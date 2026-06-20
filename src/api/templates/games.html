@@ -1,0 +1,89 @@
+{% extends "base.html" %}
+{% block title %}Games{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <h4 class="mb-0"><i class="bi bi-controller me-2"></i>Discovered Games</h4>
+  <div class="btn-group">
+    <a href="/games?sort=viral_score" class="btn btn-sm {% if sort == 'viral_score' %}btn-primary{% else %}btn-outline-secondary{% endif %}">Viral Score</a>
+    <a href="/games?sort=visits" class="btn btn-sm {% if sort == 'visits' %}btn-primary{% else %}btn-outline-secondary{% endif %}">Visits</a>
+    <a href="/games?sort=active_players" class="btn btn-sm {% if sort == 'active_players' %}btn-primary{% else %}btn-outline-secondary{% endif %}">Active Now</a>
+    <a href="/games?sort=novelty_score" class="btn btn-sm {% if sort == 'novelty_score' %}btn-primary{% else %}btn-outline-secondary{% endif %}">Novelty</a>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-body p-0">
+    <table class="table table-hover mb-0">
+      <thead style="border-bottom:1px solid rgba(255,255,255,0.1)">
+        <tr>
+          <th>Game</th>
+          <th>Genre</th>
+          <th class="text-end">Visits</th>
+          <th class="text-end">Active</th>
+          <th class="text-end">Favorites</th>
+          <th class="text-end">Viral Score</th>
+          <th class="text-end">Growth</th>
+          <th class="text-center">Content</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+      {% for game in games %}
+        <tr>
+          <td>
+            {% if game.thumbnail_url %}
+              <img src="{{ game.thumbnail_url }}" style="width:48px;height:27px;border-radius:4px;object-fit:cover;margin-right:8px">
+            {% endif %}
+            <a href="{{ game.url }}" target="_blank" class="text-decoration-none text-white fw-bold">{{ game.name[:30] }}</a>
+            <div class="text-muted small">{{ game.creator_name }}</div>
+          </td>
+          <td><span class="badge bg-secondary">{{ game.genre or '—' }}</span></td>
+          <td class="text-end">
+            {% if game.visits >= 1000000000 %}{{ (game.visits / 1000000000) | round(1) }}B
+            {% elif game.visits >= 1000000 %}{{ (game.visits / 1000000) | round(1) }}M
+            {% elif game.visits >= 1000 %}{{ (game.visits / 1000) | round(0) | int }}K
+            {% else %}{{ game.visits }}{% endif %}
+          </td>
+          <td class="text-end">
+            <span class="{% if game.active_players > 1000 %}text-success{% elif game.active_players > 100 %}text-warning{% else %}text-muted{% endif %}">
+              {{ game.active_players | int }}
+            </span>
+          </td>
+          <td class="text-end">
+            {% if game.favorites >= 1000000 %}{{ (game.favorites / 1000000) | round(1) }}M
+            {% elif game.favorites >= 1000 %}{{ (game.favorites / 1000) | round(0) | int }}K
+            {% else %}{{ game.favorites }}{% endif %}
+          </td>
+          <td class="text-end">
+            {% set vs = (game.viral_score * 100) | round(1) %}
+            <div class="fw-bold {% if vs > 70 %}text-success{% elif vs > 50 %}text-warning{% else %}text-muted{% endif %}">
+              {{ vs }}%
+            </div>
+            <div style="height:3px;background:rgba(255,255,255,0.1);border-radius:2px;margin-top:2px">
+              <div style="height:3px;width:{{ vs }}%;background:{% if vs > 70 %}#22c55e{% elif vs > 50 %}#f59e0b{% else %}#6b7280{% endif %};border-radius:2px"></div>
+            </div>
+          </td>
+          <td class="text-end">
+            <small class="{% if game.growth_velocity_score > 0.6 %}text-success{% elif game.growth_velocity_score > 0.3 %}text-warning{% else %}text-muted{% endif %}">
+              {{ (game.growth_velocity_score * 100) | round(0) | int }}%
+            </small>
+          </td>
+          <td class="text-center">
+            {% if game.content_generated %}
+              <span class="badge bg-success"><i class="bi bi-check-lg"></i></span>
+            {% else %}
+              <span class="badge bg-secondary">Pending</span>
+            {% endif %}
+          </td>
+          <td>
+            <a href="{{ game.url }}" target="_blank" class="btn btn-sm btn-outline-secondary">
+              <i class="bi bi-box-arrow-up-right"></i>
+            </a>
+          </td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,45 @@
+version: "3.9"
+
+services:
+  pipeline:
+    build: .
+    container_name: tiktok-robox-pipeline
+    restart: unless-stopped
+    env_file: .env
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./output:/app/output
+      - ./assets:/app/assets
+      - ./tiktok_robox.db:/app/tiktok_robox.db
+    environment:
+      - DATABASE_URL=sqlite+aiosqlite:///./tiktok_robox.db
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "5"
+
+  # Optional: postgres for production (uncomment and update DATABASE_URL)
+  # postgres:
+  #   image: postgres:16-alpine
+  #   environment:
+  #     POSTGRES_DB: tiktok_robox
+  #     POSTGRES_USER: robox
+  #     POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+  #   volumes:
+  #     - postgres_data:/var/lib/postgresql/data
+  #   healthcheck:
+  #     test: ["CMD-SHELL", "pg_isready -U robox"]
+  #     interval: 5s
+  #     timeout: 5s
+  #     retries: 5
+
+volumes:
+  postgres_data:

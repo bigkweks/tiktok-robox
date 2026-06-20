@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}RoboxPipeline{% endblock %} — TikTok Automation</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css" rel="stylesheet">
+  <style>
+    :root {
+      --brand: #6C63FF;
+      --brand-dark: #5a52d5;
+      --accent: #FFD700;
+      --surface: #1a1a2e;
+      --surface-2: #16213e;
+      --text: #e2e8f0;
+      --text-muted: #94a3b8;
+      --success: #22c55e;
+      --warning: #f59e0b;
+      --danger: #ef4444;
+    }
+    body { background: var(--surface); color: var(--text); font-family: 'Inter', system-ui, sans-serif; }
+    .navbar { background: var(--surface-2) !important; border-bottom: 1px solid rgba(255,255,255,0.08); }
+    .navbar-brand { color: var(--accent) !important; font-weight: 700; font-size: 1.3rem; }
+    .nav-link { color: var(--text-muted) !important; }
+    .nav-link.active, .nav-link:hover { color: var(--text) !important; }
+    .card { background: var(--surface-2); border: 1px solid rgba(255,255,255,0.07); border-radius: 12px; }
+    .card-header { background: rgba(255,255,255,0.03); border-bottom: 1px solid rgba(255,255,255,0.07); }
+    .stat-card { border-left: 3px solid var(--brand); }
+    .stat-number { font-size: 2.5rem; font-weight: 700; color: var(--accent); }
+    .badge-gem { background: #22c55e; }
+    .badge-good { background: #f59e0b; }
+    .badge-decent { background: #f97316; }
+    .badge-bad { background: #ef4444; }
+    .priority-bar { height: 4px; background: linear-gradient(90deg, var(--brand), var(--accent)); border-radius: 2px; }
+    .thumbnail-preview { width: 120px; border-radius: 8px; cursor: pointer; transition: transform 0.2s; }
+    .thumbnail-preview:hover { transform: scale(1.05); }
+    .score-badge { font-size: 1.5rem; font-weight: 700; padding: 0.4rem 1rem; border-radius: 20px; display: inline-block; }
+    .btn-approve { background: var(--success); border: none; color: white; }
+    .btn-approve:hover { background: #16a34a; color: white; }
+    .btn-reject { background: transparent; border: 1px solid var(--danger); color: var(--danger); }
+    .btn-reject:hover { background: var(--danger); color: white; }
+    .table { color: var(--text); }
+    .table > :not(caption) > * > * { background: transparent; color: var(--text); border-color: rgba(255,255,255,0.07); }
+    .form-control, .form-select { background: var(--surface); color: var(--text); border-color: rgba(255,255,255,0.15); }
+    .form-control:focus { background: var(--surface); color: var(--text); border-color: var(--brand); box-shadow: 0 0 0 0.2rem rgba(108,99,255,0.25); }
+    pre.caption-box { background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; padding: 1rem; font-size: 0.85rem; white-space: pre-wrap; color: var(--text-muted); }
+  </style>
+</head>
+<body>
+  <nav class="navbar navbar-expand-lg navbar-dark">
+    <div class="container-fluid">
+      <a class="navbar-brand" href="/">💎 RoboxPipeline</a>
+      <div class="navbar-nav ms-auto">
+        <a class="nav-link {% if request.url.path == '/' %}active{% endif %}" href="/">Dashboard</a>
+        <a class="nav-link {% if '/queue' in request.url.path %}active{% endif %}" href="/queue">Queue</a>
+        <a class="nav-link {% if '/games' in request.url.path %}active{% endif %}" href="/games">Games</a>
+        <a class="nav-link {% if '/analytics' in request.url.path %}active{% endif %}" href="/analytics">Analytics</a>
+      </div>
+    </div>
+  </nav>
+  <div class="container-fluid py-4">
+    {% block content %}{% endblock %}
+  </div>
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <script>
+    async function post(url, data={}) {
+      const r = await fetch(url, {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(data)});
+      return r.json();
+    }
+    async function approve(id) {
+      await post(`/content/${id}/approve`);
+      location.reload();
+    }
+    async function reject(id) {
+      await post(`/content/${id}/reject`);
+      location.reload();
+    }
+    async function triggerDiscovery() {
+      const btn = document.getElementById('discoverBtn');
+      btn.disabled = true; btn.textContent = 'Running...';
+      await post('/pipeline/run-discovery');
+      btn.textContent = 'Started! ✓';
+    }
+    async function triggerContent() {
+      const btn = document.getElementById('contentBtn');
+      btn.disabled = true; btn.textContent = 'Running...';
+      await post('/pipeline/run-content');
+      btn.textContent = 'Started! ✓';
+    }
+  </script>
+  {% block scripts %}{% endblock %}
+</body>
+</html>

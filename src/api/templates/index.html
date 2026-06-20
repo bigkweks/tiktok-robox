@@ -1,0 +1,139 @@
+{% extends "base.html" %}
+{% block title %}Dashboard{% endblock %}
+{% block content %}
+<div class="row g-4 mb-4">
+  <div class="col-md-2">
+    <div class="card stat-card h-100">
+      <div class="card-body text-center">
+        <div class="stat-number">{{ stats.total_games }}</div>
+        <div class="text-muted small">Games Discovered</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-2">
+    <div class="card stat-card h-100" style="border-color:#22c55e">
+      <div class="card-body text-center">
+        <div class="stat-number" style="color:#22c55e">{{ stats.queue_size }}</div>
+        <div class="text-muted small">Approved Queue</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-2">
+    <div class="card stat-card h-100" style="border-color:#f59e0b">
+      <div class="card-body text-center">
+        <div class="stat-number" style="color:#f59e0b">{{ stats.pending }}</div>
+        <div class="text-muted small">Awaiting Review</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-2">
+    <div class="card stat-card h-100" style="border-color:#a78bfa">
+      <div class="card-body text-center">
+        <div class="stat-number" style="color:#a78bfa">{{ stats.posted }}</div>
+        <div class="text-muted small">Posted</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-2">
+    <div class="card h-100" style="border-color:#06b6d4">
+      <div class="card-body text-center">
+        <div class="stat-number" style="color:#06b6d4">{{ (perf.avg_follow_conv_rate * 100) | round(2) }}%</div>
+        <div class="text-muted small">Avg Follow Rate</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-2">
+    <div class="card h-100">
+      <div class="card-body text-center">
+        <div class="stat-number" style="font-size:1.4rem">{{ stats.total_views | default(perf.total_views, true) | int }}</div>
+        <div class="text-muted small">Total Views</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="row g-4 mb-4">
+  <div class="col-md-8">
+    <div class="card">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <span><i class="bi bi-graph-up me-2"></i>Pipeline Controls</span>
+        <small class="text-muted">Last run: {{ now.strftime('%H:%M UTC') }}</small>
+      </div>
+      <div class="card-body">
+        <div class="row g-3">
+          <div class="col-md-4">
+            <button id="discoverBtn" class="btn btn-primary w-100" onclick="triggerDiscovery()">
+              <i class="bi bi-search me-1"></i> Run Discovery
+            </button>
+            <small class="text-muted d-block mt-1">Crawl Roblox for trending games</small>
+          </div>
+          <div class="col-md-4">
+            <button id="contentBtn" class="btn btn-success w-100" onclick="triggerContent()">
+              <i class="bi bi-play-circle me-1"></i> Generate Content
+            </button>
+            <small class="text-muted d-block mt-1">AI rate + thumbnail + video</small>
+          </div>
+          <div class="col-md-4">
+            <a href="/queue?status=pending" class="btn w-100" style="background:#f59e0b;color:black">
+              <i class="bi bi-check2-square me-1"></i> Review Queue ({{ stats.pending }})
+            </a>
+            <small class="text-muted d-block mt-1">Approve or reject pending items</small>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-4">
+    <div class="card h-100">
+      <div class="card-header"><i class="bi bi-trophy me-2"></i>Top Game</div>
+      <div class="card-body d-flex align-items-center justify-content-center">
+        <div class="text-center">
+          <div style="font-size:1.2rem;font-weight:600">{{ stats.top_game }}</div>
+          <div class="text-muted small">Highest viral score</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="row g-4">
+  <div class="col-md-6">
+    <div class="card">
+      <div class="card-header"><i class="bi bi-bar-chart me-2"></i>Content Performance</div>
+      <div class="card-body">
+        <table class="table table-sm">
+          <tr><td class="text-muted">Total Posts</td><td class="text-end fw-bold">{{ perf.total_posts }}</td></tr>
+          <tr><td class="text-muted">Total Views</td><td class="text-end fw-bold">{{ perf.total_views | int }}</td></tr>
+          <tr><td class="text-muted">Total Follows</td><td class="text-end fw-bold">{{ perf.total_follows }}</td></tr>
+          <tr><td class="text-muted">Avg Completion Rate</td><td class="text-end fw-bold">{{ (perf.avg_completion_rate * 100) | round(1) }}%</td></tr>
+          <tr><td class="text-muted">Avg Engagement Rate</td><td class="text-end fw-bold">{{ (perf.avg_engagement_rate * 100) | round(2) }}%</td></tr>
+          <tr><td class="text-muted">Best Thumbnail</td><td class="text-end fw-bold">Variant {{ perf.top_performing_variant }}</td></tr>
+        </table>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-6">
+    <div class="card">
+      <div class="card-header"><i class="bi bi-info-circle me-2"></i>10K Follower Progress</div>
+      <div class="card-body">
+        {% set follows = perf.total_follows %}
+        {% set pct = [follows / 10000 * 100, 100] | min %}
+        <div class="d-flex justify-content-between mb-2">
+          <span>{{ follows }} followers</span>
+          <span class="text-muted">Goal: 10,000</span>
+        </div>
+        <div class="progress" style="height:20px;background:rgba(255,255,255,0.1)">
+          <div class="progress-bar" role="progressbar" style="width:{{ pct }}%;background:linear-gradient(90deg,#6C63FF,#FFD700)" aria-valuenow="{{ pct }}"></div>
+        </div>
+        <div class="mt-3 text-muted small">
+          {% if perf.total_posts > 0 %}
+            Daily avg: {{ (follows / [perf.total_posts, 1] | max * 3) | round(0) | int }} follows/day needed to hit 10K in 30 days
+          {% else %}
+            Post your first video to start tracking progress
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
