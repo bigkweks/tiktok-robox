@@ -209,6 +209,198 @@ If the steps above feel like too much on Windows, this bundles everything
 
 ---
 
+## 📱 iPad guide (no installation needed — runs in Safari)
+
+iPads can't install Python or run commands directly. Instead, the robot runs
+on **GitHub's computers for free** and you control it from Safari — like
+streaming a game instead of installing it. This is called **GitHub Codespaces**.
+
+You get **60 free hours every month.** That's plenty.
+
+---
+
+### Before you start: the one thing you need
+
+Go to **https://console.anthropic.com** in Safari.
+Make an account, go to **API Keys**, tap **Create Key**.
+It gives you a long code starting with `sk-ant-`. **Copy it** — tap and hold,
+then tap **Copy**. Paste it somewhere safe (your Notes app is fine). You'll use
+it in Step 4 below.
+
+---
+
+### Step 1: Open the project on GitHub
+
+1. Open **Safari** on your iPad.
+2. Go to this address:
+
+   ```
+   https://github.com/bigkweks/tiktok-robox
+   ```
+
+3. You'll see a list of files. Near the top there's a button that says
+   **`main`** with a little arrow next to it. **Tap it.**
+
+4. A list of branches appears. Tap the one called:
+
+   ```
+   claude/roblox-tiktok-pipeline-x5t414
+   ```
+
+   The page reloads showing your project files. ✅
+
+---
+
+### Step 2: Open a cloud computer (Codespaces)
+
+1. Look for the green button that says **`<> Code`**. Tap it.
+
+2. A small box pops up. Tap the tab that says **Codespaces**.
+
+3. Tap the button **"Create codespace on claude/roblox-tiktok-pipeline-x5t414"**.
+
+4. A new tab opens. It loads for about 60 seconds — you'll see a spinning
+   circle and a loading bar. **Wait. Don't close the tab.** ⏳
+
+5. When it finishes, you'll see a screen that looks like a text editor. At the
+   bottom there's a **black strip with a `$` cursor** — that's your command
+   box, inside your browser. ✅
+
+> 💡 It looks complicated but you only tap buttons and type small commands.
+> You are not going to break anything.
+
+---
+
+### Step 3: Run the setup (one line to type)
+
+1. Tap inside the **black strip at the bottom** of the page (the terminal).
+
+2. Type this exactly and tap the **Return** key on your iPad keyboard:
+
+   ```
+   pip install -r requirements.txt
+   ```
+
+   You'll see lots of lines scroll past. Wait until the `$` cursor comes back.
+
+3. Now type this and tap **Return**:
+
+   ```
+   python scripts/init_db.py
+   ```
+
+   You should see: `✓ Database schema created`. ✅
+
+---
+
+### Step 4: Add your AI key
+
+1. In the same black strip, type this and tap **Return**:
+
+   ```
+   cp .env.example .env
+   ```
+
+2. On the left side of the screen there's a list of files. Find and **tap**
+   the file called **`.env`** to open it in the editor.
+
+   > 🔍 Can't see `.env`? Files starting with a dot are hidden. Tap the three
+   > dots `···` menu above the file list and tap **"Show Hidden Files."**
+
+3. Find the line that says:
+
+   ```
+   ANTHROPIC_API_KEY=sk-ant-...
+   ```
+
+4. Tap that line to edit it. Delete the `sk-ant-...` part and **paste your
+   real key** (the one you saved in Notes). The line should now look like:
+
+   ```
+   ANTHROPIC_API_KEY=sk-ant-yourrealkey
+   ```
+
+5. Save it: tap the three dots `···` menu at the top and tap **Save**, or look
+   for a save icon.
+
+---
+
+### Step 5: Find your first games and make videos
+
+Tap in the black strip at the bottom and run each of these — one at a time,
+waiting for the `$` to come back after each:
+
+```
+python main.py discover
+```
+*(Finds trending Roblox games — takes about a minute)*
+
+```
+python main.py generate 5
+```
+*(Makes thumbnails + videos for the top 5 games — takes a few minutes)*
+
+---
+
+### Step 6: Open your control panel
+
+1. In the black strip, type this and tap **Return**:
+
+   ```
+   python main.py serve
+   ```
+
+2. A small popup appears at the bottom of the screen saying something like
+   **"Open in Browser"** or **"Your application running on port 8000."**
+   **Tap it.** 👆
+
+3. Your control panel opens in a new Safari tab! 🎉
+
+   > If no popup appears: tap the **Ports** tab (near the bottom of the
+   > Codespaces window), find port **8000**, and tap the little globe icon 🌐
+   > next to it.
+
+---
+
+### Step 7: Your daily routine (from the control panel)
+
+From now on you only use the control panel website — no more typing.
+
+1. **Tap "Queue"** at the top → see the game cards.
+2. **Tap the green Approve button** on the ones you like.
+3. **Tap an approved card** → "Get Post Package" → download the video and
+   copy the caption.
+4. **Open TikTok** on your iPad, upload the video, paste the caption, post it.
+5. Come back and tap **"Mark as Posted."**
+6. Next day: tap **"Analytics"** and log the numbers from TikTok.
+
+---
+
+### Stopping and starting again on iPad
+
+- **To stop:** go back to the Codespaces tab and tap the red square ■ Stop
+  button, or just close the tab (it auto-stops after a few minutes of
+  inactivity to save your free hours).
+
+- **To start again:** go to **https://github.com/codespaces** in Safari.
+  You'll see your codespace listed. **Tap it to resume** — everything is
+  already set up, your files and database are still there.
+  Then just run `python main.py serve` and tap the popup.
+
+---
+
+### ⚠️ iPad things to know
+
+| Thing | What to do |
+|---|---|
+| Free hours ran out | Codespaces free tier is 60h/month. Either wait for next month, or upgrade GitHub ($4/month). |
+| Tab closed by accident | Go to github.com/codespaces and reopen it. Nothing is lost. |
+| Can't see the `.env` file | Tap `···` above the file list → Show Hidden Files. |
+| Port 8000 popup never appeared | Tap the **Ports** tab and tap the 🌐 globe icon next to port 8000. |
+| Keyboard covering the command box | Tap outside the keyboard area then tap the terminal again — it scrolls to the cursor. |
+
+---
+
 ## 🤓 For advanced users
 
 If you know your way around a terminal, you don't need the quickstart script:
