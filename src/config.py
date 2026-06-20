@@ -13,7 +13,7 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
     # ── AI ──────────────────────────────────────────────────────────────
-    ANTHROPIC_API_KEY: str = Field(..., description="Required: Anthropic API key")
+    ANTHROPIC_API_KEY: str = Field(default="", description="Required for content generation")
     ANTHROPIC_MODEL: str = "claude-sonnet-4-6"
 
     # ── Database ─────────────────────────────────────────────────────────

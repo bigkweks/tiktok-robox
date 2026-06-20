@@ -271,7 +271,7 @@ it in Step 4 below.
 
 ---
 
-### Step 3: Run the setup (one line to type)
+### Step 3: Install the parts
 
 1. Tap inside the **black strip at the bottom** of the page (the terminal).
 
@@ -281,51 +281,86 @@ it in Step 4 below.
    pip install -r requirements.txt
    ```
 
-   You'll see lots of lines scroll past. Wait until the `$` cursor comes back.
-
-3. Now type this and tap **Return**:
-
-   ```
-   python scripts/init_db.py
-   ```
-
-   You should see: `✓ Database schema created`. ✅
+   You'll see lots of lines scroll past. Wait until the `$` cursor comes back
+   — this takes 1–2 minutes. That's normal. ⏳
 
 ---
 
-### Step 4: Add your AI key
+### Step 4: Add your AI key (do this BEFORE step 5)
 
-1. In the same black strip, type this and tap **Return**:
+This must be done before the setup — the robot won't start without it.
+
+1. In the black strip, type this and tap **Return**:
 
    ```
    cp .env.example .env
    ```
 
-2. On the left side of the screen there's a list of files. Find and **tap**
-   the file called **`.env`** to open it in the editor.
+   Nothing visible happens. That's fine — it just made a copy of a settings
+   file called `.env`.
 
-   > 🔍 Can't see `.env`? Files starting with a dot are hidden. Tap the three
-   > dots `···` menu above the file list and tap **"Show Hidden Files."**
+2. On the **left side** of the screen there's a list of files. Find the file
+   called **`.env`** and **tap it** to open it in the editor.
 
-3. Find the line that says:
+   > 🔍 Can't see `.env`? Files starting with a dot are hidden by default.
+   > Look for a small **eye icon** or tap the `···` dots menu above the file
+   > list and tap **"Show Hidden Files."**
+
+3. Inside the file, find the line that says:
 
    ```
    ANTHROPIC_API_KEY=sk-ant-...
    ```
 
-4. Tap that line to edit it. Delete the `sk-ant-...` part and **paste your
-   real key** (the one you saved in Notes). The line should now look like:
+4. Tap that line to put your cursor there. Delete the `sk-ant-...` part
+   (the placeholder) and **paste your real key** from Notes. The line should
+   look like:
 
    ```
-   ANTHROPIC_API_KEY=sk-ant-yourrealkey
+   ANTHROPIC_API_KEY=sk-ant-youractualrealkey
    ```
 
-5. Save it: tap the three dots `···` menu at the top and tap **Save**, or look
-   for a save icon.
+5. **Save it:** press **Command + S** on a keyboard, or tap the `···` dots
+   menu at the top of the editor and tap **Save**.
 
 ---
 
-### Step 5: Find your first games and make videos
+### Step 5: Run the setup script
+
+Now that the key is saved, run the setup:
+
+1. Tap inside the black strip at the bottom.
+
+2. Type this and tap **Return**:
+
+   ```
+   python scripts/init_db.py
+   ```
+
+3. You should see these lines appear one by one:
+
+   ```
+   Setting up folders...
+     Folders ready.
+   Creating database tables...
+     Database schema created.
+   Seeding default scoring weights...
+     Default weights seeded.
+
+   ==============================================
+     Setup complete!
+   ==============================================
+   ```
+
+   If you see **"Setup complete!"** you're done with setup. ✅
+
+   > ❌ Seeing an error instead? The most common cause is the `.env` file
+   > wasn't saved in Step 4. Go back to Step 4, make sure you saved the file,
+   > and run the command again.
+
+---
+
+### Step 6: Find your first games and make videos
 
 Tap in the black strip at the bottom and run each of these — one at a time,
 waiting for the `$` to come back after each:
@@ -342,7 +377,7 @@ python main.py generate 5
 
 ---
 
-### Step 6: Open your control panel
+### Step 7: Open your control panel
 
 1. In the black strip, type this and tap **Return**:
 
@@ -362,7 +397,7 @@ python main.py generate 5
 
 ---
 
-### Step 7: Your daily routine (from the control panel)
+### Step 8: Your daily routine (from the control panel)
 
 From now on you only use the control panel website — no more typing.
 
