@@ -4,5 +4,4 @@
   ignore = "exit 0"
 
 [build.environment]
-  PYTHON_VERSION = "3.11.6"
   NETLIFY_USE_YARN = "false"
