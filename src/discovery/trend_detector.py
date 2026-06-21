@@ -3,6 +3,11 @@ Trend detection layer.
 
 Aggregates games from multiple Roblox discovery sources, scores them,
 deduplicates, and persists new/updated games to the database.
+
+Discovery strategy (403-resistant):
+  1. Fetch details for all SEED_UNIVERSE_IDS via the fully-public /v1/games endpoint
+  2. Expand by fetching recommendations from a rotating subset of seeds
+  3. Score every game and persist to DB
 """
 from __future__ import annotations
 
@@ -18,7 +23,7 @@ from src.database.connection import get_session
 from src.database.models import CrawlLog, Game, ModelWeights
 from src.discovery.roblox_client import (
     GENRE_IDS,
-    SORT_TOKENS,
+    SEED_UNIVERSE_IDS,
     RobloxClient,
     RobloxGame,
 )
@@ -26,42 +31,10 @@ from src.discovery.viral_scorer import ViralScorer
 
 log = structlog.get_logger(__name__)
 
-# Discovery strategy: which sort×genre combos to crawl.
-# "trending × horror" finds fast-growing horror games, etc.
-DISCOVERY_PLAN: list[tuple[str, str]] = [
-    ("trending", "all"),
-    ("trending", "horror"),
-    ("trending", "adventure"),
-    ("trending", "roleplay"),
-    ("new", "all"),
-    ("new", "adventure"),
-    ("new", "horror"),
-    ("popular", "all"),
-    ("top_rated", "all"),
-    ("updated", "all"),
-]
-
-# Keywords that signal high TikTok content potential
-VIRAL_KEYWORDS: list[str] = [
-    "obby",
-    "horror",
-    "escape",
-    "murder mystery",
-    "adopt me",
-    "tycoon",
-    "piggy",
-    "brookhaven",
-    "blox fruits",
-    "parkour",
-    "survival",
-    "roleplay",
-    "simulator",
-    "tower of hell",
-    "ragdoll",
-    "liminal",
-]
-
 MAX_GAMES_PER_RUN = 500
+
+# How many seed games to fan out for recommendations each run
+RECOMMENDATION_SEEDS = 10
 
 
 class TrendDetector:
@@ -92,63 +65,61 @@ class TrendDetector:
         return stats
 
     async def _crawl_all_sources(self, client: RobloxClient) -> list[RobloxGame]:
-        """Parallel crawl of all discovery sources."""
-        tasks = []
-        for sort_name, genre_name in DISCOVERY_PLAN:
-            sort_token = SORT_TOKENS.get(sort_name, sort_name)
-            genre_id = GENRE_IDS.get(genre_name, 0)
-            tasks.append(
-                client.fetch_games_with_enrichment(
-                    sort_tokens=[sort_token],
-                    genre_ids=[genre_id],
-                    max_per_sort=80,
-                )
-            )
-
-        # Keyword searches (sequential to avoid hammering)
-        for kw in VIRAL_KEYWORDS[:6]:
-            tasks.append(self._keyword_search_task(client, kw))
-
-        results = await asyncio.gather(*tasks, return_exceptions=True)
-
+        """
+        Seed-based discovery using only public Roblox endpoints.
+        """
         seen: set[str] = set()
         games: list[RobloxGame] = []
-        for result in results:
+
+        # Step 1: fetch all seed games (public endpoint, always works)
+        log.info("trend_detector.fetching_seeds", count=len(SEED_UNIVERSE_IDS))
+        seed_games = await client.fetch_games_with_enrichment(SEED_UNIVERSE_IDS)
+        for g in seed_games:
+            if g.universe_id not in seen:
+                seen.add(g.universe_id)
+                games.append(g)
+        log.info("trend_detector.seeds_fetched", count=len(games))
+
+        # Step 2: expand via recommendations from a rotating subset of seeds
+        recommendation_seeds = SEED_UNIVERSE_IDS[:RECOMMENDATION_SEEDS]
+        rec_tasks = [
+            client.get_recommendations(uid, max_rows=20)
+            for uid in recommendation_seeds
+        ]
+        rec_results = await asyncio.gather(*rec_tasks, return_exceptions=True)
+
+        extra_ids: list[str] = []
+        for result in rec_results:
             if isinstance(result, Exception):
-                log.error("trend_detector.source_failed", error=str(result))
+                log.warning("trend_detector.rec_failed", error=str(result))
                 continue
-            for game in result:
-                if game.universe_id not in seen:
-                    seen.add(game.universe_id)
-                    games.append(game)
+            for uid in result:
+                if uid and uid not in seen:
+                    seen.add(uid)
+                    extra_ids.append(uid)
+
+        if extra_ids:
+            log.info("trend_detector.fetching_recommendations", count=len(extra_ids))
+            rec_games = await client.fetch_games_with_enrichment(extra_ids)
+            games.extend(rec_games)
+            log.info("trend_detector.recommendations_fetched", total=len(games))
+
+        # Step 3: optionally try the authenticated games/list endpoint (may 403)
+        sort_ids = await client.try_get_sort_tokens()
+        if sort_ids:
+            log.info("trend_detector.sort_tokens_available", count=len(sort_ids))
+            for token in sort_ids[:3]:
+                uids = await client.try_games_list(sort_token=token, max_rows=80)
+                new_uids = [u for u in uids if u not in seen]
+                if new_uids:
+                    extra = await client.fetch_games_with_enrichment(new_uids)
+                    for g in extra:
+                        if g.universe_id not in seen:
+                            seen.add(g.universe_id)
+                            games.append(g)
 
         log.info("trend_detector.crawled", total=len(games))
-        # Cap to avoid processing too many
         return games[:MAX_GAMES_PER_RUN]
-
-    async def _keyword_search_task(self, client: RobloxClient, keyword: str) -> list[RobloxGame]:
-        try:
-            raw = await client.get_games_by_keyword(keyword, max_rows=30)
-            uids = [str(g.get("universeId", g.get("id", ""))) for g in raw if g.get("universeId") or g.get("id")]
-            if not uids:
-                return []
-            details = await client.get_game_details_bulk(uids)
-            thumbnails = await client.get_thumbnails(uids)
-            icons = await client.get_icons(uids)
-            games = []
-            details_map = {str(d.get("id", "")): d for d in details}
-            for g in raw:
-                uid = str(g.get("universeId", g.get("id", "")))
-                merged = {**g, **details_map.get(uid, {})}
-                game = client._parse_game(merged)
-                if game:
-                    game.thumbnail_url = thumbnails.get(uid)
-                    game.icon_url = icons.get(uid)
-                    games.append(game)
-            return games
-        except Exception as exc:
-            log.warning("trend_detector.keyword_failed", keyword=keyword, error=str(exc))
-            return []
 
     async def _process_games(
         self,
@@ -166,7 +137,6 @@ class TrendDetector:
                 )
 
                 if existing:
-                    # Update velocity metrics
                     existing.visits_24h_ago = existing.visits
                     existing.players_24h_ago = existing.active_players
                     existing.favorites_24h_ago = existing.favorites

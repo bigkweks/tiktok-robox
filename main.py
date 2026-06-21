@@ -27,7 +27,6 @@ def configure_logging() -> None:
     structlog.configure(
         processors=[
             structlog.stdlib.add_log_level,
-            structlog.stdlib.add_logger_name,
             structlog.processors.TimeStamper(fmt="%Y-%m-%d %H:%M:%S"),
             structlog.dev.ConsoleRenderer(colors=True),
         ],
