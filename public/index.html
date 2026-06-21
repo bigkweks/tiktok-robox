@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>RoboxPipeline — TikTok Automation</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css" rel="stylesheet">
+  <style>
+    :root {
+      --brand: #6C63FF;
+      --accent: #FFD700;
+      --surface: #1a1a2e;
+      --surface-2: #16213e;
+      --text: #e2e8f0;
+      --text-muted: #94a3b8;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: var(--surface);
+      color: var(--text);
+      font-family: 'Inter', system-ui, sans-serif;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .hero {
+      text-align: center;
+      padding: 3rem 2rem;
+      max-width: 640px;
+    }
+    .logo {
+      font-size: 3.5rem;
+      margin-bottom: 0.5rem;
+    }
+    .brand {
+      font-size: 2rem;
+      font-weight: 700;
+      color: var(--accent);
+      margin-bottom: 0.5rem;
+    }
+    .tagline {
+      color: var(--text-muted);
+      font-size: 1.1rem;
+      margin-bottom: 2.5rem;
+    }
+    .features {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1rem;
+      margin-bottom: 2.5rem;
+      text-align: left;
+    }
+    .feature {
+      background: var(--surface-2);
+      border: 1px solid rgba(255,255,255,0.07);
+      border-radius: 12px;
+      padding: 1.25rem;
+    }
+    .feature-icon {
+      font-size: 1.5rem;
+      margin-bottom: 0.5rem;
+    }
+    .feature h3 {
+      font-size: 0.95rem;
+      font-weight: 600;
+      margin-bottom: 0.25rem;
+    }
+    .feature p {
+      font-size: 0.8rem;
+      color: var(--text-muted);
+    }
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      background: rgba(34,197,94,0.15);
+      border: 1px solid rgba(34,197,94,0.3);
+      color: #22c55e;
+      padding: 0.35rem 0.85rem;
+      border-radius: 20px;
+      font-size: 0.85rem;
+      font-weight: 600;
+    }
+    .pulse {
+      width: 8px;
+      height: 8px;
+      background: #22c55e;
+      border-radius: 50%;
+      animation: pulse 2s infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.4; }
+    }
+  </style>
+</head>
+<body>
+  <div class="hero">
+    <div class="logo">💎</div>
+    <div class="brand">RoboxPipeline</div>
+    <div class="tagline">Automated Roblox → TikTok content generation pipeline</div>
+
+    <div class="features">
+      <div class="feature">
+        <div class="feature-icon">🔍</div>
+        <h3>Trend Discovery</h3>
+        <p>Crawls Roblox for trending games using viral scoring algorithms</p>
+      </div>
+      <div class="feature">
+        <div class="feature-icon">🖼️</div>
+        <h3>Thumbnail Generation</h3>
+        <p>AI-powered A/B thumbnail variants with game art and branding</p>
+      </div>
+      <div class="feature">
+        <div class="feature-icon">📸</div>
+        <h3>Carousel Creator</h3>
+        <p>Viral photo carousel format with Poppins typography</p>
+      </div>
+      <div class="feature">
+        <div class="feature-icon">📊</div>
+        <h3>Analytics Loop</h3>
+        <p>Tracks views, follows, and completion rates to optimize content</p>
+      </div>
+    </div>
+
+    <div class="status-badge">
+      <span class="pulse"></span>
+      Pipeline Active
+    </div>
+  </div>
+</body>
+</html>
