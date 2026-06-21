@@ -24,6 +24,9 @@ echo ""
 
 # ── Step 0: Pull latest code ────────────────────────────────
 say "Step 0 of 7: Getting the latest updates..."
+# The database file is local-only; stop git tracking it so it never blocks pulls
+git rm --cached tiktok_robox.db 2>/dev/null || true
+git checkout -- tiktok_robox.db 2>/dev/null || true
 if git pull origin claude/roblox-tiktok-pipeline-x5t414 2>&1; then
   ok "Code is up to date."
 else
