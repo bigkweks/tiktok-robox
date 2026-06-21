@@ -22,6 +22,14 @@ echo "This will set everything up for you."
 echo "It may take a few minutes. That's normal."
 echo ""
 
+# ── Step 0: Pull latest code ────────────────────────────────
+say "Step 0 of 7: Getting the latest updates..."
+if git pull origin claude/roblox-tiktok-pipeline-x5t414 2>&1; then
+  ok "Code is up to date."
+else
+  warn "Could not pull updates (no internet or not a git repo). Continuing anyway."
+fi
+
 # ── Step 1: Find Python ─────────────────────────────────────
 say "Step 1 of 7: Looking for Python on your computer..."
 if command -v python3 >/dev/null 2>&1; then
