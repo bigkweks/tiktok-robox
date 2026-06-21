@@ -32,7 +32,7 @@ from sqlalchemy import desc, select
 from src.analytics.feedback_loop import FeedbackLoop
 from src.config import get_settings
 from src.database.connection import get_session, init_db
-from src.database.models import Content, Game, PostAnalytics
+from src.database.models import CarouselPost, Content, Game, PostAnalytics
 from src.queue.content_queue import ContentQueue
 from src.scheduler.pipeline import Pipeline
 
@@ -219,6 +219,73 @@ async def trigger_content(background_tasks: BackgroundTasks):
         background_tasks.add_task(_pipeline.run_content_factory)
         return {"status": "started", "job": "content_factory"}
     return {"status": "error", "message": "Pipeline not initialized"}
+
+
+@app.post("/pipeline/run-carousel")
+async def trigger_carousel(background_tasks: BackgroundTasks):
+    if _pipeline:
+        result = await _pipeline.run_carousel_factory()
+        return result
+    return {"status": "error", "message": "Pipeline not initialized"}
+
+
+# ── Carousel pages ────────────────────────────────────────────────────
+
+@app.get("/carousels", response_class=HTMLResponse)
+async def carousels_page(request: Request):
+    async with get_session() as session:
+        result = await session.execute(
+            select(CarouselPost).order_by(CarouselPost.created_at.desc()).limit(20)
+        )
+        posts = result.scalars().all()
+
+    # Attach helper properties for template
+    enriched = []
+    for p in posts:
+        slide_paths_list = []
+        try:
+            slide_paths_list = json.loads(p.slide_paths or "[]")
+        except Exception:
+            pass
+        hashtags_list = []
+        try:
+            hashtags_list = json.loads(p.hashtags or "[]")
+        except Exception:
+            pass
+        enriched.append({
+            "id": p.id,
+            "edition": p.edition,
+            "part_number": p.part_number,
+            "status": p.status,
+            "caption": p.caption,
+            "created_at": p.created_at,
+            "slide_paths_list": slide_paths_list,
+            "hashtags_str": " ".join(hashtags_list),
+        })
+
+    return templates.TemplateResponse("carousels.html", {
+        "request": request,
+        "carousels": enriched,
+        "settings": _settings,
+    })
+
+
+@app.post("/carousel/{carousel_id}/approve")
+async def approve_carousel(carousel_id: int):
+    async with get_session() as session:
+        post = await session.get(CarouselPost, carousel_id)
+        if post:
+            post.status = "approved"
+    return {"status": "approved"}
+
+
+@app.post("/carousel/{carousel_id}/reject")
+async def reject_carousel(carousel_id: int):
+    async with get_session() as session:
+        post = await session.get(CarouselPost, carousel_id)
+        if post:
+            post.status = "rejected"
+    return {"status": "rejected"}
 
 
 # ── Analytics ingestion ───────────────────────────────────────────────

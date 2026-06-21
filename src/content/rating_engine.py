@@ -38,6 +38,7 @@ class RatingResult:
     tts_script: str                 # what the narrator will say
     controversy_angle: str          # the opinion that will spark debate
     hook_text: str = ""             # first 2s on screen (≤9 words, no emoji)
+    carousel_caption: str = ""      # short casual line for photo carousel slides
 
     @property
     def display_score(self) -> str:
@@ -105,7 +106,8 @@ Generate a JSON rating with this exact structure:
   "verdict": "<one punchy sentence, max 12 words, no emojis>",
   "controversy_angle": "<the mildly controversial opinion that will spark comment debate, 1 sentence>",
   "tts_script": "<15-20 second narration script for the video, natural spoken English, include the score reveal at the end, no special chars>",
-  "hook_text": "<the first 2 seconds of text shown on screen — max 9 words>"
+  "hook_text": "<the first 2 seconds of text shown on screen — max 9 words>",
+  "carousel_caption": "<3-8 words, all lowercase, casual personal description for a photo carousel slide. Style: sound like a real player, not a brand. Examples: 'only escape room thats actually challenging', 'well made game i spent 30+ hours in', 'GTA in roblox', 'MUST check out', 'minecraft dropper if ukuk', 'insane pvp no one knows about'. No punctuation at end. Genre comparisons and personal takes work best.>"
 }}
 
 HOOK RULES (this is the single most important field — most viewers leave in 1.5s):
@@ -190,6 +192,7 @@ class RatingEngine:
             controversy = data.get("controversy_angle", "")
             tts_script = data.get("tts_script", self._fallback_tts(name, score, visits))
             hook_text = data.get("hook_text", self._fallback_hook(name, visits))
+            carousel_caption = data.get("carousel_caption", self._fallback_carousel_caption(name, score, visits))
 
             # Override label with hook if hook_text is empty
             if not hook_text:
@@ -207,6 +210,7 @@ class RatingEngine:
                 tts_script=tts_script,
                 controversy_angle=controversy,
                 hook_text=hook_text,
+                carousel_caption=carousel_caption,
             )
             log.info("rating.generated", game=name, score=score, label=label)
             return result
@@ -215,6 +219,7 @@ class RatingEngine:
             log.error("rating.failed", game=name, error=str(exc))
             fb = self._fallback_rating(name, visits, viral_score)
             fb.hook_text = self._fallback_hook(name, visits)
+            fb.carousel_caption = self._fallback_carousel_caption(name, fb.score, visits)
             return fb
 
     def _fallback_rating(self, name: str, visits: int, viral_score: float) -> RatingResult:
@@ -238,6 +243,21 @@ class RatingEngine:
             f"After testing it ourselves, we're giving it a {score:.1f} out of 10. "
             f"Follow for more hidden Roblox gems every day."
         )
+
+    @staticmethod
+    def _fallback_carousel_caption(name: str, score: float, visits: int) -> str:
+        if score >= 9.5:
+            return "MUST check out"
+        elif score >= 9.0:
+            return f"hidden gem most people sleep on"
+        elif score >= 8.0:
+            return f"well made game fr"
+        elif score >= 7.0:
+            return f"actually pretty good"
+        elif score >= 5.5:
+            return f"decent if you like this genre"
+        else:
+            return f"overhyped tbh"
 
     @staticmethod
     def _fallback_hook(name: str, visits: int) -> str:

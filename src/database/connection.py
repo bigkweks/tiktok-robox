@@ -62,7 +62,19 @@ async def init_db() -> None:
             await conn.execute(text("PRAGMA cache_size=10000"))
             await conn.execute(text("PRAGMA temp_store=MEMORY"))
         await conn.run_sync(Base.metadata.create_all)
+        # Migrate: add new columns to existing tables if they don't exist yet
+        if "sqlite" in str(engine.url):
+            await _sqlite_add_column_if_missing(conn, "content", "carousel_caption", "TEXT")
     log.info("database.initialized")
+
+
+async def _sqlite_add_column_if_missing(conn, table: str, column: str, col_type: str) -> None:
+    from sqlalchemy import text
+    result = await conn.execute(text(f"PRAGMA table_info({table})"))
+    cols = {row[1] for row in result.fetchall()}
+    if column not in cols:
+        await conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {column} {col_type}"))
+        log.info("database.column_added", table=table, column=column)
 
 
 async def close_db() -> None:

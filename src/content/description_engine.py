@@ -38,9 +38,13 @@ class DescriptionResult:
 
 
 HASHTAG_TIERS = {
+    # These match the EXACT search queries that drove 23.9% search traffic
+    # on the proven viral post: "roblox games", "roblox games to play",
+    # "roblox games to play with friends", "fun roblox games with friends"
     "brand": ["#robloxgems", "#robloxrating", "#robloxreview"],
-    "niche": ["#robloxfyp", "#robloxgames", "#roblox2024", "#robloxtrending"],
-    "broad": ["#fyp", "#foryoupage", "#gaming", "#gamingtiktok"],
+    "search": ["#robloxgames", "#robloxgamestoplywithfriends", "#funrobloxgames"],
+    "niche": ["#robloxfyp", "#roblox", "#robloxtrending"],
+    "broad": ["#fyp", "#gaming"],
     "genre": {
         "horror": ["#robloxhorror", "#horrorRoblox"],
         "adventure": ["#robloxadventure"],
@@ -141,7 +145,8 @@ class DescriptionEngine:
     def _build_hashtags(self, genre: Optional[str], name: str) -> list[str]:
         tags: list[str] = []
 
-        # Brand tags always first (build discoverability over time)
+        # Search-optimised order: match proven queries first
+        tags.extend(HASHTAG_TIERS["search"])   # drives Search traffic (23.9% proven)
         tags.extend(HASHTAG_TIERS["brand"])
 
         # Genre-specific tags
@@ -154,14 +159,10 @@ class DescriptionEngine:
         if len(slug) > 2:
             tags.append(f"#{slug}")
 
-        # Niche tags
+        # Niche + broad
         tags.extend(HASHTAG_TIERS["niche"])
+        tags.extend(HASHTAG_TIERS["broad"])
 
-        # Broad reach tags (limit these — too many broad tags = lower engagement rate)
-        tags.extend(HASHTAG_TIERS["broad"][:2])
-
-        # TikTok has a recommended hashtag count of 3-5 for gaming
-        # Use 8-12 total for Roblox gaming niche (data shows this performs best)
         return tags[:12]
 
     @staticmethod

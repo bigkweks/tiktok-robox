@@ -127,6 +127,7 @@ class Content(Base):
 
     # ── Captions / copy ───────────────────────────────────────────────
     hook_text: Mapped[Optional[str]] = mapped_column(Text)
+    carousel_caption: Mapped[Optional[str]] = mapped_column(Text)
     description_a: Mapped[Optional[str]] = mapped_column(Text)
     description_b: Mapped[Optional[str]] = mapped_column(Text)
     hashtags: Mapped[Optional[str]] = mapped_column(Text)  # JSON array
@@ -201,6 +202,38 @@ class PostAnalytics(Base):
         Index("ix_post_analytics_recorded_at", "recorded_at"),
         Index("ix_post_analytics_variant", "thumbnail_variant"),
     )
+
+
+class CarouselPost(Base):
+    """
+    A 6-slide photo carousel (the proven viral format).
+    Groups 5 rated games into a single TikTok photo carousel post.
+    """
+    __tablename__ = "carousel_posts"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+
+    # Series metadata
+    edition: Mapped[str] = mapped_column(String(64), default="Friends edition")
+    part_number: Mapped[int] = mapped_column(Integer, default=1)
+
+    # Ordered JSON list of game IDs (5 games)
+    game_ids: Mapped[str] = mapped_column(Text)  # JSON [id1, id2, ...]
+
+    # Paths to the 6 slide images (JSON list, slide 0 = title)
+    slide_paths: Mapped[Optional[str]] = mapped_column(Text)  # JSON list
+
+    # TikTok caption (targets search queries like "roblox games to play")
+    caption: Mapped[Optional[str]] = mapped_column(Text)
+    hashtags: Mapped[Optional[str]] = mapped_column(Text)  # JSON
+
+    # Queue status
+    status: Mapped[str] = mapped_column(String(32), default="pending", index=True)
+    scheduled_post_time: Mapped[Optional[datetime]] = mapped_column(DateTime)
+    posted_at: Mapped[Optional[datetime]] = mapped_column(DateTime)
+    tiktok_post_id: Mapped[Optional[str]] = mapped_column(String(128))
+
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=func.now())
 
 
 class ModelWeights(Base):
