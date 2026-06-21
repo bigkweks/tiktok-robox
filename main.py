@@ -17,12 +17,16 @@ import sys
 import structlog
 import uvicorn
 
+# Configure structlog at import time so it's always set before any log call,
+# regardless of how this module is loaded (CLI, uvicorn string import, etc.)
+from src.logging_config import configure_logging as _configure_logging
+_configure_logging()
+
 log = structlog.get_logger(__name__)
 
 
 def configure_logging() -> None:
-    from src.logging_config import configure_logging as _configure
-    _configure()
+    _configure_logging()
 
 
 async def cmd_init_db() -> None:
