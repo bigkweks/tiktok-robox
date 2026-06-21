@@ -107,8 +107,32 @@ Generate a JSON rating with this exact structure:
   "controversy_angle": "<the mildly controversial opinion that will spark comment debate, 1 sentence>",
   "tts_script": "<15-20 second narration script for the video, natural spoken English, include the score reveal at the end, no special chars>",
   "hook_text": "<the first 2 seconds of text shown on screen — max 9 words>",
-  "carousel_caption": "<3-8 words, all lowercase, casual personal description for a photo carousel slide. Style: sound like a real player, not a brand. Examples: 'only escape room thats actually challenging', 'well made game i spent 30+ hours in', 'GTA in roblox', 'MUST check out', 'minecraft dropper if ukuk', 'insane pvp no one knows about'. No punctuation at end. Genre comparisons and personal takes work best.>"
+  "carousel_caption": "<see CAROUSEL CAPTION VOICE below — this is burned onto the photo slide>"
 }}
+
+CAROUSEL CAPTION VOICE (this single line sits on the game's screenshot — it MUST sound like a real teenage Roblox player typing fast, never like a brand or a marketer):
+
+These are REAL captions from a carousel that hit 118K views — match this voice EXACTLY:
+  - "only escape room thats actually challenging"
+  - "well made game i spent 30+ hours in"
+  - "GTA in roblox"
+  - "minecraft dropper if ukuk"
+  - "MUST check out"
+  - "anime pvp if u know u know"
+
+Hard rules for carousel_caption:
+  - 3 to 8 words. Shorter is better.
+  - all lowercase EXCEPT you may CAPS one word for hype ("MUST", "INSANE").
+  - NO ending punctuation. NO emojis. NO hashtags.
+  - drop apostrophes ("thats", "dont", "its") — it reads as authentic.
+  - slang is good: "if ukuk", "if u know u know", "fr", "ngl", "no cap", "lowkey", "hits different".
+  - Pick ONE of these angles, whichever fits the game best:
+      * genre comparison: "GTA in roblox", "minecraft dropper", "valorant but roblox"
+      * personal flex: "spent 30+ hours in this", "cant stop playing this"
+      * underrated: "no one talks about this", "criminally underrated"
+      * pure hype (only for 9.5+): "MUST check out", "actual masterpiece"
+      * niche callout: "anime pvp if ukuk", "horror that actually scared me"
+  - Make it specific to THIS game's genre/vibe — never generic like "fun game" or "good game".
 
 HOOK RULES (this is the single most important field — most viewers leave in 1.5s):
 - Be concrete and specific, never generic. BAD: "This game is amazing".
@@ -246,18 +270,19 @@ class RatingEngine:
 
     @staticmethod
     def _fallback_carousel_caption(name: str, score: float, visits: int) -> str:
+        # Same casual player voice as the AI prompt, used only if the API fails.
         if score >= 9.5:
-            return "MUST check out"
+            return "MUST check out fr"
         elif score >= 9.0:
-            return f"hidden gem most people sleep on"
+            return "no one talks about this"
         elif score >= 8.0:
-            return f"well made game fr"
+            return "well made game ngl"
         elif score >= 7.0:
-            return f"actually pretty good"
+            return "lowkey pretty good"
         elif score >= 5.5:
-            return f"decent if you like this genre"
+            return "decent if ur into this"
         else:
-            return f"overhyped tbh"
+            return "overhyped tbh"
 
     @staticmethod
     def _fallback_hook(name: str, visits: int) -> str:
