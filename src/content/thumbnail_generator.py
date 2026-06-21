@@ -19,6 +19,8 @@ import textwrap
 from pathlib import Path
 from typing import Optional
 
+import re
+
 import requests
 import structlog
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
@@ -390,6 +392,3 @@ class ThumbnailGenerator:
         self.generate_variant_b(game_name, score, label, hook_text, thumbnail_path, thumbnail_url, path_b)
 
         return path_a, path_b
-
-
-import re  # noqa: E402 (needed after the class for the label strip)

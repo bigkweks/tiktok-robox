@@ -25,11 +25,14 @@ from __future__ import annotations
 import io
 import math
 import os
+import random
+import re
 import textwrap
 from pathlib import Path
 from typing import Optional
 
 import numpy as np
+import requests
 import structlog
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
@@ -107,7 +110,6 @@ def _load_game_image(path: Optional[Path], url: Optional[str]) -> Optional[Image
             pass
     if url:
         try:
-            import requests
             resp = requests.get(url, timeout=10)
             resp.raise_for_status()
             return Image.open(io.BytesIO(resp.content)).convert("RGB")
@@ -155,7 +157,6 @@ def _split_narration(script: str, n: int) -> list[str]:
     """
     if not script:
         return [""] * n
-    import re
     parts = [p.strip() for p in re.split(r"(?<=[.!?])\s+", script.strip()) if p.strip()]
     if not parts:
         return [""] * n
@@ -415,8 +416,7 @@ class VideoAssembler:
         return output
 
     def _tts_elevenlabs(self, script: str, output: Path) -> Path:
-        import requests as req  # noqa: PLC0415
-        resp = req.post(
+        resp = requests.post(
             "https://api.elevenlabs.io/v1/text-to-speech/21m00Tcm4TlvDq8ikWAM",
             headers={
                 "xi-api-key": self._settings.ELEVENLABS_API_KEY,
@@ -438,11 +438,15 @@ class VideoAssembler:
 
     def _slide_hook(self, hook_text: str, settings) -> Image.Image:
         bg = _make_gradient_bg(settings.brand_primary_rgb, (10, 10, 30))
-        draw = ImageDraw.Draw(bg)
 
+        # Subtle diagonal stripes — draw on RGBA overlay so alpha blending works
+        stripe_layer = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+        sdraw = ImageDraw.Draw(stripe_layer)
         for i in range(0, W, 60):
-            draw.line([(i, 0), (i + 40, H)], fill=(255, 255, 255, 15), width=1)
+            sdraw.line([(i, 0), (i + 40, H)], fill=(255, 255, 255, 18), width=1)
+        bg = Image.alpha_composite(bg.convert("RGBA"), stripe_layer).convert("RGB")
 
+        draw = ImageDraw.Draw(bg)
         font_large = _load_font(96, bold=True)
         font_small = _load_font(52)
 
@@ -625,16 +629,19 @@ class VideoAssembler:
 
     def _slide_cta(self, settings) -> Image.Image:
         bg = _make_gradient_bg(settings.brand_primary_rgb, (10, 10, 30))
-        draw = ImageDraw.Draw(bg)
 
-        import random  # noqa: PLC0415
+        # Twinkling star particles — draw on RGBA overlay so alpha blending works
+        star_layer = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+        sdraw = ImageDraw.Draw(star_layer)
         rng = random.Random(42)
         for _ in range(40):
             sx = rng.randint(0, W)
             sy = rng.randint(0, H)
             r = rng.randint(2, 6)
             a = rng.randint(60, 180)
-            draw.ellipse([sx - r, sy - r, sx + r, sy + r], fill=(255, 255, 255, a))
+            sdraw.ellipse([sx - r, sy - r, sx + r, sy + r], fill=(255, 255, 255, a))
+        bg = Image.alpha_composite(bg.convert("RGBA"), star_layer).convert("RGB")
+        draw = ImageDraw.Draw(bg)
 
         cta_font = _load_font(90, bold=True)
         sub_font = _load_font(56)

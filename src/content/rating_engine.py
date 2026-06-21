@@ -37,6 +37,7 @@ class RatingResult:
     breakdown: dict[str, float]     # sub-scores
     tts_script: str                 # what the narrator will say
     controversy_angle: str          # the opinion that will spark debate
+    hook_text: str = ""             # first 2s on screen (≤9 words, no emoji)
 
     @property
     def display_score(self) -> str:
@@ -205,13 +206,16 @@ class RatingEngine:
                 breakdown=breakdown,
                 tts_script=tts_script,
                 controversy_angle=controversy,
+                hook_text=hook_text,
             )
             log.info("rating.generated", game=name, score=score, label=label)
             return result
 
         except Exception as exc:
             log.error("rating.failed", game=name, error=str(exc))
-            return self._fallback_rating(name, visits, viral_score)
+            fb = self._fallback_rating(name, visits, viral_score)
+            fb.hook_text = self._fallback_hook(name, visits)
+            return fb
 
     def _fallback_rating(self, name: str, visits: int, viral_score: float) -> RatingResult:
         """Rule-based fallback if AI fails."""
