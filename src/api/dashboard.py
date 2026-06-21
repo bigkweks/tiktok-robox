@@ -17,6 +17,9 @@ from typing import Optional
 
 import structlog
 from fastapi import BackgroundTasks, FastAPI, Form, HTTPException, Request
+
+from src.logging_config import configure_logging as _configure_logging
+_configure_logging()
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates

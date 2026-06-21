@@ -21,18 +21,8 @@ log = structlog.get_logger(__name__)
 
 
 def configure_logging() -> None:
-    import logging
-    import structlog
-
-    structlog.configure(
-        processors=[
-            structlog.stdlib.add_log_level,
-            structlog.processors.TimeStamper(fmt="%Y-%m-%d %H:%M:%S"),
-            structlog.dev.ConsoleRenderer(colors=True),
-        ],
-        wrapper_class=structlog.make_filtering_bound_logger(logging.INFO),
-        logger_factory=structlog.PrintLoggerFactory(),
-    )
+    from src.logging_config import configure_logging as _configure
+    _configure()
 
 
 async def cmd_init_db() -> None:
