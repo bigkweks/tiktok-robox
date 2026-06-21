@@ -29,6 +29,7 @@ from src.content.carousel_generator import CarouselGame, CarouselGenerator, EDIT
 from src.content.description_engine import DescriptionEngine
 from src.content.rating_engine import RatingEngine
 from src.content.thumbnail_generator import ThumbnailGenerator
+from src.content.tiktok_poster import get_poster_from_settings
 from src.content.video_assembler import VideoAssembler
 from src.database.connection import get_session, init_db
 from src.database.models import CarouselPost, Content, Game
@@ -94,6 +95,14 @@ class Pipeline:
             id="carousel_factory",
             name="Carousel Batch Generator",
             misfire_grace_time=300,
+        )
+        self._scheduler.add_job(
+            self.run_auto_poster,
+            "interval",
+            minutes=30,
+            id="auto_poster",
+            name="TikTok Auto Poster",
+            misfire_grace_time=120,
         )
 
         self._scheduler.start()
@@ -259,6 +268,83 @@ class Pipeline:
         log.info("pipeline.carousel_factory.complete", part=part, edition=edition,
                  slides=len(slide_paths), games=[g.name for g in carousel_games])
         return {"carousels": 1, "part": part, "edition": edition}
+
+    async def run_auto_poster(self) -> dict:
+        """
+        Post approved carousels to TikTok automatically.
+        Fires every 30 minutes. Skips silently when credentials aren't set.
+        """
+        import json as _json  # noqa: PLC0415
+        from datetime import datetime, timezone  # noqa: PLC0415
+        from pathlib import Path as _Path  # noqa: PLC0415
+
+        poster = get_poster_from_settings()
+        if poster is None:
+            log.debug("pipeline.auto_poster.no_credentials")
+            return {"posted": 0, "skipped": "no_credentials"}
+
+        now = datetime.now(timezone.utc)
+        async with get_session() as session:
+            from sqlalchemy import select as sa_select, or_ as sa_or  # noqa: PLC0415
+            result = await session.execute(
+                sa_select(CarouselPost)
+                .where(CarouselPost.status == "approved")
+                .where(
+                    sa_or(
+                        CarouselPost.scheduled_post_time.is_(None),
+                        CarouselPost.scheduled_post_time <= now,
+                    )
+                )
+                .order_by(CarouselPost.created_at.asc())
+                .limit(3)
+            )
+            due = list(result.scalars().all())
+
+        if not due:
+            log.debug("pipeline.auto_poster.nothing_due")
+            return {"posted": 0}
+
+        posted_count = 0
+        for post in due:
+            try:
+                slide_paths = [_Path(p) for p in _json.loads(post.slide_paths or "[]")]
+                if not slide_paths or not all(p.exists() for p in slide_paths):
+                    log.warning("pipeline.auto_poster.missing_slides", carousel_id=post.id)
+                    continue
+
+                hashtags = _json.loads(post.hashtags or "[]")
+                full_caption = (post.caption or "") + (
+                    "\n\n" + " ".join(hashtags) if hashtags else ""
+                )
+
+                result_obj = await asyncio.get_event_loop().run_in_executor(
+                    None,
+                    lambda p=post, sp=slide_paths, cap=full_caption: poster.post_carousel(
+                        slide_paths=sp,
+                        caption=cap,
+                        privacy_level=self._settings.TIKTOK_PRIVACY_LEVEL,
+                    ),
+                )
+
+                async with get_session() as session:
+                    fresh = await session.get(CarouselPost, post.id)
+                    if fresh:
+                        fresh.status = "posted"
+                        fresh.posted_at = datetime.now(timezone.utc)
+                        fresh.tiktok_post_id = result_obj.tiktok_post_id or result_obj.publish_id
+
+                log.info(
+                    "pipeline.auto_poster.posted",
+                    carousel_id=post.id,
+                    part=post.part_number,
+                    tiktok_post_id=result_obj.tiktok_post_id,
+                )
+                posted_count += 1
+
+            except Exception as exc:
+                log.error("pipeline.auto_poster.failed", carousel_id=post.id, error=str(exc))
+
+        return {"posted": posted_count, "attempted": len(due)}
 
     @staticmethod
     def _build_carousel_caption(edition: str, part: int, games: list) -> str:

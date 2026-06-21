@@ -6,12 +6,30 @@
     <h4 class="mb-0">📸 Photo Carousels</h4>
     <small class="text-muted">Viral format — 6 slides, 5 games per post</small>
   </div>
-  <div class="d-flex gap-2">
+  <div class="d-flex gap-2 align-items-center">
+    {% if not tiktok_configured %}
+    <span class="badge bg-warning text-dark" title="Set TIKTOK_ACCESS_TOKEN in .env to enable auto-posting">
+      TikTok: not connected
+    </span>
+    {% else %}
+    <span class="badge bg-success">TikTok: connected</span>
+    {% endif %}
     <button class="btn btn-sm btn-outline-light" onclick="triggerCarousel()" id="carouselBtn">
       ⚡ Generate Now
     </button>
   </div>
 </div>
+
+{% if not tiktok_configured %}
+<div class="alert alert-warning d-flex align-items-center gap-2 mb-4 py-2 small">
+  <span>⚠️</span>
+  <span>
+    TikTok auto-posting is not set up. Add <code>TIKTOK_ACCESS_TOKEN</code> and
+    <code>TIKTOK_OPEN_ID</code> to your <code>.env</code> file.
+    See <a href="https://developers.tiktok.com/doc/content-posting-api-get-started" target="_blank" rel="noopener">TikTok docs</a>.
+  </span>
+</div>
+{% endif %}
 
 {% if not carousels %}
 <div class="card text-center py-5">
@@ -28,7 +46,11 @@
   <div class="card-header d-flex justify-content-between align-items-center">
     <div>
       <span class="fw-bold">Part {{ post.part_number }} — {{ post.edition }}</span>
-      <span class="badge ms-2 {% if post.status == 'pending' %}bg-warning text-dark{% elif post.status == 'approved' %}bg-success{% else %}bg-secondary{% endif %}">
+      <span class="badge ms-2
+        {% if post.status == 'pending' %}bg-warning text-dark
+        {% elif post.status == 'approved' %}bg-success
+        {% elif post.status == 'posted' %}bg-primary
+        {% else %}bg-secondary{% endif %}">
         {{ post.status }}
       </span>
     </div>
@@ -37,6 +59,18 @@
       {% if post.status == 'pending' %}
       <button class="btn btn-sm btn-approve" onclick="approveCarousel({{ post.id }})">Approve</button>
       <button class="btn btn-sm btn-reject" onclick="rejectCarousel({{ post.id }})">Reject</button>
+      {% elif post.status == 'approved' %}
+      <button class="btn btn-sm btn-approve" onclick="approveCarousel({{ post.id }})">Re-Approve</button>
+      <button class="btn btn-sm btn-reject" onclick="rejectCarousel({{ post.id }})">Reject</button>
+      {% if tiktok_configured %}
+      <button class="btn btn-sm btn-primary" onclick="postToTikTok({{ post.id }}, this)">
+        🚀 Post to TikTok
+      </button>
+      {% else %}
+      <button class="btn btn-sm btn-secondary" disabled title="Configure TikTok credentials first">
+        🚀 Post to TikTok
+      </button>
+      {% endif %}
       {% endif %}
     </div>
   </div>
@@ -64,7 +98,7 @@
 
     <!-- Caption -->
     {% if post.caption %}
-    <div class="mb-3">
+    <div class="mb-2">
       <small class="text-muted d-block mb-1">TikTok Caption</small>
       <pre class="caption-box">{{ post.caption }}
 
@@ -103,6 +137,25 @@ async function approveCarousel(id) {
 async function rejectCarousel(id) {
   await post(`/carousel/${id}/reject`);
   location.reload();
+}
+async function postToTikTok(id, btn) {
+  btn.disabled = true;
+  btn.textContent = '⏳ Posting...';
+  try {
+    const r = await post(`/carousel/${id}/post`);
+    if (r.status === 'posting') {
+      btn.textContent = '✓ Queued';
+      btn.classList.replace('btn-primary', 'btn-success');
+      setTimeout(() => location.reload(), 3000);
+    } else {
+      btn.textContent = '✗ Error';
+      btn.disabled = false;
+    }
+  } catch (e) {
+    btn.textContent = '✗ Failed';
+    btn.disabled = false;
+    alert('Post failed: ' + (e.message || 'check logs'));
+  }
 }
 function expandSlide(src) {
   document.getElementById('modalImg').src = src;

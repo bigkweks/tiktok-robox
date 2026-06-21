@@ -45,6 +45,8 @@ class Settings(BaseSettings):
     TIKTOK_CLIENT_SECRET: str = ""
     TIKTOK_ACCESS_TOKEN: str = ""
     TIKTOK_OPEN_ID: str = ""
+    # PUBLIC_TO_EVERYONE | MUTUAL_FOLLOW_FRIENDS | SELF_ONLY (use SELF_ONLY for testing)
+    TIKTOK_PRIVACY_LEVEL: str = "PUBLIC_TO_EVERYONE"
 
     # ── Scoring weights ───────────────────────────────────────────────────
     WEIGHT_GROWTH_VELOCITY: float = 0.30

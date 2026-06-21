@@ -27,7 +27,7 @@ say "Step 0 of 7: Getting the latest updates..."
 # The database file is local-only; stop git tracking it so it never blocks pulls
 git rm --cached tiktok_robox.db 2>/dev/null || true
 git checkout -- tiktok_robox.db 2>/dev/null || true
-if git pull origin claude/roblox-tiktok-pipeline-x5t414 2>&1; then
+if git pull origin claude/handoff-continuation-ab99x3 2>&1; then
   ok "Code is up to date."
 else
   warn "Could not pull updates (no internet or not a git repo). Continuing anyway."
@@ -146,5 +146,14 @@ echo "   👉  Go to this address:   http://localhost:8000"
 echo ""
 echo "   To STOP it later: hold the Control key and press C."
 echo "   To START it again next time: run  bash quickstart.sh"
+echo ""
+echo "   ── TikTok Auto-Posting ─────────────────────────────"
+echo "   To enable automatic TikTok posting, add these to .env:"
+echo "     TIKTOK_ACCESS_TOKEN=your_token"
+echo "     TIKTOK_OPEN_ID=your_open_id"
+echo "   Get credentials: https://developers.tiktok.com/doc/content-posting-api-get-started"
+echo "   After adding, restart this script. The pipeline will post"
+echo "   approved carousels automatically every 30 minutes."
+echo "   ────────────────────────────────────────────────────"
 echo ""
 $PY main.py serve
