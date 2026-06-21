@@ -56,24 +56,9 @@ CROSSFADE = 0.35  # seconds of crossfade between slides
 
 
 def _load_font(size: int, bold: bool = False) -> ImageFont.ImageFont:
-    settings = get_settings()
-    font_dir = Path(settings.ASSETS_DIR, "fonts")
-    candidates = [
-        font_dir / ("bold.ttf" if bold else "regular.ttf"),
-        font_dir / ("Roboto-Bold.ttf" if bold else "Roboto-Regular.ttf"),
-        "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf" if bold
-        else "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
-        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf" if bold
-        else "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
-    ]
-    for path in candidates:
-        p = Path(path)
-        if p.exists():
-            try:
-                return ImageFont.truetype(str(p), size)
-            except Exception:
-                continue
-    return ImageFont.load_default()
+    # Shared Poppins loader (bundled) → clean, real-looking type
+    from src.content.fonts import load_font as _shared
+    return _shared("extrabold" if bold else "medium", size)
 
 
 def _pil_to_array(img: Image.Image) -> np.ndarray:

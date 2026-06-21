@@ -66,35 +66,9 @@ def _get_score_color(score: float) -> tuple[int, int, int]:
 
 
 def _load_font(size: int, bold: bool = False) -> ImageFont.ImageFont:
-    settings = get_settings()
-    font_dir = Path(settings.ASSETS_DIR, "fonts")
-    candidates = [
-        font_dir / ("bold.ttf" if bold else "regular.ttf"),
-        font_dir / ("Roboto-Bold.ttf" if bold else "Roboto-Regular.ttf"),
-        font_dir / "Inter-Bold.ttf" if bold else font_dir / "Inter-Regular.ttf",
-    ]
-    for path in candidates:
-        if path.exists():
-            try:
-                return ImageFont.truetype(str(path), size)
-            except Exception:
-                continue
-
-    # Try system fonts
-    system_paths = [
-        "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf" if bold
-        else "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
-        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf" if bold
-        else "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
-    ]
-    for path in system_paths:
-        if Path(path).exists():
-            try:
-                return ImageFont.truetype(path, size)
-            except Exception:
-                continue
-
-    return ImageFont.load_default()
+    # Shared Poppins loader (bundled) → clean, real-looking type
+    from src.content.fonts import load_font as _shared
+    return _shared("extrabold" if bold else "medium", size)
 
 
 def _download_image(url: str) -> Optional[Image.Image]:
@@ -213,28 +187,36 @@ class ThumbnailGenerator:
         channel_font = _load_font(52, bold=True)
         _draw_centered_text(draw, self._settings.CHANNEL_NAME, THUMB_W // 2, 55, channel_font, (255, 255, 255, 255), shadow=False)
 
-        # ── Score: Giant number ───────────────────────────────────────
-        score_font = _load_font(280, bold=True)
+        # ── Score: Giant number (anchor-positioned for predictable bounds) ─
+        score_font = _load_font(250, bold=True)
         score_text = f"{score:.1f}"
-        _draw_centered_text(draw, score_text, THUMB_W // 2, int(THUMB_H * 0.155), score_font, score_color + (255,), shadow=True, shadow_offset=6)
+        score_cy = int(THUMB_H * 0.17)
+        # Shadow then fill, both center-anchored
+        draw.text((THUMB_W // 2 + 6, score_cy + 6), score_text, font=score_font,
+                  fill=(0, 0, 0, 150), anchor="mm")
+        draw.text((THUMB_W // 2, score_cy), score_text, font=score_font,
+                  fill=score_color + (255,), anchor="mm")
 
-        # /10 subscript
-        sub_font = _load_font(80, bold=False)
-        bbox = draw.textbbox((0, 0), score_text, font=score_font)
-        score_w = bbox[2] - bbox[0]
-        sub_x = THUMB_W // 2 + score_w // 2 + 8
-        sub_y = int(THUMB_H * 0.155) + 60
-        draw.text((sub_x, sub_y), "/10", font=sub_font, fill=(200, 200, 200, 220))
+        # True pixel bounds of the drawn score
+        sbbox = draw.textbbox((THUMB_W // 2, score_cy), score_text, font=score_font, anchor="mm")
+        score_right = sbbox[2]
+        score_bottom = sbbox[3]
 
-        # ── Label badge ───────────────────────────────────────────────
+        # /10 subscript aligned to the score's right edge
+        sub_font = _load_font(72, bold=False)
+        draw.text((score_right + 14, score_cy), "/10", font=sub_font,
+                  fill=(200, 200, 200, 220), anchor="lm")
+
+        # ── Label badge — sits cleanly below the score ────────────────
         label_clean = re.sub(r"[^\w\s]", "", label).strip() if label else "HIDDEN GEM"
-        badge_font = _load_font(58, bold=True)
-        bbox = draw.textbbox((0, 0), label_clean, font=badge_font)
-        bw, bh = bbox[2] - bbox[0] + 48, bbox[3] - bbox[1] + 24
+        badge_font = _load_font(56, bold=True)
+        lbbox = draw.textbbox((0, 0), label_clean, font=badge_font)
+        bw, bh = lbbox[2] - lbbox[0] + 56, lbbox[3] - lbbox[1] + 34
         bx = (THUMB_W - bw) // 2
-        by = int(THUMB_H * 0.228)
-        draw.rounded_rectangle([bx, by, bx + bw, by + bh], radius=16, fill=label_color + (230,))
-        draw.text((bx + 24, by + 12), label_clean, font=badge_font, fill=(255, 255, 255, 255))
+        by = score_bottom + 44
+        draw.rounded_rectangle([bx, by, bx + bw, by + bh], radius=18, fill=label_color + (230,))
+        draw.text((THUMB_W // 2, by + bh // 2), label_clean, font=badge_font,
+                  fill=(255, 255, 255, 255), anchor="mm")
 
         # ── Game name ─────────────────────────────────────────────────
         name_font = _load_font(68, bold=True)

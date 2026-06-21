@@ -202,7 +202,7 @@ class Pipeline:
 
         # Take top 5
         batch = candidates[:5]
-        edition = EDITIONS[self._carousel_part_counter % len(EDITIONS)]
+        edition = EDITIONS[self._carousel_part_counter % len(EDITIONS)][0]
         part = self._carousel_part_counter
         self._carousel_part_counter += 1
 
@@ -218,6 +218,7 @@ class Pipeline:
                 icon_url=g.icon_url,
                 genre=g.genre,
                 visits=g.visits,
+                description=g.description or "",
             )
             for c, g in batch
         ]
