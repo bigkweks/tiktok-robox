@@ -467,7 +467,7 @@ async def health():
 
 @app.get("/app-icon.png")
 async def app_icon():
-    path = Path(_settings.ASSETS_DIR, "app_icon_512.png")
+    path = Path(_settings.ASSETS_DIR, "app_icon_1024.png")
     if not path.exists():
         raise HTTPException(404, "App icon not found — run: python scripts/generate_app_icon.py")
     return FileResponse(str(path), media_type="image/png")
