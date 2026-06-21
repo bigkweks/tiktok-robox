@@ -20,11 +20,13 @@ Minimum sample size: 10 posted videos before weights are adjusted.
 from __future__ import annotations
 
 import json
+import statistics
+import time
 from datetime import datetime, timezone
 from typing import Optional
 
 import structlog
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.database.connection import get_session
@@ -34,6 +36,9 @@ log = structlog.get_logger(__name__)
 
 LEARNING_RATE = 0.1
 MIN_SAMPLE = 10
+_WEIGHTS_TTL = 3600.0  # cache model weights for 1 hour
+
+_weights_cache: tuple = (None, 0.0)
 
 
 class FeedbackLoop:
@@ -78,7 +83,6 @@ class FeedbackLoop:
             session.add(record)
             await session.flush()
 
-            # Update content item
             content = await session.get(Content, content_id)
             if content:
                 content.status = "posted"
@@ -107,6 +111,10 @@ class FeedbackLoop:
         new_weights = await self._compute_weights(analytics)
         async with get_session() as session:
             session.add(new_weights)
+
+        # Invalidate weights cache after update
+        global _weights_cache
+        _weights_cache = (None, 0.0)
 
         log.info("feedback.weights_updated", sample_size=len(analytics))
         return new_weights
@@ -147,27 +155,22 @@ class FeedbackLoop:
         Simple correlation-based weight update.
         Uses follow conversion rate as the primary optimization target.
         """
-        import statistics
-
         current = await self._get_current_weights()
 
         follow_rates = [d["follow_conv_rate"] for d in data]
         mean_follow = statistics.mean(follow_rates) if follow_rates else 0.0
 
         def _corr(feature: str) -> float:
-            """Pearson correlation between feature and follow conversion."""
             xs = [d[feature] for d in data]
-            ys = follow_rates
             if len(xs) < 2:
                 return 0.0
-            mx, my = statistics.mean(xs), statistics.mean(ys)
-            num = sum((x - mx) * (y - my) for x, y in zip(xs, ys))
+            mx, my = statistics.mean(xs), statistics.mean(follow_rates)
+            num = sum((x - mx) * (y - my) for x, y in zip(xs, follow_rates))
             denom = (
-                (sum((x - mx) ** 2 for x in xs) * sum((y - my) ** 2 for y in ys)) ** 0.5
+                (sum((x - mx) ** 2 for x in xs) * sum((y - my) ** 2 for y in follow_rates)) ** 0.5
             )
             return num / denom if denom > 0 else 0.0
 
-        # Correlations of game features with follow conversion
         corr_growth = max(0.0, _corr("growth_velocity"))
         corr_engagement = max(0.0, _corr("engagement_ratio"))
         corr_novelty = max(0.0, _corr("novelty"))
@@ -176,7 +179,6 @@ class FeedbackLoop:
 
         total_corr = corr_growth + corr_engagement + corr_novelty + corr_retention + corr_freshness
         if total_corr <= 0:
-            # No signal — keep current weights
             return ModelWeights(
                 weight_growth_velocity=current.weight_growth_velocity,
                 weight_engagement_ratio=current.weight_engagement_ratio,
@@ -191,8 +193,7 @@ class FeedbackLoop:
                 update_reason="no_correlation_signal_found",
             )
 
-        # Normalize to target weight allocation (leave cross_platform fixed)
-        allocated = 0.90  # remaining 0.10 stays as cross_platform
+        allocated = 0.90
         raw_weights = {
             "growth": corr_growth,
             "engagement": corr_engagement,
@@ -206,7 +207,7 @@ class FeedbackLoop:
         def _update(old: float, new: float) -> float:
             return round(old + LEARNING_RATE * (new - old), 4)
 
-        # Thumbnail A/B analysis
+        # Thumbnail A/B analysis (pre-partitioned from data dict)
         variant_a = [d for d in data if d["thumbnail_variant"] == "A"]
         variant_b = [d for d in data if d["thumbnail_variant"] == "B"]
         if variant_a and variant_b:
@@ -231,52 +232,66 @@ class FeedbackLoop:
         )
 
     async def _get_current_weights(self) -> ModelWeights:
+        global _weights_cache
+        cached, ts = _weights_cache
+        if cached is not None and time.monotonic() - ts < _WEIGHTS_TTL:
+            return cached
         async with get_session() as session:
             weights = await session.scalar(
                 select(ModelWeights).order_by(ModelWeights.updated_at.desc()).limit(1)
             )
-        if weights:
-            return weights
-        return ModelWeights()  # defaults
+        result = weights if weights else ModelWeights()
+        _weights_cache = (result, time.monotonic())
+        return result
 
     async def get_performance_summary(self) -> dict:
-        """Return aggregated performance stats for dashboard."""
+        """Return aggregated performance stats using SQL aggregates — no full table scan."""
         async with get_session() as session:
-            result = await session.execute(select(PostAnalytics))
-            all_analytics = result.scalars().all()
+            row = (await session.execute(
+                select(
+                    func.count(PostAnalytics.id).label("total_posts"),
+                    func.coalesce(func.sum(PostAnalytics.views), 0).label("total_views"),
+                    func.coalesce(func.sum(PostAnalytics.follows_from_video), 0).label("total_follows"),
+                    func.avg(PostAnalytics.completion_rate).label("avg_completion"),
+                    func.avg(PostAnalytics.follow_conversion_rate).label("avg_follow_conv"),
+                    func.avg(PostAnalytics.engagement_rate).label("avg_engagement"),
+                )
+            )).one()
 
-        if not all_analytics:
-            return {
-                "total_posts": 0,
-                "total_views": 0,
-                "total_follows": 0,
-                "avg_completion_rate": 0.0,
-                "avg_follow_conv_rate": 0.0,
-                "avg_engagement_rate": 0.0,
-                "top_performing_variant": "N/A",
-            }
+            if not row.total_posts:
+                return {
+                    "total_posts": 0,
+                    "total_views": 0,
+                    "total_follows": 0,
+                    "avg_completion_rate": 0.0,
+                    "avg_follow_conv_rate": 0.0,
+                    "avg_engagement_rate": 0.0,
+                    "top_performing_variant": "N/A",
+                }
 
-        total_views = sum(a.views for a in all_analytics)
-        total_follows = sum(a.follows_from_video for a in all_analytics)
+            # Variant winner via GROUP BY — no Python-level filtering
+            variant_rows = (await session.execute(
+                select(
+                    PostAnalytics.thumbnail_variant,
+                    func.avg(PostAnalytics.follow_conversion_rate).label("avg_follow"),
+                )
+                .group_by(PostAnalytics.thumbnail_variant)
+            )).all()
 
-        import statistics
-        completion_rates = [a.completion_rate for a in all_analytics if a.completion_rate > 0]
-        eng_rates = [a.engagement_rate for a in all_analytics if a.engagement_rate > 0]
-        follow_rates = [a.follow_conversion_rate for a in all_analytics if a.follow_conversion_rate > 0]
-
-        a_follows = [a.follow_conversion_rate for a in all_analytics if a.thumbnail_variant == "A"]
-        b_follows = [a.follow_conversion_rate for a in all_analytics if a.thumbnail_variant == "B"]
-        if a_follows and b_follows:
-            top_variant = "A" if statistics.mean(a_follows) >= statistics.mean(b_follows) else "B"
+        variants = {r.thumbnail_variant: float(r.avg_follow or 0) for r in variant_rows}
+        a_rate = variants.get("A", 0)
+        b_rate = variants.get("B", 0)
+        if a_rate and b_rate:
+            top_variant = "A" if a_rate >= b_rate else "B"
         else:
-            top_variant = "A" if a_follows else "B" if b_follows else "N/A"
+            top_variant = "A" if a_rate else ("B" if b_rate else "N/A")
 
         return {
-            "total_posts": len(all_analytics),
-            "total_views": total_views,
-            "total_follows": total_follows,
-            "avg_completion_rate": statistics.mean(completion_rates) if completion_rates else 0.0,
-            "avg_follow_conv_rate": statistics.mean(follow_rates) if follow_rates else 0.0,
-            "avg_engagement_rate": statistics.mean(eng_rates) if eng_rates else 0.0,
+            "total_posts": row.total_posts,
+            "total_views": int(row.total_views),
+            "total_follows": int(row.total_follows),
+            "avg_completion_rate": float(row.avg_completion or 0.0),
+            "avg_follow_conv_rate": float(row.avg_follow_conv or 0.0),
+            "avg_engagement_rate": float(row.avg_engagement or 0.0),
             "top_performing_variant": top_variant,
         }

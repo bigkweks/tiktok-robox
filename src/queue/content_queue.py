@@ -14,7 +14,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 import structlog
-from sqlalchemy import func, select
+from sqlalchemy import case, func, select, update
 
 from src.database.connection import get_session
 from src.database.models import Content, Game, ModelWeights
@@ -64,7 +64,6 @@ class ContentQueue:
             return 0
 
         now = datetime.now(timezone.utc)
-        # Find the next posting slot
         next_slot = self._next_post_slot(now)
         scheduled = 0
 
@@ -110,18 +109,19 @@ class ContentQueue:
             w_engage = weights.weight_engagement_pred if weights else 0.30
             w_follow = weights.weight_follow_conv_pred if weights else 0.30
 
+            # Single UPDATE instead of loading all rows + N individual updates
             result = await session.execute(
-                select(Content).where(Content.status.in_(["pending", "approved"]))
+                update(Content)
+                .where(Content.status.in_(["pending", "approved"]))
+                .values(queue_priority=(
+                    w_viral * Content.predicted_viral_score
+                    + w_engage * Content.predicted_engagement_score
+                    + w_follow * Content.predicted_follow_conv_score
+                ))
             )
-            items = result.scalars().all()
-            for item in items:
-                item.queue_priority = (
-                    w_viral * item.predicted_viral_score
-                    + w_engage * item.predicted_engagement_score
-                    + w_follow * item.predicted_follow_conv_score
-                )
+            count = result.rowcount
 
-        log.info("queue.reprioritized", count=len(items))
+        log.info("queue.reprioritized", count=count)
 
     async def get_due_for_posting(self) -> list[Content]:
         """Return items whose scheduled_post_time has passed."""
@@ -136,29 +136,31 @@ class ContentQueue:
             return list(result.scalars().all())
 
     async def get_dashboard_stats(self) -> dict:
+        """All dashboard counts in 3 queries instead of 6."""
         async with get_session() as session:
+            # All content status counts in a single conditional aggregate
+            cs = (await session.execute(
+                select(
+                    func.count(Content.id).label("total"),
+                    func.sum(case((Content.status == "approved", 1), else_=0)).label("approved"),
+                    func.sum(case((Content.status == "posted", 1), else_=0)).label("posted"),
+                    func.sum(case((Content.status == "pending", 1), else_=0)).label("pending"),
+                )
+            )).one()
+
             total_games = await session.scalar(select(func.count(Game.id)))
-            total_content = await session.scalar(select(func.count(Content.id)))
-            approved = await session.scalar(
-                select(func.count(Content.id)).where(Content.status == "approved")
-            )
-            posted = await session.scalar(
-                select(func.count(Content.id)).where(Content.status == "posted")
-            )
-            pending = await session.scalar(
-                select(func.count(Content.id)).where(Content.status == "pending")
-            )
             top_game = await session.scalar(
                 select(Game.name).order_by(Game.viral_score.desc()).limit(1)
             )
-            return {
-                "total_games": total_games or 0,
-                "total_content": total_content or 0,
-                "queue_size": approved or 0,
-                "posted": posted or 0,
-                "pending": pending or 0,
-                "top_game": top_game or "N/A",
-            }
+
+        return {
+            "total_games": total_games or 0,
+            "total_content": cs.total or 0,
+            "queue_size": cs.approved or 0,
+            "posted": cs.posted or 0,
+            "pending": cs.pending or 0,
+            "top_game": top_game or "N/A",
+        }
 
     @staticmethod
     def _next_post_slot(after: datetime) -> datetime:
@@ -166,7 +168,6 @@ class ContentQueue:
             candidate = after.replace(hour=hour, minute=0, second=0, microsecond=0)
             if candidate > after:
                 return candidate
-        # All today's slots passed — first slot tomorrow
         tomorrow = after + timedelta(days=1)
         return tomorrow.replace(hour=POSTING_HOURS[0], minute=0, second=0, microsecond=0)
 

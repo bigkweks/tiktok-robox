@@ -55,6 +55,12 @@ async def get_session() -> AsyncGenerator[AsyncSession, None]:
 async def init_db() -> None:
     engine = get_engine()
     async with engine.begin() as conn:
+        if "sqlite" in str(engine.url):
+            from sqlalchemy import text
+            await conn.execute(text("PRAGMA journal_mode=WAL"))
+            await conn.execute(text("PRAGMA synchronous=NORMAL"))
+            await conn.execute(text("PRAGMA cache_size=10000"))
+            await conn.execute(text("PRAGMA temp_store=MEMORY"))
         await conn.run_sync(Base.metadata.create_all)
     log.info("database.initialized")
 

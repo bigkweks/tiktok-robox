@@ -13,6 +13,7 @@ Schedule:
 from __future__ import annotations
 
 import asyncio
+import functools
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
@@ -53,7 +54,6 @@ class Pipeline:
         await init_db()
         self._settings.ensure_dirs()
 
-        # Register scheduled jobs
         self._scheduler.add_job(
             self.run_discovery,
             "interval",
@@ -89,12 +89,11 @@ class Pipeline:
         self._running = True
         log.info("pipeline.started")
 
-        # Run immediately on startup if queue is thin
+        # Kick off background tasks if queue is thin — no sleep, both fire immediately
         queue_size = await self._queue.queue_size()
         if queue_size < 20:
             log.info("pipeline.startup_discovery", queue_size=queue_size)
             asyncio.create_task(self.run_discovery())
-            await asyncio.sleep(2)
             asyncio.create_task(self.run_content_factory())
 
     async def stop(self) -> None:
@@ -157,6 +156,7 @@ class Pipeline:
 
     async def _generate_content_for_game(self, game: Game) -> Content:
         log.info("pipeline.generating", game=game.name, universe_id=game.universe_id)
+        loop = asyncio.get_event_loop()
 
         # 1. Download visual assets
         async with ScreenshotEngine() as screenshot:
@@ -169,45 +169,57 @@ class Pipeline:
         thumb_path = assets.get("thumbnail")
         game_thumb = Path(thumb_path) if thumb_path else None
 
-        # 2. Generate AI rating (sync — Claude SDK)
-        rating = self._rating.rate_game(
-            name=game.name,
-            description=game.description or "",
-            visits=game.visits,
-            active_players=game.active_players,
-            favorites=game.favorites,
-            like_ratio=game.like_ratio,
-            genre=game.genre or "",
-            created_at=str(game.created_at_roblox) if game.created_at_roblox else None,
-            updated_at=str(game.updated_at_roblox) if game.updated_at_roblox else None,
-            viral_score=game.viral_score,
+        # 2. AI rating — sync Claude SDK call, run in thread to avoid blocking event loop
+        rating = await loop.run_in_executor(
+            None,
+            functools.partial(
+                self._rating.rate_game,
+                name=game.name,
+                description=game.description or "",
+                visits=game.visits,
+                active_players=game.active_players,
+                favorites=game.favorites,
+                like_ratio=game.like_ratio,
+                genre=game.genre or "",
+                created_at=str(game.created_at_roblox) if game.created_at_roblox else None,
+                updated_at=str(game.updated_at_roblox) if game.updated_at_roblox else None,
+                viral_score=game.viral_score,
+            ),
         )
 
-        # 3. Generate captions
-        desc = self._description.generate(
-            name=game.name,
-            score=rating.score,
-            label=rating.label,
-            verdict=rating.verdict,
-            visits=game.visits,
-            genre=game.genre,
-            hook_text=rating.tts_script[:80] if rating.tts_script else "",
-            controversy_angle=rating.controversy_angle,
+        # 3. Captions — sync call, run in thread
+        desc = await loop.run_in_executor(
+            None,
+            functools.partial(
+                self._description.generate,
+                name=game.name,
+                score=rating.score,
+                label=rating.label,
+                verdict=rating.verdict,
+                visits=game.visits,
+                genre=game.genre,
+                hook_text=rating.tts_script[:80] if rating.tts_script else "",
+                controversy_angle=rating.controversy_angle,
+            ),
         )
 
-        # 4. Generate thumbnails A + B
-        thumb_a, thumb_b = self._thumbgen.generate_both(
-            game_name=game.name,
-            universe_id=game.universe_id,
-            score=rating.score,
-            label=rating.label,
-            hook_text=rating.tts_script[:80] if rating.tts_script else "",
-            thumbnail_path=game_thumb,
-            thumbnail_url=game.thumbnail_url,
+        # 4. Thumbnails A + B — CPU-bound Pillow, run in thread
+        thumb_a, thumb_b = await loop.run_in_executor(
+            None,
+            functools.partial(
+                self._thumbgen.generate_both,
+                game_name=game.name,
+                universe_id=game.universe_id,
+                score=rating.score,
+                label=rating.label,
+                hook_text=rating.tts_script[:80] if rating.tts_script else "",
+                thumbnail_path=game_thumb,
+                thumbnail_url=game.thumbnail_url,
+            ),
         )
 
-        # 5. Compute TikTok performance predictions
-        from src.discovery.viral_scorer import ViralScorer  # noqa: PLC0415
+        # 5. TikTok performance predictions
+        from src.discovery.viral_scorer import ViralScorer, ScoreBreakdown  # noqa: PLC0415
         async with get_session() as session:
             from sqlalchemy import select as sa_select  # noqa: PLC0415
             from src.database.models import ModelWeights  # noqa: PLC0415
@@ -215,7 +227,6 @@ class Pipeline:
                 sa_select(ModelWeights).order_by(ModelWeights.updated_at.desc()).limit(1)
             )
         scorer = ViralScorer(weights=weights)
-        from src.discovery.viral_scorer import ScoreBreakdown  # noqa: PLC0415
         breakdown = ScoreBreakdown(
             viral_score=game.viral_score,
             growth_velocity_score=game.growth_velocity_score,
@@ -226,22 +237,26 @@ class Pipeline:
         )
         predictions = scorer.predict_tiktok_performance(breakdown, rating.score, game.name)
 
-        # 6. Assemble video (can take a minute)
+        # 6. Video assembly — CPU+I/O-bound, run in thread
         features = self._extract_features(game.description or "", 3)
-        video_path = self._video.assemble(
-            universe_id=game.universe_id,
-            game_name=game.name,
-            score=rating.score,
-            label=rating.label,
-            verdict=rating.verdict,
-            hook_text=rating.tts_script[:100] if rating.tts_script else "",
-            visits=game.visits,
-            active_players=game.active_players,
-            favorites=game.favorites,
-            tts_script=rating.tts_script or "",
-            thumbnail_path=game_thumb,
-            thumbnail_url=game.thumbnail_url,
-            features=features,
+        video_path = await loop.run_in_executor(
+            None,
+            functools.partial(
+                self._video.assemble,
+                universe_id=game.universe_id,
+                game_name=game.name,
+                score=rating.score,
+                label=rating.label,
+                verdict=rating.verdict,
+                hook_text=rating.tts_script[:100] if rating.tts_script else "",
+                visits=game.visits,
+                active_players=game.active_players,
+                favorites=game.favorites,
+                tts_script=rating.tts_script or "",
+                thumbnail_path=game_thumb,
+                thumbnail_url=game.thumbnail_url,
+                features=features,
+            ),
         )
 
         # 7. Persist content package
@@ -272,8 +287,6 @@ class Pipeline:
         async with get_session() as session:
             session.add(content)
             await session.flush()
-
-            # Mark game as having content generated
             g = await session.get(Game, game.id)
             if g:
                 g.content_generated = True
@@ -289,7 +302,6 @@ class Pipeline:
 
     @staticmethod
     def _extract_features(description: str, count: int) -> list[str]:
-        """Extract key feature phrases from game description."""
         if not description:
             return []
         sentences = [s.strip() for s in description.replace("\n", ". ").split(".") if len(s.strip()) > 20]

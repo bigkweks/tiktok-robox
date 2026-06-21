@@ -10,6 +10,7 @@ Provides:
 """
 from __future__ import annotations
 
+import asyncio
 import json
 from datetime import datetime
 from pathlib import Path
@@ -17,9 +18,11 @@ from typing import Optional
 
 import structlog
 from fastapi import BackgroundTasks, FastAPI, Form, HTTPException, Request
+from fastapi.middleware.gzip import GZipMiddleware
 
 from src.logging_config import configure_logging as _configure_logging
 _configure_logging()
+
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -36,6 +39,7 @@ from src.scheduler.pipeline import Pipeline
 log = structlog.get_logger(__name__)
 
 app = FastAPI(title="TikTok Robox Dashboard", version="1.0.0")
+app.add_middleware(GZipMiddleware, minimum_size=500)
 
 _settings = get_settings()
 _queue = ContentQueue()
@@ -70,8 +74,11 @@ async def shutdown():
 
 @app.get("/", response_class=HTMLResponse)
 async def index(request: Request):
-    stats = await _queue.get_dashboard_stats()
-    perf = await _feedback.get_performance_summary()
+    # Run both stat queries concurrently
+    stats, perf = await asyncio.gather(
+        _queue.get_dashboard_stats(),
+        _feedback.get_performance_summary(),
+    )
     return templates.TemplateResponse("index.html", {
         "request": request,
         "stats": stats,
@@ -141,20 +148,26 @@ async def analytics_page(request: Request):
 
 @app.get("/content/{content_id}", response_class=HTMLResponse)
 async def content_detail(request: Request, content_id: int):
+    # Single joined query instead of two separate gets
     async with get_session() as session:
-        content = await session.get(Content, content_id)
-        if not content:
+        result = await session.execute(
+            select(Content, Game)
+            .join(Game, Content.game_id == Game.id)
+            .where(Content.id == content_id)
+        )
+        row = result.one_or_none()
+        if not row:
             raise HTTPException(404, "Content not found")
-        game = await session.get(Game, content.game_id)
+        content, game = row
 
-    hashtags = []
+    hashtags: list = []
     if content.hashtags:
         try:
             hashtags = json.loads(content.hashtags)
         except Exception:
             pass
 
-    breakdown = {}
+    breakdown: dict = {}
     if content.rating_breakdown:
         try:
             breakdown = json.loads(content.rating_breakdown)
@@ -246,8 +259,10 @@ async def ingest_analytics(payload: AnalyticsPayload):
 
 @app.get("/api/stats")
 async def api_stats():
-    stats = await _queue.get_dashboard_stats()
-    perf = await _feedback.get_performance_summary()
+    stats, perf = await asyncio.gather(
+        _queue.get_dashboard_stats(),
+        _feedback.get_performance_summary(),
+    )
     return {**stats, **perf}
 
 

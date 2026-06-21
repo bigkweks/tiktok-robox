@@ -196,6 +196,12 @@ class PostAnalytics(Base):
 
     content: Mapped[Content] = relationship("Content", back_populates="analytics")
 
+    __table_args__ = (
+        Index("ix_post_analytics_content_id", "content_id"),
+        Index("ix_post_analytics_recorded_at", "recorded_at"),
+        Index("ix_post_analytics_variant", "thumbnail_variant"),
+    )
+
 
 class ModelWeights(Base):
     """Learnable scoring weights updated by the analytics feedback loop."""
