@@ -104,8 +104,21 @@ Generate a JSON rating with this exact structure:
   "verdict": "<one punchy sentence, max 12 words, no emojis>",
   "controversy_angle": "<the mildly controversial opinion that will spark comment debate, 1 sentence>",
   "tts_script": "<15-20 second narration script for the video, natural spoken English, include the score reveal at the end, no special chars>",
-  "hook_text": "<the first 2 seconds of text shown on screen — must create instant curiosity, max 10 words>"
+  "hook_text": "<the first 2 seconds of text shown on screen — max 9 words>"
 }}
+
+HOOK RULES (this is the single most important field — most viewers leave in 1.5s):
+- Be concrete and specific, never generic. BAD: "This game is amazing".
+  GOOD: "This 800K-visit game humbles Blox Fruits".
+- Use ONE of these proven angles:
+  * Underrated shock: "Why does nobody play this Roblox game?"
+  * Overrated hot take: "{name} is wildly overrated and here's proof"
+  * Number tension: "I rated {name} and people are going to be mad"
+  * Curiosity gap: "The {genre} game Roblox doesn't want you to find"
+  * Stakes: "Rating {name} so you don't waste your time"
+- Reference a real number or the genre when it sharpens the hook.
+- Never reveal the score in the hook — the score is the payoff.
+- No hashtags, no emojis in hook_text.
 
 Scoring rules:
 - 9.0–10.0: Elite tier — exceptional quality AND underexposed (< 10M visits preferred)
@@ -224,9 +237,23 @@ class RatingEngine:
 
     @staticmethod
     def _fallback_hook(name: str, visits: int) -> str:
-        if visits > 100_000_000:
-            return f"Is {name} actually worth your time?"
-        elif visits > 10_000_000:
-            return f"{name} has {visits // 1_000_000}M visits — here's why"
+        # Concrete, pattern-interrupting hooks mapped to the game's fame tier.
+        if visits >= 500_000_000:
+            return f"Is {name} actually overrated?"
+        elif visits >= 100_000_000:
+            return f"Rating {name} so you don't have to"
+        elif visits >= 10_000_000:
+            return f"{name} has {visits // 1_000_000}M visits — but is it good?"
+        elif visits >= 1_000_000:
+            return f"Why does nobody talk about {name}?"
         else:
-            return f"Nobody talks about this Roblox game..."
+            n = _format_short(visits)
+            return f"This {n}-visit game is a hidden gem"
+
+
+def _format_short(n: int) -> str:
+    if n >= 1_000_000:
+        return f"{n / 1_000_000:.1f}M"
+    if n >= 1_000:
+        return f"{n // 1_000}K"
+    return str(n)

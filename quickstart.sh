@@ -49,6 +49,14 @@ else
 fi
 ok "Found Python."
 
+# Best-effort: install fonts so burned-in text + emoji render crisply.
+# (Liberation = clean Latin text, Noto Color Emoji = ⭐💎 instead of boxes.)
+if command -v apt-get >/dev/null 2>&1; then
+  sudo apt-get install -y -q fonts-liberation fonts-noto-color-emoji >/dev/null 2>&1 \
+    && ok "Fonts ready (crisp text + emoji)." \
+    || warn "Could not auto-install fonts — text still works, emoji may show as boxes."
+fi
+
 # ── Step 2: Check for ffmpeg (video maker) ──────────────────
 say "Step 2 of 7: Checking the video tool (ffmpeg)..."
 if command -v ffmpeg >/dev/null 2>&1; then

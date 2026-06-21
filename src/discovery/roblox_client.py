@@ -65,9 +65,7 @@ SEED_UNIVERSE_IDS: list[str] = [
     "3628400479",   # Anime Fighting Simulator X
     "391149966",    # Dragon Ball Z Final Stand
     "2788229376",   # Wisteria
-    "5806180688",   # Roblox Bedwars
     "1537690962",   # Super Golf
-    "2788229376",   # Wisteria
     "1271834323",   # Prison Life
     "155615604",    # Speed Run 4
     "301549746",    # The Mad Murderer
@@ -88,9 +86,7 @@ SEED_UNIVERSE_IDS: list[str] = [
     "9969477681",   # Evade
     "3254287817",   # Survive the Killer
     "4792038890",   # Bee Swarm Simulator
-    "1537690962",   # Super Golf
     "189707",       # Escape Room (classic)
-    "142823291",    # Murder Mystery 2
 ]
 
 GENRE_IDS: dict[str, int] = {

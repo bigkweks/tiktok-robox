@@ -251,6 +251,51 @@ class ViralScorer:
         else:
             return 0.4
 
+    def tiktok_candidacy(
+        self,
+        *,
+        visits: int,
+        viral_score: float,
+        novelty_score: float,
+        growth_velocity_score: float,
+        retention_proxy_score: float,
+    ) -> float:
+        """
+        How good a TikTok CONTENT candidate this game is — distinct from raw
+        viral_score. The channel brand is "hidden gems," so this deliberately
+        down-weights ubiquitous mega-games (everyone already knows Adopt Me;
+        a video saying "have you heard of it?" flops) and rewards the
+        discoverable-but-not-famous sweet spot that produces discovery dopamine.
+
+        Discoverability multiplier by visit count:
+          < 100K      0.60  — too obscure: weak social proof, often low quality
+          100K – 1M   0.92  — true hidden gem, strongest "I found this" hook
+          1M – 20M    1.00  — sweet spot: credible AND surprising
+          20M – 100M  0.80  — known, still rateable
+          100M – 500M 0.55  — famous, novelty mostly gone
+          > 500M      0.35  — everyone knows it; only works as a hot take
+        """
+        if visits < 100_000:
+            disc = 0.60
+        elif visits < 1_000_000:
+            disc = 0.92
+        elif visits < 20_000_000:
+            disc = 1.00
+        elif visits < 100_000_000:
+            disc = 0.80
+        elif visits < 500_000_000:
+            disc = 0.55
+        else:
+            disc = 0.35
+
+        base = (
+            0.45 * viral_score
+            + 0.25 * novelty_score
+            + 0.20 * growth_velocity_score
+            + 0.10 * retention_proxy_score
+        )
+        return round(base * disc, 4)
+
     def predict_tiktok_performance(
         self,
         breakdown: ScoreBreakdown,

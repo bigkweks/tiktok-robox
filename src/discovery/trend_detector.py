@@ -254,13 +254,36 @@ class TrendDetector:
         return {"new": new_count, "updated": updated_count, "skipped": skipped_count}
 
     async def get_top_unprocessed(self, limit: int = 20) -> list[Game]:
-        """Return top-scored games that haven't had content generated yet."""
+        """
+        Return the best TikTok CONTENT candidates that haven't had content
+        generated yet.
+
+        We do NOT just take the highest raw viral_score — that floods the
+        first batch with ubiquitous mega-games (Adopt Me, Brookhaven) that
+        flop as "hidden gem" videos. Instead we pull a wider pool by
+        viral_score, then re-rank by tiktok_candidacy (which rewards the
+        discoverable-but-not-famous sweet spot) and return the top `limit`.
+        """
         async with get_session() as session:
+            scorer = await self._get_scorer(session)
             result = await session.execute(
                 select(Game)
                 .where(Game.content_generated == False)  # noqa: E712
                 .where(Game.is_blacklisted == False)  # noqa: E712
                 .order_by(Game.viral_score.desc())
-                .limit(limit)
+                .limit(max(limit * 4, 40))
             )
-            return list(result.scalars().all())
+            pool = list(result.scalars().all())
+
+        ranked = sorted(
+            pool,
+            key=lambda g: scorer.tiktok_candidacy(
+                visits=g.visits,
+                viral_score=g.viral_score,
+                novelty_score=g.novelty_score,
+                growth_velocity_score=g.growth_velocity_score,
+                retention_proxy_score=g.retention_proxy_score,
+            ),
+            reverse=True,
+        )
+        return ranked[:limit]
