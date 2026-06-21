@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+{% block title %}Privacy Policy{% endblock %}
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-lg-8">
+    <div class="card p-4">
+      <h2 class="mb-1">Privacy Policy</h2>
+      <p class="text-muted small mb-4">Last updated: June 2025 · RoboxPipeline / RobloxGems</p>
+
+      <h5>1. What this app is</h5>
+      <p>RoboxPipeline is a personal content automation tool. It discovers Roblox games, generates
+      photo carousel posts using AI, and publishes them to TikTok on behalf of its single operator
+      (you). It is not a public service and does not have end-users other than its owner.</p>
+
+      <h5>2. Data we collect</h5>
+      <ul>
+        <li><strong>Roblox game data</strong> — publicly available information fetched from the
+        Roblox public API (game names, descriptions, player counts, thumbnails). No personal data.</li>
+        <li><strong>TikTok OAuth credentials</strong> — your Access Token and Open ID are stored
+        locally in a <code>.env</code> file on your own machine/server. They are never transmitted
+        to any third party other than TikTok's own API endpoints.</li>
+        <li><strong>Content metadata</strong> — generated captions, ratings, and post history are
+        stored in a local SQLite database (<code>tiktok_robox.db</code>) on your machine.</li>
+        <li><strong>No user data</strong> — this app has no sign-up, no accounts, and collects
+        no personal information from any person other than the operator.</li>
+      </ul>
+
+      <h5>3. How we use data</h5>
+      <ul>
+        <li>Roblox game data is used solely to generate TikTok content.</li>
+        <li>TikTok credentials are used solely to call the TikTok Content Posting API on your behalf.</li>
+        <li>Anthropic API is called to generate game ratings and captions. Game metadata (name,
+        description, stats) is sent to Anthropic. No personal data is included.</li>
+      </ul>
+
+      <h5>4. Third-party services</h5>
+      <table class="table table-sm">
+        <thead><tr><th>Service</th><th>Purpose</th><th>Privacy Policy</th></tr></thead>
+        <tbody>
+          <tr><td>TikTok</td><td>Publishing carousel posts</td>
+              <td><a href="https://www.tiktok.com/legal/page/us/privacy-policy/en" target="_blank" rel="noopener">tiktok.com/legal</a></td></tr>
+          <tr><td>Roblox</td><td>Fetching public game data</td>
+              <td><a href="https://en.help.roblox.com/hc/en-us/articles/115004630823" target="_blank" rel="noopener">roblox.com/legal</a></td></tr>
+          <tr><td>Anthropic</td><td>AI game ratings &amp; captions</td>
+              <td><a href="https://www.anthropic.com/legal/privacy" target="_blank" rel="noopener">anthropic.com/legal</a></td></tr>
+        </tbody>
+      </table>
+
+      <h5>5. Data storage &amp; security</h5>
+      <p>All data is stored locally on the operator's own device or private server. No data is
+      uploaded to any cloud service controlled by this application. You are responsible for
+      securing your own machine and <code>.env</code> credentials file.</p>
+
+      <h5>6. Data retention</h5>
+      <p>Data persists in the local SQLite database until you delete the <code>tiktok_robox.db</code>
+      file. TikTok tokens may be revoked at any time through the TikTok app → Settings →
+      Connected Apps.</p>
+
+      <h5>7. Your rights (TikTok data)</h5>
+      <p>You can revoke this app's access to your TikTok account at any time through TikTok's
+      app settings. Doing so immediately invalidates the stored Access Token.</p>
+
+      <h5>8. Contact</h5>
+      <p>This is a personal automation tool. For questions, reach out to the operator directly.</p>
+    </div>
+  </div>
+</div>
+{% endblock %}

@@ -119,9 +119,10 @@ PYEOF
   fi
 fi
 
-# ── Step 6: Build the robot's memory ────────────────────────
-say "Step 6 of 7: Building the database (the robot's memory)..."
+# ── Step 6: Build the robot's memory + app icon ─────────────
+say "Step 6 of 7: Building the database and app icon..."
 $PY scripts/init_db.py
+$PY scripts/generate_app_icon.py 2>/dev/null && ok "App icon ready (assets/app_icon_512.png)." || warn "Icon generation skipped."
 ok "Memory ready."
 
 # ── Step 7: Optional first batch ────────────────────────────

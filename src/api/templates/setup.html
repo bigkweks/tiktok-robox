@@ -1,0 +1,273 @@
+{% extends "base.html" %}
+{% block title %}TikTok Setup{% endblock %}
+{% block content %}
+
+{# ── Status banner ─────────────────────────────────────────── #}
+{% if tiktok_configured %}
+<div class="alert alert-success d-flex align-items-center gap-2 mb-4">
+  <span style="font-size:1.4rem">✅</span>
+  <div>
+    <strong>TikTok is connected.</strong>
+    The pipeline will auto-post approved carousels every 30 minutes.
+    You can still use the steps below to update your credentials.
+  </div>
+</div>
+{% else %}
+<div class="alert alert-warning d-flex align-items-center gap-2 mb-4">
+  <span style="font-size:1.4rem">⚠️</span>
+  <div>
+    <strong>TikTok is not connected yet.</strong>
+    Follow the steps below — it takes about 10 minutes to set up
+    (then 1–3 days for TikTok to approve your app).
+  </div>
+</div>
+{% endif %}
+
+<h4 class="mb-4">🔌 Connect to TikTok — Step by Step</h4>
+
+<div class="row g-4">
+
+  {# ── STEP 1: Create Developer Account ───────────────────── #}
+  <div class="col-12">
+    <div class="card">
+      <div class="card-header d-flex align-items-center gap-2">
+        <span class="badge bg-primary rounded-pill">Step 1</span>
+        <strong>Create a TikTok Developer account</strong>
+      </div>
+      <div class="card-body">
+        <ol class="mb-0">
+          <li>Go to <a href="https://developers.tiktok.com" target="_blank" rel="noopener"><strong>developers.tiktok.com</strong></a></li>
+          <li>Click <strong>"Log in"</strong> in the top-right — use the same TikTok account you want to post from</li>
+          <li>Click your avatar → <strong>"Manage apps"</strong></li>
+          <li>Click <strong>"Connect an app"</strong> then <strong>"Create an app"</strong></li>
+        </ol>
+      </div>
+    </div>
+  </div>
+
+  {# ── STEP 2: Fill in App Details ────────────────────────── #}
+  <div class="col-12">
+    <div class="card">
+      <div class="card-header d-flex align-items-center gap-2">
+        <span class="badge bg-primary rounded-pill">Step 2</span>
+        <strong>Fill in the App Details form — copy these exactly</strong>
+      </div>
+      <div class="card-body">
+        <p class="text-muted small mb-3">
+          TikTok will ask for these fields. Copy each one below.
+        </p>
+
+        <div class="mb-3">
+          <label class="form-label text-muted small">App Name</label>
+          <div class="input-group">
+            <input type="text" class="form-control" id="val-name" value="RobloxGems" readonly>
+            <button class="btn btn-outline-secondary btn-sm" onclick="copy('val-name')">Copy</button>
+          </div>
+        </div>
+
+        <div class="mb-3">
+          <label class="form-label text-muted small">App Description</label>
+          <div class="input-group">
+            <textarea class="form-control" id="val-desc" rows="3" readonly>RobloxGems is a personal content automation tool that discovers trending Roblox games, generates AI-powered photo carousel posts, and publishes them to TikTok via the Content Posting API. It is operated by a single creator for their own TikTok account.</textarea>
+            <button class="btn btn-outline-secondary btn-sm" onclick="copy('val-desc')">Copy</button>
+          </div>
+        </div>
+
+        <div class="mb-3">
+          <label class="form-label text-muted small">Privacy Policy URL</label>
+          <div class="input-group">
+            <input type="text" class="form-control font-monospace" id="val-privacy" value="{{ base_url }}/privacy" readonly>
+            <button class="btn btn-outline-secondary btn-sm" onclick="copy('val-privacy')">Copy</button>
+          </div>
+          <small class="text-muted">
+            This URL must be publicly accessible. In GitHub Codespaces: make port 8000 <strong>Public</strong>
+            in the Ports tab, then paste the forwarded URL here with <code>/privacy</code>.
+            <a href="/privacy" target="_blank">Preview →</a>
+          </small>
+        </div>
+
+        <div class="mb-3">
+          <label class="form-label text-muted small">Terms of Service URL</label>
+          <div class="input-group">
+            <input type="text" class="form-control font-monospace" id="val-terms" value="{{ base_url }}/terms" readonly>
+            <button class="btn btn-outline-secondary btn-sm" onclick="copy('val-terms')">Copy</button>
+          </div>
+          <small class="text-muted">
+            Same note as above — must be public.
+            <a href="/terms" target="_blank">Preview →</a>
+          </small>
+        </div>
+
+        <div class="mb-3">
+          <label class="form-label text-muted small">App Icon — download and upload to TikTok</label>
+          <div class="d-flex align-items-center gap-3">
+            <img src="/app-icon.png" alt="App Icon" width="80" height="80" class="rounded"
+                 style="border: 2px solid rgba(255,255,255,0.15);">
+            <div>
+              <a href="/app-icon.png" download="robloxgems_icon.png" class="btn btn-sm btn-outline-light">
+                ⬇ Download 512×512 Icon
+              </a>
+              <p class="text-muted small mt-1 mb-0">Download this, then upload it in the TikTok app details form.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  {# ── STEP 3: Add Content Posting API ────────────────────── #}
+  <div class="col-12">
+    <div class="card">
+      <div class="card-header d-flex align-items-center gap-2">
+        <span class="badge bg-primary rounded-pill">Step 3</span>
+        <strong>Add the "Content Posting API" product to your app</strong>
+      </div>
+      <div class="card-body">
+        <ol class="mb-0">
+          <li>Inside your new app on the developer portal, find the <strong>"Add products"</strong> section</li>
+          <li>Click <strong>"Content Posting API"</strong> → Add it</li>
+          <li>Under Scopes, enable: <code>video.publish</code> and <code>video.upload</code></li>
+          <li>Click <strong>"Submit for review"</strong> — TikTok approves in 1–3 business days</li>
+        </ol>
+        <div class="alert alert-info mt-3 mb-0 py-2 small">
+          While waiting for approval, your app works in <strong>Sandbox mode</strong> — it will post
+          to a test account rather than your real TikTok. You can still generate tokens and test everything.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  {# ── STEP 4: Get your token ──────────────────────────────── #}
+  <div class="col-12">
+    <div class="card">
+      <div class="card-header d-flex align-items-center gap-2">
+        <span class="badge bg-primary rounded-pill">Step 4</span>
+        <strong>Get your Access Token</strong>
+      </div>
+      <div class="card-body">
+        <ol>
+          <li>In your app on the developer portal, go to <strong>"Tools &amp; Resources" → "API Explorer"</strong></li>
+          <li>Select your app from the dropdown</li>
+          <li>Select the scope <code>video.publish</code></li>
+          <li>Click <strong>"Get Token"</strong> — it will open TikTok for you to authorise</li>
+          <li>After authorising, copy the <strong>Access Token</strong> and <strong>Open ID</strong> shown on screen</li>
+        </ol>
+        <div class="alert alert-warning mt-2 mb-0 py-2 small">
+          Tokens expire after 24 hours in Sandbox mode, and after 30–90 days in production.
+          You'll need to repeat this step when it expires.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  {# ── STEP 5: Enter credentials ──────────────────────────── #}
+  <div class="col-12">
+    <div class="card">
+      <div class="card-header d-flex align-items-center gap-2">
+        <span class="badge bg-primary rounded-pill">Step 5</span>
+        <strong>Paste your credentials here</strong>
+      </div>
+      <div class="card-body">
+        <form id="credForm">
+          <div class="mb-3">
+            <label class="form-label">Access Token <span class="text-danger">*</span></label>
+            <input type="text" class="form-control font-monospace" id="accessToken"
+                   placeholder="paste your access token here"
+                   value="{{ current_token }}">
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Open ID <span class="text-danger">*</span></label>
+            <input type="text" class="form-control font-monospace" id="openId"
+                   placeholder="paste your open_id here"
+                   value="{{ current_open_id }}">
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Privacy Level</label>
+            <select class="form-select" id="privacyLevel">
+              <option value="SELF_ONLY" {% if privacy_level == 'SELF_ONLY' %}selected{% endif %}>
+                SELF_ONLY — only I can see (recommended for testing)
+              </option>
+              <option value="PUBLIC_TO_EVERYONE" {% if privacy_level == 'PUBLIC_TO_EVERYONE' %}selected{% endif %}>
+                PUBLIC_TO_EVERYONE — visible to all TikTok users
+              </option>
+              <option value="MUTUAL_FOLLOW_FRIENDS" {% if privacy_level == 'MUTUAL_FOLLOW_FRIENDS' %}selected{% endif %}>
+                MUTUAL_FOLLOW_FRIENDS — only mutual followers
+              </option>
+            </select>
+          </div>
+          <button type="button" class="btn btn-primary" onclick="saveCredentials()">
+            💾 Save &amp; Activate
+          </button>
+          <div id="saveStatus" class="mt-2 small"></div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  {# ── What happens next ───────────────────────────────────── #}
+  <div class="col-12">
+    <div class="card">
+      <div class="card-header d-flex align-items-center gap-2">
+        <span class="badge bg-success rounded-pill">Done</span>
+        <strong>What happens after you save credentials</strong>
+      </div>
+      <div class="card-body">
+        <ul class="mb-0">
+          <li>The pipeline checks for approved carousels every <strong>30 minutes</strong> and posts them automatically</li>
+          <li>You can also go to <a href="/carousels">📸 Carousels</a> and click <strong>"🚀 Post to TikTok"</strong> on any approved carousel to post it right now</li>
+          <li>Posted carousels show a blue <strong>"posted"</strong> badge</li>
+          <li>Set Privacy Level to <code>SELF_ONLY</code> first to test — then switch to <code>PUBLIC_TO_EVERYONE</code> when ready</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+</div><!-- /row -->
+{% endblock %}
+
+{% block scripts %}
+<script>
+function copy(id) {
+  const el = document.getElementById(id);
+  navigator.clipboard.writeText(el.value || el.innerText).then(() => {
+    const btn = el.parentElement.querySelector('button');
+    const orig = btn.textContent;
+    btn.textContent = 'Copied ✓';
+    btn.classList.add('btn-success');
+    btn.classList.remove('btn-outline-secondary');
+    setTimeout(() => {
+      btn.textContent = orig;
+      btn.classList.remove('btn-success');
+      btn.classList.add('btn-outline-secondary');
+    }, 1500);
+  });
+}
+
+async function saveCredentials() {
+  const token = document.getElementById('accessToken').value.trim();
+  const openId = document.getElementById('openId').value.trim();
+  const privacy = document.getElementById('privacyLevel').value;
+  const status = document.getElementById('saveStatus');
+
+  if (!token) { status.innerHTML = '<span class="text-danger">Access Token is required.</span>'; return; }
+
+  status.innerHTML = '<span class="text-muted">Saving…</span>';
+  try {
+    const r = await fetch('/setup/save-credentials', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ access_token: token, open_id: openId, privacy_level: privacy }),
+    });
+    const data = await r.json();
+    if (data.status === 'saved') {
+      status.innerHTML = '<span class="text-success">✓ Saved! TikTok posting is now active.</span>';
+      setTimeout(() => location.reload(), 1500);
+    } else {
+      status.innerHTML = `<span class="text-danger">Error: ${data.detail || 'unknown'}</span>`;
+    }
+  } catch (e) {
+    status.innerHTML = `<span class="text-danger">Failed: ${e.message}</span>`;
+  }
+}
+</script>
+{% endblock %}

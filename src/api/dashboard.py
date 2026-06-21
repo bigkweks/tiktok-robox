@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import re
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
@@ -460,3 +461,76 @@ async def health():
         "pipeline_running": _pipeline._running if _pipeline else False,
         "timestamp": datetime.utcnow().isoformat(),
     }
+
+
+# ── Static assets ─────────────────────────────────────────────────────
+
+@app.get("/app-icon.png")
+async def app_icon():
+    path = Path(_settings.ASSETS_DIR, "app_icon_512.png")
+    if not path.exists():
+        raise HTTPException(404, "App icon not found — run: python scripts/generate_app_icon.py")
+    return FileResponse(str(path), media_type="image/png")
+
+
+# ── Legal pages ───────────────────────────────────────────────────────
+
+@app.get("/privacy", response_class=HTMLResponse)
+async def privacy_page(request: Request):
+    return templates.TemplateResponse("privacy.html", {"request": request})
+
+
+@app.get("/terms", response_class=HTMLResponse)
+async def terms_page(request: Request):
+    return templates.TemplateResponse("terms.html", {"request": request})
+
+
+# ── TikTok Setup wizard ───────────────────────────────────────────────
+
+@app.get("/setup", response_class=HTMLResponse)
+async def setup_page(request: Request):
+    base_url = str(request.base_url).rstrip("/")
+    return templates.TemplateResponse("setup.html", {
+        "request": request,
+        "base_url": base_url,
+        "tiktok_configured": bool(_settings.TIKTOK_ACCESS_TOKEN),
+        "current_token": _settings.TIKTOK_ACCESS_TOKEN,
+        "current_open_id": _settings.TIKTOK_OPEN_ID,
+        "privacy_level": _settings.TIKTOK_PRIVACY_LEVEL,
+    })
+
+
+class CredentialsPayload(BaseModel):
+    access_token: str
+    open_id: str = ""
+    privacy_level: str = "PUBLIC_TO_EVERYONE"
+
+
+@app.post("/setup/save-credentials")
+async def save_credentials(payload: CredentialsPayload):
+    """Write TikTok credentials into .env and hot-reload settings."""
+    env_path = Path(".env")
+    if not env_path.exists():
+        example = Path(".env.example")
+        env_path.write_text(example.read_text() if example.exists() else "")
+
+    text = env_path.read_text()
+
+    def _set(content: str, key: str, value: str) -> str:
+        pattern = rf"(?m)^{re.escape(key)}=.*$"
+        line = f"{key}={value}"
+        if re.search(pattern, content):
+            return re.sub(pattern, line, content)
+        return content.rstrip("\n") + f"\n{line}\n"
+
+    text = _set(text, "TIKTOK_ACCESS_TOKEN", payload.access_token)
+    text = _set(text, "TIKTOK_OPEN_ID", payload.open_id)
+    text = _set(text, "TIKTOK_PRIVACY_LEVEL", payload.privacy_level)
+    env_path.write_text(text)
+
+    # Hot-reload the cached settings object
+    from src.config import get_settings as _gs
+    _gs.cache_clear()
+
+    log.info("setup.credentials_saved", has_token=bool(payload.access_token))
+    return {"status": "saved"}

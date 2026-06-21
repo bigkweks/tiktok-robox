@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block title %}Terms of Service{% endblock %}
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-lg-8">
+    <div class="card p-4">
+      <h2 class="mb-1">Terms of Service</h2>
+      <p class="text-muted small mb-4">Last updated: June 2025 · RoboxPipeline / RobloxGems</p>
+
+      <h5>1. Acceptance</h5>
+      <p>By running and using RoboxPipeline you agree to these terms. This is a personal,
+      single-operator automation tool — not a public platform.</p>
+
+      <h5>2. What this software does</h5>
+      <p>RoboxPipeline:</p>
+      <ul>
+        <li>Fetches publicly available Roblox game data via the Roblox public API.</li>
+        <li>Uses Anthropic's Claude API to generate ratings and captions for those games.</li>
+        <li>Assembles 6-slide photo carousel images using open-source fonts and public game thumbnails.</li>
+        <li>Publishes those carousels to TikTok via the TikTok Content Posting API using your
+        credentials, which you provide voluntarily.</li>
+      </ul>
+
+      <h5>3. Your responsibilities</h5>
+      <ul>
+        <li><strong>TikTok Terms of Service</strong> — You must comply with
+        <a href="https://www.tiktok.com/legal/page/us/terms-of-service/en" target="_blank" rel="noopener">TikTok's Terms of Service</a>
+        and Community Guidelines. You are solely responsible for the content posted to your account.</li>
+        <li><strong>Roblox Terms</strong> — Game thumbnails and metadata are public. Respect
+        <a href="https://en.help.roblox.com/hc/en-us/articles/115004647846" target="_blank" rel="noopener">Roblox's Terms of Use</a>.</li>
+        <li><strong>API rate limits</strong> — Do not modify the pipeline to exceed the rate limits
+        of TikTok, Roblox, or Anthropic APIs.</li>
+        <li><strong>Credential security</strong> — Keep your <code>.env</code> file private. Do not
+        share or commit it to a public repository.</li>
+      </ul>
+
+      <h5>4. Intellectual property</h5>
+      <p>Game names, thumbnails, and descriptions belong to their respective Roblox developers.
+      The carousel format, pipeline code, and generated layouts are the work of the operator and
+      their tools. No claim is made over Roblox or TikTok intellectual property.</p>
+
+      <h5>5. Disclaimer of warranties</h5>
+      <p>This software is provided "as is" without warranty of any kind. There is no guarantee
+      of uptime, accuracy of AI ratings, TikTok API availability, or follower growth results.</p>
+
+      <h5>6. Limitation of liability</h5>
+      <p>The creators of this tool are not liable for any account suspensions, bans, content
+      takedowns, or other consequences resulting from its use. Use it responsibly and at your
+      own risk.</p>
+
+      <h5>7. Changes</h5>
+      <p>These terms may be updated at any time. Continued use of the software constitutes
+      acceptance of any revised terms.</p>
+
+      <h5>8. Contact</h5>
+      <p>This is a personal automation tool. For questions, reach out to the operator directly.</p>
+    </div>
+  </div>
+</div>
+{% endblock %}
