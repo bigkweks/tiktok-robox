@@ -231,7 +231,6 @@ class CarouselPost(Base):
     status: Mapped[str] = mapped_column(String(32), default="pending", index=True)
     scheduled_post_time: Mapped[Optional[datetime]] = mapped_column(DateTime)
     posted_at: Mapped[Optional[datetime]] = mapped_column(DateTime)
-    tiktok_post_id: Mapped[Optional[str]] = mapped_column(String(128))
 
     created_at: Mapped[datetime] = mapped_column(DateTime, default=func.now())
 

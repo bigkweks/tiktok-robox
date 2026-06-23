@@ -9,7 +9,7 @@ and produces TikTok content. Target: 10K followers in 30 days.
 User is on an **iPad using GitHub Codespaces** — cannot run a real terminal
 comfortably, so everything must work via `bash quickstart.sh`.
 
-- **Branch (develop + push here only):** `claude/handoff-continuation-ab99x3`
+- **Branch (develop + push here only):** `claude/handoff-file-continue-nmksfs`
 - **Repo:** `bigkweks/tiktok-robox`
 - **Run it:** `bash quickstart.sh` (auto-pulls, installs, sets API key, serves
   dashboard at http://localhost:8000)
@@ -93,35 +93,43 @@ src/database/connection.py  init_db() creates tables + auto-migrates the
 - Carousel generator produces all 6 slides in <1s, real Poppins + real emoji,
   game art as hero, authentic Roblox-page look. Verified by rendering.
 - Rating engine outputs carousel_caption in the viral creator's voice.
-- Dashboard /carousels page reviews + approves/rejects carousels.
+- Dashboard /carousels page reviews + approves/rejects carousels, and lets you
+  **Mark as Posted** after you upload them to TikTok yourself.
 - Pipeline batches carousels every 8h; manual "⚡ Generate Now" button.
 - Video + thumbnail pipeline intact (badge-overlap bug fixed).
-- **TikTok auto-posting** (new): `src/content/tiktok_poster.py` implements
-  TikTok Content Posting API v2 (photo carousel, FILE_UPLOAD path). The pipeline
-  auto-posts approved carousels every 30 min (`run_auto_poster`). Dashboard
-  /carousels shows "Post to TikTok" button per approved carousel + credential
-  status badge. Requires `TIKTOK_ACCESS_TOKEN` + `TIKTOK_OPEN_ID` in `.env`.
-  Privacy level set via `TIKTOK_PRIVACY_LEVEL` (default: PUBLIC_TO_EVERYONE).
 
-## Key new files (this handoff)
-- `src/content/tiktok_poster.py` — TikTokPoster class + `get_poster_from_settings()`
-- `src/config.py` — added `TIKTOK_PRIVACY_LEVEL` setting
+## Posting is MANUAL by design (auto-upload removed)
+We removed the automatic TikTok uploader. Automated **public** posting is not
+achievable for this single-creator setup:
+- TikTok's Content Posting API only allows **public** posts from apps that have
+  passed TikTok's **audit**. Until audited, every post is forced to `SELF_ONLY`
+  (visible only to the creator) and the account must be private at post time.
+- Even in the best case it needs an OAuth + PKCE flow and a token-refresh job
+  (access tokens expire in ~24h in sandbox), none of which existed — so the
+  old "auto-post every 30 min" job would have died within a day.
+
+So the flow is: generate → review → approve → **you** save the 6 slides, copy
+the caption, upload the photo carousel to TikTok, then click **Mark as Posted**.
+This matches how the video pipeline already worked.
+
+**Removed in this handoff:** `src/content/tiktok_poster.py`, the `run_auto_poster`
+pipeline job, the `/carousel/{id}/post` + `/setup` + `/privacy` + `/terms` +
+`/app-icon.png` dashboard routes, the setup/privacy/terms templates, all
+`TIKTOK_*` posting settings, `scripts/generate_app_icon.py`, and the
+Netlify/Cloudflare/`docs/` static site + TikTok domain-verification files (these
+existed only to get the posting app audited).
 
 ## Likely next steps (not yet done — pick up here)
-1. **TikTok OAuth flow**: user currently needs to manually get access_token via
-   TikTok Developer Portal. Could add an `/auth/tiktok` redirect endpoint in
-   dashboard.py to automate token acquisition (Authorization Code + PKCE).
-2. **Token refresh**: TikTok access tokens expire. Add a refresh job that calls
-   `/v2/oauth/token/refresh/` using `TIKTOK_REFRESH_TOKEN` before expiry.
-3. **Feedback loop on carousels**: PostAnalytics is wired for videos; extend
+1. **Feedback loop on carousels**: PostAnalytics is wired for videos; extend
    to carousels so the scorer learns which editions/games/captions land.
    Add `/analytics/ingest-carousel` endpoint and extend CarouselPost with view/like fields.
-4. **Caption A/B**: generate 2 caption variants per carousel and track.
-5. **More edition variety / scheduling cadence** (currently 8 editions rotate).
-   Consider time-of-day scheduling (6am, 12pm, 7pm) for carousel posts.
+2. **Caption A/B**: generate 2 caption variants per carousel and track.
+3. **More edition variety / scheduling cadence** (currently 8 editions rotate).
+4. **Per-slide download buttons** on /carousels to make manual posting a
+   one-tap save (currently you long-press/right-click each slide preview).
 
 ## Conventions
-- Develop + push ONLY to `claude/roblox-tiktok-pipeline-x5t414`.
+- Develop + push ONLY to `claude/handoff-file-continue-nmksfs`.
 - Don't create PRs unless asked.
 - Don't put the model ID in commits/code.
 - Commit trailers used:

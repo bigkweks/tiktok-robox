@@ -40,14 +40,6 @@ class Settings(BaseSettings):
     BRAND_SECONDARY_COLOR: str = "#FF6584"
     BRAND_ACCENT_COLOR: str = "#FFD700"
 
-    # ── TikTok ───────────────────────────────────────────────────────────
-    TIKTOK_CLIENT_KEY: str = ""
-    TIKTOK_CLIENT_SECRET: str = ""
-    TIKTOK_ACCESS_TOKEN: str = ""
-    TIKTOK_OPEN_ID: str = ""
-    # PUBLIC_TO_EVERYONE | MUTUAL_FOLLOW_FRIENDS | SELF_ONLY (use SELF_ONLY for testing)
-    TIKTOK_PRIVACY_LEVEL: str = "PUBLIC_TO_EVERYONE"
-
     # ── Scoring weights ───────────────────────────────────────────────────
     WEIGHT_GROWTH_VELOCITY: float = 0.30
     WEIGHT_ENGAGEMENT_RATIO: float = 0.20

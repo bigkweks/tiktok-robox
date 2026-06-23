@@ -12,7 +12,6 @@ from __future__ import annotations
 
 import asyncio
 import json
-import re
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
@@ -32,7 +31,6 @@ from sqlalchemy import desc, select
 
 from src.analytics.feedback_loop import FeedbackLoop
 from src.config import get_settings
-from src.content.tiktok_poster import get_poster_from_settings
 from src.database.connection import get_session, init_db
 from src.database.models import CarouselPost, Content, Game, PostAnalytics
 from src.queue.content_queue import ContentQueue
@@ -265,12 +263,10 @@ async def carousels_page(request: Request):
             "hashtags_str": " ".join(hashtags_list),
         })
 
-    tiktok_configured = bool(_settings.TIKTOK_ACCESS_TOKEN)
     return templates.TemplateResponse("carousels.html", {
         "request": request,
         "carousels": enriched,
         "settings": _settings,
-        "tiktok_configured": tiktok_configured,
     })
 
 
@@ -292,59 +288,17 @@ async def reject_carousel(carousel_id: int):
     return {"status": "rejected"}
 
 
-@app.post("/carousel/{carousel_id}/post")
-async def post_carousel_to_tiktok(carousel_id: int, background_tasks: BackgroundTasks):
-    """Manually trigger TikTok posting for an approved carousel."""
-    poster = get_poster_from_settings()
-    if poster is None:
-        raise HTTPException(
-            400,
-            detail="TikTok credentials not configured. Set TIKTOK_ACCESS_TOKEN in .env",
-        )
-
+@app.post("/carousel/{carousel_id}/mark-posted")
+async def mark_carousel_posted(carousel_id: int):
+    """Mark a carousel as posted after you've uploaded it to TikTok yourself."""
+    from datetime import timezone
     async with get_session() as session:
         post = await session.get(CarouselPost, carousel_id)
         if not post:
             raise HTTPException(404, "Carousel not found")
-        if post.status not in ("approved", "pending"):
-            raise HTTPException(400, f"Carousel status is '{post.status}', must be approved or pending")
-        post_data = {
-            "id": post.id,
-            "slide_paths": json.loads(post.slide_paths or "[]"),
-            "caption": post.caption or "",
-            "hashtags": json.loads(post.hashtags or "[]"),
-            "part_number": post.part_number,
-        }
-
-    async def _do_post():
-        from datetime import datetime, timezone
-        from pathlib import Path
-        try:
-            slide_paths = [Path(p) for p in post_data["slide_paths"]]
-            hashtags = post_data["hashtags"]
-            full_caption = post_data["caption"] + ("\n\n" + " ".join(hashtags) if hashtags else "")
-            loop = asyncio.get_event_loop()
-            result = await loop.run_in_executor(
-                None,
-                lambda: poster.post_carousel(
-                    slide_paths=slide_paths,
-                    caption=full_caption,
-                    privacy_level=_settings.TIKTOK_PRIVACY_LEVEL,
-                ),
-            )
-            async with get_session() as session:
-                fresh = await session.get(CarouselPost, carousel_id)
-                if fresh:
-                    fresh.status = "posted"
-                    fresh.posted_at = datetime.now(timezone.utc)
-                    fresh.tiktok_post_id = result.tiktok_post_id or result.publish_id
-            log.info("dashboard.carousel_posted", carousel_id=carousel_id,
-                     tiktok_post_id=result.tiktok_post_id)
-        except Exception as exc:
-            log.error("dashboard.carousel_post_failed", carousel_id=carousel_id, error=str(exc))
-
-    background_tasks.add_task(_do_post)
-    return {"status": "posting", "carousel_id": carousel_id}
+        post.status = "posted"
+        post.posted_at = datetime.now(timezone.utc)
+    return {"status": "posted", "carousel_id": carousel_id}
 
 
 # ── Analytics ingestion ───────────────────────────────────────────────
@@ -461,76 +415,3 @@ async def health():
         "pipeline_running": _pipeline._running if _pipeline else False,
         "timestamp": datetime.utcnow().isoformat(),
     }
-
-
-# ── Static assets ─────────────────────────────────────────────────────
-
-@app.get("/app-icon.png")
-async def app_icon():
-    path = Path(_settings.ASSETS_DIR, "app_icon_1024.png")
-    if not path.exists():
-        raise HTTPException(404, "App icon not found — run: python scripts/generate_app_icon.py")
-    return FileResponse(str(path), media_type="image/png")
-
-
-# ── Legal pages ───────────────────────────────────────────────────────
-
-@app.get("/privacy", response_class=HTMLResponse)
-async def privacy_page(request: Request):
-    return templates.TemplateResponse("privacy.html", {"request": request})
-
-
-@app.get("/terms", response_class=HTMLResponse)
-async def terms_page(request: Request):
-    return templates.TemplateResponse("terms.html", {"request": request})
-
-
-# ── TikTok Setup wizard ───────────────────────────────────────────────
-
-@app.get("/setup", response_class=HTMLResponse)
-async def setup_page(request: Request):
-    base_url = str(request.base_url).rstrip("/")
-    return templates.TemplateResponse("setup.html", {
-        "request": request,
-        "base_url": base_url,
-        "tiktok_configured": bool(_settings.TIKTOK_ACCESS_TOKEN),
-        "current_token": _settings.TIKTOK_ACCESS_TOKEN,
-        "current_open_id": _settings.TIKTOK_OPEN_ID,
-        "privacy_level": _settings.TIKTOK_PRIVACY_LEVEL,
-    })
-
-
-class CredentialsPayload(BaseModel):
-    access_token: str
-    open_id: str = ""
-    privacy_level: str = "PUBLIC_TO_EVERYONE"
-
-
-@app.post("/setup/save-credentials")
-async def save_credentials(payload: CredentialsPayload):
-    """Write TikTok credentials into .env and hot-reload settings."""
-    env_path = Path(".env")
-    if not env_path.exists():
-        example = Path(".env.example")
-        env_path.write_text(example.read_text() if example.exists() else "")
-
-    text = env_path.read_text()
-
-    def _set(content: str, key: str, value: str) -> str:
-        pattern = rf"(?m)^{re.escape(key)}=.*$"
-        line = f"{key}={value}"
-        if re.search(pattern, content):
-            return re.sub(pattern, line, content)
-        return content.rstrip("\n") + f"\n{line}\n"
-
-    text = _set(text, "TIKTOK_ACCESS_TOKEN", payload.access_token)
-    text = _set(text, "TIKTOK_OPEN_ID", payload.open_id)
-    text = _set(text, "TIKTOK_PRIVACY_LEVEL", payload.privacy_level)
-    env_path.write_text(text)
-
-    # Hot-reload the cached settings object
-    from src.config import get_settings as _gs
-    _gs.cache_clear()
-
-    log.info("setup.credentials_saved", has_token=bool(payload.access_token))
-    return {"status": "saved"}

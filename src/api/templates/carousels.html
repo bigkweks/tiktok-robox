@@ -7,29 +7,20 @@
     <small class="text-muted">Viral format — 6 slides, 5 games per post</small>
   </div>
   <div class="d-flex gap-2 align-items-center">
-    {% if not tiktok_configured %}
-    <span class="badge bg-warning text-dark" title="Set TIKTOK_ACCESS_TOKEN in .env to enable auto-posting">
-      TikTok: not connected
-    </span>
-    {% else %}
-    <span class="badge bg-success">TikTok: connected</span>
-    {% endif %}
     <button class="btn btn-sm btn-outline-light" onclick="triggerCarousel()" id="carouselBtn">
       ⚡ Generate Now
     </button>
   </div>
 </div>
 
-{% if not tiktok_configured %}
-<div class="alert alert-warning d-flex align-items-center gap-2 mb-4 py-2 small">
-  <span>⚠️</span>
+<div class="alert alert-info d-flex align-items-center gap-2 mb-4 py-2 small">
+  <span>📲</span>
   <span>
-    TikTok auto-posting is not set up. Add <code>TIKTOK_ACCESS_TOKEN</code> and
-    <code>TIKTOK_OPEN_ID</code> to your <code>.env</code> file.
-    See <a href="https://developers.tiktok.com/doc/content-posting-api-get-started" target="_blank" rel="noopener">TikTok docs</a>.
+    Approve a carousel, then save its 6 slides and copy the caption below.
+    Upload them to TikTok yourself as a photo post, then hit
+    <strong>Mark as Posted</strong>.
   </span>
 </div>
-{% endif %}
 
 {% if not carousels %}
 <div class="card text-center py-5">
@@ -60,17 +51,10 @@
       <button class="btn btn-sm btn-approve" onclick="approveCarousel({{ post.id }})">Approve</button>
       <button class="btn btn-sm btn-reject" onclick="rejectCarousel({{ post.id }})">Reject</button>
       {% elif post.status == 'approved' %}
-      <button class="btn btn-sm btn-approve" onclick="approveCarousel({{ post.id }})">Re-Approve</button>
       <button class="btn btn-sm btn-reject" onclick="rejectCarousel({{ post.id }})">Reject</button>
-      {% if tiktok_configured %}
-      <button class="btn btn-sm btn-primary" onclick="postToTikTok({{ post.id }}, this)">
-        🚀 Post to TikTok
+      <button class="btn btn-sm btn-primary" onclick="markPosted({{ post.id }}, this)">
+        ✅ Mark as Posted
       </button>
-      {% else %}
-      <button class="btn btn-sm btn-secondary" disabled title="Configure TikTok credentials first">
-        🚀 Post to TikTok
-      </button>
-      {% endif %}
       {% endif %}
     </div>
   </div>
@@ -138,23 +122,18 @@ async function rejectCarousel(id) {
   await post(`/carousel/${id}/reject`);
   location.reload();
 }
-async function postToTikTok(id, btn) {
+async function markPosted(id, btn) {
   btn.disabled = true;
-  btn.textContent = '⏳ Posting...';
+  btn.textContent = '⏳ Saving...';
   try {
-    const r = await post(`/carousel/${id}/post`);
-    if (r.status === 'posting') {
-      btn.textContent = '✓ Queued';
-      btn.classList.replace('btn-primary', 'btn-success');
-      setTimeout(() => location.reload(), 3000);
-    } else {
-      btn.textContent = '✗ Error';
-      btn.disabled = false;
-    }
+    await post(`/carousel/${id}/mark-posted`);
+    btn.textContent = '✓ Posted';
+    btn.classList.replace('btn-primary', 'btn-success');
+    setTimeout(() => location.reload(), 1000);
   } catch (e) {
     btn.textContent = '✗ Failed';
     btn.disabled = false;
-    alert('Post failed: ' + (e.message || 'check logs'));
+    alert('Failed: ' + (e.message || 'check logs'));
   }
 }
 function expandSlide(src) {

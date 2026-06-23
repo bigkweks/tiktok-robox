@@ -119,10 +119,9 @@ PYEOF
   fi
 fi
 
-# ── Step 6: Build the robot's memory + app icon ─────────────
-say "Step 6 of 7: Building the database and app icon..."
+# ── Step 6: Build the robot's memory ────────────────────────
+say "Step 6 of 7: Building the database..."
 $PY scripts/init_db.py
-$PY scripts/generate_app_icon.py 2>/dev/null && ok "App icon ready (assets/app_icon_1024.png)." || warn "Icon generation skipped."
 ok "Memory ready."
 
 # ── Step 7: Optional first batch ────────────────────────────
@@ -148,13 +147,10 @@ echo ""
 echo "   To STOP it later: hold the Control key and press C."
 echo "   To START it again next time: run  bash quickstart.sh"
 echo ""
-echo "   ── TikTok Auto-Posting ─────────────────────────────"
-echo "   To enable automatic TikTok posting, add these to .env:"
-echo "     TIKTOK_ACCESS_TOKEN=your_token"
-echo "     TIKTOK_OPEN_ID=your_open_id"
-echo "   Get credentials: https://developers.tiktok.com/doc/content-posting-api-get-started"
-echo "   After adding, restart this script. The pipeline will post"
-echo "   approved carousels automatically every 30 minutes."
+echo "   ── Posting to TikTok ───────────────────────────────"
+echo "   Open the Carousels page, approve a carousel, save its 6"
+echo "   slides and copy the caption, then upload them to TikTok"
+echo "   yourself as a photo post. Hit 'Mark as Posted' when done."
 echo "   ────────────────────────────────────────────────────"
 echo ""
 $PY main.py serve

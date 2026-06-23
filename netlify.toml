@@ -1,7 +1,0 @@
-[build]
-  publish = "docs"
-  command = ""
-  ignore = "exit 0"
-
-[build.environment]
-  NETLIFY_USE_YARN = "false"
