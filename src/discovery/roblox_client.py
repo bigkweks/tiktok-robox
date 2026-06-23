@@ -191,14 +191,17 @@ class RobloxClient:
 
     async def get_game_details_bulk(self, universe_ids: list[str]) -> list[dict[str, Any]]:
         """
-        Fetch detailed game data for up to 100 universe IDs at once.
-        This endpoint is fully public — no auth required.
+        Fetch detailed game data for universe IDs.
+
+        The nominal limit is 100 IDs per request, but the explore-api sometimes
+        returns non-universe numeric IDs (category/filter IDs) mixed in with real
+        ones. A single invalid ID causes Roblox to return 400 for the whole batch.
+        Strategy: try 50 at a time; on failure bisect to 10 to salvage valid IDs.
         """
         if not universe_ids:
             return []
-        # Deduplicate
         unique_ids = list(dict.fromkeys(universe_ids))
-        chunks = [unique_ids[i: i + 100] for i in range(0, len(unique_ids), 100)]
+        chunks = [unique_ids[i: i + 50] for i in range(0, len(unique_ids), 50)]
         results = []
         for chunk in chunks:
             data = await self._get(
@@ -207,6 +210,17 @@ class RobloxClient:
             )
             if data:
                 results.extend(data.get("data", []))
+            else:
+                # Chunk contained at least one invalid ID — fall back to sub-chunks
+                # of 10 to salvage the valid ones.
+                for sub in [chunk[i: i + 10] for i in range(0, len(chunk), 10)]:
+                    sub_data = await self._get(
+                        f"{ROBLOX_GAMES_BASE}/games",
+                        universeIds=",".join(sub),
+                    )
+                    if sub_data:
+                        results.extend(sub_data.get("data", []))
+                    await asyncio.sleep(0.3)
         return results
 
     async def get_votes(self, universe_id: str) -> dict[str, int]:
@@ -304,7 +318,12 @@ class RobloxClient:
             if sid:
                 sort_ids.append(str(sid))
 
+        # Skip non-game sorts: "filters" returns category/genre filter IDs (not
+        # universe IDs), which poison the bulk games API and cause 400 errors.
+        SKIP_SORTS = {"filters"}
         for sid in sort_ids[:max_sorts]:
+            if sid in SKIP_SORTS:
+                continue
             content = await self._get(
                 f"{ROBLOX_EXPLORE_BASE}/get-sort-content",
                 sessionId=self._session_id,

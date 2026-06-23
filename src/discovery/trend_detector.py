@@ -109,15 +109,17 @@ class TrendDetector:
             log.warning("trend_detector.explore_failed", error=str(exc))
 
         # ── SECONDARY: public search API across genre keywords ────────────
+        # Run sequentially with a short pause — firing all 15 in parallel
+        # saturates the search API's per-session rate limit (429 for everything).
         try:
-            search_tasks = [client.omni_search(k) for k in HIDDEN_GEM_KEYWORDS]
-            search_results = await asyncio.gather(*search_tasks, return_exceptions=True)
             search_added = 0
-            for res in search_results:
-                if isinstance(res, list):
+            for keyword in HIDDEN_GEM_KEYWORDS:
+                try:
+                    res = await client.omni_search(keyword)
                     search_added += _add(res)
-                elif isinstance(res, Exception):
-                    log.debug("trend_detector.search_failed", error=str(res))
+                except Exception as exc:
+                    log.debug("trend_detector.search_kw_failed", keyword=keyword, error=str(exc))
+                await asyncio.sleep(1.5)
             log.info("trend_detector.search", added=search_added)
         except Exception as exc:
             log.warning("trend_detector.search_failed", error=str(exc))
