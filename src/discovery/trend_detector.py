@@ -37,6 +37,15 @@ log = structlog.get_logger(__name__)
 
 MAX_GAMES_PER_RUN = 500
 
+# Keywords fed to the public search API to surface games across genres.
+# Combined with the explore-api homepage sorts, these give broad coverage;
+# the tiktok_candidacy re-ranking later filters down to the hidden-gem range.
+HIDDEN_GEM_KEYWORDS: list[str] = [
+    "tower defense", "anime", "simulator", "obby", "tycoon",
+    "horror", "survival", "fighting", "roleplay", "rpg",
+    "fps", "racing", "story", "escape", "clicker",
+]
+
 
 class TrendDetector:
     def __init__(self):
@@ -67,69 +76,87 @@ class TrendDetector:
 
     async def _crawl_all_sources(self, client: RobloxClient) -> list[RobloxGame]:
         """
-        Hidden-gem discovery using only public Roblox endpoints.
+        Discovery using the public Roblox endpoints that actually work today.
 
-        Seed games are excluded from the content pool — they are mega-famous
-        (Adopt Me, Blox Fruits, etc.) and would produce bad "hidden gem" content.
-        Seeds are used only to fan out recommendations.
+        Collect candidate universe IDs from every source, then do a SINGLE
+        enrichment pass (details + thumbnails + votes) for correct data.
+
+        Seed games are mega-famous (Adopt Me, Blox Fruits, etc.) and are
+        excluded up front so they never enter the content pool — they are not
+        even used as a discovery source anymore because the legacy
+        recommendations endpoint Roblox exposed for them is dead.
         """
-        # Pre-populate seen with all seed IDs so they are never added as content candidates.
+        # Pre-populate seen with all seed IDs so they are never added as candidates.
         seen: set[str] = set(SEED_UNIVERSE_IDS)
-        games: list[RobloxGame] = []
+        candidate_ids: list[str] = []
 
-        # Step 1: Fan out recommendations from ALL seeds in parallel.
-        # 46 seeds × 20 recommendations = up to 920 unique candidate IDs.
-        log.info("trend_detector.fetching_recommendations", seeds=len(SEED_UNIVERSE_IDS))
-        rec_tasks = [
-            client.get_recommendations(uid, max_rows=20)
-            for uid in SEED_UNIVERSE_IDS
-        ]
-        rec_results = await asyncio.gather(*rec_tasks, return_exceptions=True)
+        def _add(ids: list[str]) -> int:
+            added = 0
+            for uid in ids:
+                if uid and uid not in seen:
+                    seen.add(uid)
+                    candidate_ids.append(uid)
+                    added += 1
+            return added
 
-        extra_ids: list[str] = []
-        for result in rec_results:
-            if isinstance(result, list):
-                for uid in result:
-                    if uid and uid not in seen:
-                        seen.add(uid)
-                        extra_ids.append(uid)
-            elif isinstance(result, Exception):
-                log.warning("trend_detector.rec_failed", error=str(result))
+        # ── PRIMARY: modern explore-api homepage sorts ────────────────────
+        # (Popular, Up-and-Coming, genre rows — what roblox.com itself loads.)
+        try:
+            explore_ids = await client.explore_discover(max_sorts=12)
+            n = _add(explore_ids)
+            log.info("trend_detector.explore", returned=len(explore_ids), added=n)
+        except Exception as exc:  # never let one source kill the run
+            log.warning("trend_detector.explore_failed", error=str(exc))
 
-        if extra_ids:
-            log.info("trend_detector.fetching_rec_details", count=len(extra_ids))
-            rec_games = await client.fetch_games_with_enrichment(extra_ids)
-            games.extend(rec_games)
-            log.info("trend_detector.recommendations_fetched", count=len(rec_games), total=len(games))
+        # ── SECONDARY: public search API across genre keywords ────────────
+        try:
+            search_tasks = [client.omni_search(k) for k in HIDDEN_GEM_KEYWORDS]
+            search_results = await asyncio.gather(*search_tasks, return_exceptions=True)
+            search_added = 0
+            for res in search_results:
+                if isinstance(res, list):
+                    search_added += _add(res)
+                elif isinstance(res, Exception):
+                    log.debug("trend_detector.search_failed", error=str(res))
+            log.info("trend_detector.search", added=search_added)
+        except Exception as exc:
+            log.warning("trend_detector.search_failed", error=str(exc))
 
-        # Step 2: Try genre-specific game lists as a supplementary source.
-        # These may 403 on some deployments; failures are silently skipped.
-        for genre_name, genre_id in list(GENRE_IDS.items())[:8]:
-            uids = await client.try_games_list(genre_id=genre_id, max_rows=60)
-            new_uids = [u for u in uids if u not in seen]
-            if new_uids:
-                log.info("trend_detector.genre_games_found", genre=genre_name, count=len(new_uids))
-                extra = await client.fetch_games_with_enrichment(new_uids[:40])
-                for g in extra:
-                    if g.universe_id not in seen:
-                        seen.add(g.universe_id)
-                        games.append(g)
+        # ── TERTIARY (legacy fallbacks, may be dead): recommendations ─────
+        # Kept only as a safety net; harmless when the endpoint returns nothing.
+        try:
+            rec_tasks = [client.get_recommendations(uid, max_rows=20) for uid in SEED_UNIVERSE_IDS]
+            rec_results = await asyncio.gather(*rec_tasks, return_exceptions=True)
+            rec_added = 0
+            for res in rec_results:
+                if isinstance(res, list):
+                    rec_added += _add(res)
+            if rec_added:
+                log.info("trend_detector.recommendations", added=rec_added)
+        except Exception as exc:
+            log.debug("trend_detector.recommendations_failed", error=str(exc))
 
-        # Step 3: Try sort-token lists (may 403 without auth).
-        sort_ids = await client.try_get_sort_tokens()
-        if sort_ids:
-            log.info("trend_detector.sort_tokens_available", count=len(sort_ids))
-            for token in sort_ids[:3]:
-                uids = await client.try_games_list(sort_token=token, max_rows=80)
-                new_uids = [u for u in uids if u not in seen]
-                if new_uids:
-                    extra = await client.fetch_games_with_enrichment(new_uids)
-                    for g in extra:
-                        if g.universe_id not in seen:
-                            seen.add(g.universe_id)
-                            games.append(g)
+        # ── TERTIARY: legacy genre lists (may 403 without auth) ───────────
+        try:
+            for _genre_name, genre_id in list(GENRE_IDS.items())[:8]:
+                uids = await client.try_games_list(genre_id=genre_id, max_rows=60)
+                _add(uids)
+        except Exception as exc:
+            log.debug("trend_detector.genre_failed", error=str(exc))
 
-        log.info("trend_detector.crawled", total=len(games))
+        log.info("trend_detector.candidates_collected", total=len(candidate_ids))
+
+        if not candidate_ids:
+            log.error(
+                "trend_detector.no_candidates",
+                hint="All discovery sources returned 0 IDs. Run "
+                     "`python main.py diagnose` to see which endpoints are reachable.",
+            )
+            return []
+
+        # ── Single enrichment pass: authoritative details + thumbs + votes ─
+        games = await client.fetch_games_with_enrichment(candidate_ids[: MAX_GAMES_PER_RUN * 2])
+        log.info("trend_detector.crawled", candidates=len(candidate_ids), enriched=len(games))
         return games[:MAX_GAMES_PER_RUN]
 
     async def _process_games(

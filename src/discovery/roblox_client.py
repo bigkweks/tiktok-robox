@@ -12,6 +12,7 @@ We never crash on 403: every fetch has a graceful fallback.
 from __future__ import annotations
 
 import asyncio
+import uuid
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Optional
@@ -36,6 +37,11 @@ _RETRY = dict(
 
 ROBLOX_GAMES_BASE = "https://games.roblox.com/v1"
 ROBLOX_THUMBS_BASE = "https://thumbnails.roblox.com/v1"
+# Modern discovery endpoints — these power the live roblox.com homepage and
+# search bar, and are reachable without authentication. They replace the
+# deprecated /v1/games/recommendations, /v1/games/list and /v1/games/sorts.
+ROBLOX_EXPLORE_BASE = "https://apis.roblox.com/explore-api/v1"
+ROBLOX_SEARCH_BASE = "https://apis.roblox.com/search-api"
 
 # Well-known Roblox universe IDs covering all major genres.
 # The /v1/games?universeIds= endpoint is fully public — no auth needed.
@@ -134,6 +140,8 @@ class RobloxGame:
 
 class RobloxClient:
     def __init__(self, timeout: float = 30.0):
+        # A stable random session id is required by the modern explore/search APIs.
+        self._session_id = str(uuid.uuid4())
         self._client = httpx.AsyncClient(
             timeout=timeout,
             # Browser-like headers — reduces 403s on some endpoints
@@ -210,6 +218,123 @@ class RobloxClient:
             "like_count": data.get("upVotes", 0),
             "dislike_count": data.get("downVotes", 0),
         }
+
+    async def get_votes_bulk(self, universe_ids: list[str]) -> dict[str, tuple[int, int]]:
+        """
+        Fetch up/down votes for up to 100 universe IDs at once.
+        Returns {universe_id: (up_votes, down_votes)}. Public endpoint.
+
+        The /v1/games?universeIds= details endpoint does NOT include votes, so
+        without this every game would show like_ratio=0 and a broken engagement
+        score. This restores correct engagement data.
+        """
+        if not universe_ids:
+            return {}
+        result: dict[str, tuple[int, int]] = {}
+        unique_ids = list(dict.fromkeys(universe_ids))
+        chunks = [unique_ids[i: i + 100] for i in range(0, len(unique_ids), 100)]
+        for chunk in chunks:
+            data = await self._get(
+                f"{ROBLOX_GAMES_BASE}/games/votes",
+                universeIds=",".join(chunk),
+            )
+            if not data:
+                continue
+            for item in data.get("data", []):
+                uid = str(item.get("id", item.get("universeId", "")))
+                if uid:
+                    result[uid] = (
+                        int(item.get("upVotes", 0)),
+                        int(item.get("downVotes", 0)),
+                    )
+        return result
+
+    @staticmethod
+    def _collect_universe_ids(obj: Any, out: set[str]) -> None:
+        """
+        Recursively walk an arbitrary JSON structure and collect every
+        universeId it contains. This makes discovery resilient to Roblox
+        changing the exact response shape of the explore / search APIs — no
+        matter how the IDs are nested, we find them.
+        """
+        if isinstance(obj, dict):
+            for key, value in obj.items():
+                kl = key.lower()
+                if kl in ("universeid", "universeids"):
+                    if isinstance(value, (int, str)) and str(value).isdigit():
+                        out.add(str(value))
+                    elif isinstance(value, list):
+                        for item in value:
+                            if isinstance(item, (int, str)) and str(item).isdigit():
+                                out.add(str(item))
+                else:
+                    RobloxClient._collect_universe_ids(value, out)
+        elif isinstance(obj, list):
+            for item in obj:
+                RobloxClient._collect_universe_ids(item, out)
+
+    async def explore_discover(self, max_sorts: int = 10) -> list[str]:
+        """
+        MODERN PRIMARY DISCOVERY SOURCE.
+
+        Calls the explore-api homepage sorts endpoint (what roblox.com loads on
+        its home page: Popular, Up-and-Coming, genre rows, etc.), then paginates
+        the individual sorts for more games. Returns deduplicated universe IDs.
+
+        Reachable without authentication. Replaces the dead
+        /v1/games/recommendations + /v1/games/list + /v1/games/sorts chain.
+        """
+        ids: set[str] = set()
+        data = await self._get(
+            f"{ROBLOX_EXPLORE_BASE}/get-sorts",
+            sessionId=self._session_id,
+            device="computer",
+            country="all",
+        )
+        if not data:
+            return []
+
+        self._collect_universe_ids(data, ids)
+
+        # Pull individual sort IDs so we can paginate each row for more games
+        # (the homepage payload only previews a handful per sort).
+        sort_ids: list[str] = []
+        for sort in (data.get("sorts") or []):
+            sid = sort.get("sortId") or sort.get("sort")
+            if sid:
+                sort_ids.append(str(sid))
+
+        for sid in sort_ids[:max_sorts]:
+            content = await self._get(
+                f"{ROBLOX_EXPLORE_BASE}/get-sort-content",
+                sessionId=self._session_id,
+                sortId=sid,
+                device="computer",
+                country="all",
+            )
+            if content:
+                self._collect_universe_ids(content, ids)
+
+        return list(ids)
+
+    async def omni_search(self, keyword: str) -> list[str]:
+        """
+        MODERN SECONDARY DISCOVERY SOURCE.
+
+        Hits the public search-api used by the Roblox search bar. Returns
+        deduplicated universe IDs for games matching the keyword.
+        """
+        data = await self._get(
+            f"{ROBLOX_SEARCH_BASE}/omni-search",
+            searchQuery=keyword,
+            sessionId=self._session_id,
+            pageType="all",
+        )
+        if not data:
+            return []
+        ids: set[str] = set()
+        self._collect_universe_ids(data, ids)
+        return list(ids)
 
     async def get_thumbnails(self, universe_ids: list[str]) -> dict[str, str]:
         """Return {universe_id: thumbnail_url}. Public endpoint."""
@@ -363,8 +488,14 @@ class RobloxClient:
             return []
 
         fetched_ids = [str(d.get("id", "")) for d in details_raw]
-        thumbnails = await self.get_thumbnails(fetched_ids)
-        icons = await self.get_icons(fetched_ids)
+        # Fetch thumbnails, icons and votes concurrently. Votes are essential:
+        # the details endpoint omits them, so without this every game's
+        # like_ratio / engagement score would be zero.
+        thumbnails, icons, votes = await asyncio.gather(
+            self.get_thumbnails(fetched_ids),
+            self.get_icons(fetched_ids),
+            self.get_votes_bulk(fetched_ids),
+        )
 
         games: list[RobloxGame] = []
         for raw in details_raw:
@@ -373,6 +504,12 @@ class RobloxClient:
                 continue
             game.thumbnail_url = thumbnails.get(game.universe_id)
             game.icon_url = icons.get(game.universe_id)
+            up, down = votes.get(game.universe_id, (0, 0))
+            if up or down:
+                game.like_count = up
+                game.dislike_count = down
+                total = up + down
+                game.like_ratio = (up / total) if total > 0 else 0.0
             games.append(game)
 
         return games

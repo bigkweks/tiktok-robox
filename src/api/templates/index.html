@@ -152,10 +152,20 @@ async function triggerDiscovery() {
       btn.disabled = false;
     } else {
       const n = r.new || 0;
-      btn.innerHTML = n > 0
-        ? `<i class="bi bi-check-circle me-1"></i> Done! +${n} games found`
-        : '<i class="bi bi-check-circle me-1"></i> Done (no new games)';
-      setTimeout(() => location.reload(), 2500);
+      const u = r.updated || 0;
+      if (n === 0 && u === 0) {
+        // No games came back at all — almost always means this environment
+        // can't reach apis.roblox.com. Tell the user how to confirm.
+        btn.classList.remove('btn-primary');
+        btn.classList.add('btn-warning');
+        btn.innerHTML = '<i class="bi bi-exclamation-triangle me-1"></i> 0 found — run `python main.py diagnose`';
+        btn.disabled = false;
+      } else {
+        btn.innerHTML = n > 0
+          ? `<i class="bi bi-check-circle me-1"></i> Done! +${n} new (${u} updated)`
+          : `<i class="bi bi-check-circle me-1"></i> Done! ${u} updated`;
+        setTimeout(() => location.reload(), 2500);
+      }
     }
   } catch (e) {
     btn.innerHTML = '<i class="bi bi-x-circle me-1"></i> Error';

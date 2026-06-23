@@ -65,6 +65,57 @@ def test_parse_game_handles_malformed_date():
     assert game.updated_at is None
 
 
+def test_collect_universe_ids_nested_shapes():
+    """The recursive ID collector must find universeIds no matter how the
+    explore/search API nests them — this is what keeps discovery resilient to
+    Roblox changing its response shape."""
+    # Shape A: explore-api get-sorts (games inline under each sort)
+    explore = {
+        "sorts": [
+            {"sortId": "popular", "games": [{"universeId": 111}, {"universeId": 222}]},
+            {"sortId": "up-and-coming", "games": [{"universeId": "333"}]},
+        ]
+    }
+    ids: set[str] = set()
+    RobloxClient._collect_universe_ids(explore, ids)
+    assert ids == {"111", "222", "333"}
+
+    # Shape B: search-api (deeply nested contents, plus a universeIds list)
+    search = {
+        "searchResults": [
+            {"contents": [{"universeId": 444}, {"universeId": 555}]},
+            {"recommendationList": {"universeIds": [666, "777"]}},
+        ]
+    }
+    ids2: set[str] = set()
+    RobloxClient._collect_universe_ids(search, ids2)
+    assert ids2 == {"444", "555", "666", "777"}
+
+    # Non-numeric / junk values are ignored
+    ids3: set[str] = set()
+    RobloxClient._collect_universe_ids({"universeId": "abc", "other": 1}, ids3)
+    assert ids3 == set()
+
+
+@pytest.mark.asyncio
+async def test_enrichment_merges_bulk_votes():
+    """fetch_games_with_enrichment must overlay bulk votes onto games, because
+    the /v1/games details endpoint omits votes (otherwise like_ratio is always 0)."""
+    client = RobloxClient.__new__(RobloxClient)
+    # details endpoint returns a game with NO vote data
+    details = {**MOCK_GAME_RAW, "voteData": {}}
+    client.get_game_details_bulk = AsyncMock(return_value=[details])
+    client.get_thumbnails = AsyncMock(return_value={})
+    client.get_icons = AsyncMock(return_value={})
+    client.get_votes_bulk = AsyncMock(return_value={"12345": (90, 10)})
+
+    games = await client.fetch_games_with_enrichment(["12345"])
+    assert len(games) == 1
+    assert games[0].like_count == 90
+    assert games[0].dislike_count == 10
+    assert abs(games[0].like_ratio - 0.9) < 0.001
+
+
 def test_roblox_game_url_format():
     game = RobloxGame(
         universe_id="999",
