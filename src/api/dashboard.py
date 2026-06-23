@@ -32,7 +32,7 @@ from sqlalchemy import desc, select
 from src.analytics.feedback_loop import FeedbackLoop
 from src.config import get_settings
 from src.database.connection import get_session, init_db
-from src.database.models import CarouselPost, Content, Game, PostAnalytics
+from src.database.models import CarouselPost, Content, CrawlLog, Game, PostAnalytics
 from src.queue.content_queue import ContentQueue
 from src.scheduler.pipeline import Pipeline
 
@@ -206,10 +206,10 @@ async def mark_posted(content_id: int, tiktok_id: str = Form(default="")):
 
 
 @app.post("/pipeline/run-discovery")
-async def trigger_discovery(background_tasks: BackgroundTasks):
+async def trigger_discovery():
     if _pipeline:
-        background_tasks.add_task(_pipeline.run_discovery)
-        return {"status": "started", "job": "discovery"}
+        stats = await _pipeline.run_discovery()
+        return {"status": "complete", "job": "discovery", **stats}
     return {"status": "error", "message": "Pipeline not initialized"}
 
 
@@ -415,3 +415,35 @@ async def health():
         "pipeline_running": _pipeline._running if _pipeline else False,
         "timestamp": datetime.utcnow().isoformat(),
     }
+
+
+# ── Game deletion ──────────────────────────────────────────────────────
+
+@app.delete("/game/{game_id}")
+async def delete_game(game_id: int):
+    """Permanently delete a game and all its content / crawl history from the DB."""
+    async with get_session() as session:
+        game = await session.get(Game, game_id)
+        if not game:
+            raise HTTPException(404, "Game not found")
+        name = game.name
+        await session.delete(game)  # cascades to Content (→ PostAnalytics) + CrawlLog
+    log.info("dashboard.game_deleted", game_id=game_id, name=name)
+    return {"status": "deleted", "game_id": game_id, "name": name}
+
+
+@app.post("/api/games/clear-all")
+async def clear_all_games():
+    """Permanently delete ALL games, content, crawl logs, and carousel posts."""
+    from sqlalchemy import text
+    async with get_session() as session:
+        from sqlalchemy import func, select as sa_select
+        game_count = await session.scalar(sa_select(func.count(Game.id))) or 0
+        # Delete in FK-dependency order (SQLite may not enforce FKs)
+        await session.execute(text("DELETE FROM post_analytics"))
+        await session.execute(text("DELETE FROM content"))
+        await session.execute(text("DELETE FROM crawl_logs"))
+        await session.execute(text("DELETE FROM carousel_posts"))
+        await session.execute(text("DELETE FROM games"))
+    log.info("dashboard.all_games_cleared", count=game_count)
+    return {"status": "cleared", "deleted": game_count}

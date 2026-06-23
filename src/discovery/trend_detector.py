@@ -5,9 +5,13 @@ Aggregates games from multiple Roblox discovery sources, scores them,
 deduplicates, and persists new/updated games to the database.
 
 Discovery strategy (403-resistant):
-  1. Fetch details for all SEED_UNIVERSE_IDS via the fully-public /v1/games endpoint
-  2. Expand by fetching recommendations from a rotating subset of seeds
-  3. Score every game and persist to DB
+  1. Use all SEED_UNIVERSE_IDS ONLY for fetching recommendations — seeds are
+     mega-famous games and are explicitly excluded from the content pool so we
+     never generate "hidden gem" content about Adopt Me or Blox Fruits.
+  2. Fan out recommendations from all 46 seeds in parallel (up to 920 IDs).
+  3. Fetch full details + thumbnails for all recommendation IDs.
+  4. Try genre-specific game lists as a supplementary source.
+  5. Score every game and persist to DB.
 """
 from __future__ import annotations
 
@@ -32,9 +36,6 @@ from src.discovery.viral_scorer import ViralScorer
 log = structlog.get_logger(__name__)
 
 MAX_GAMES_PER_RUN = 500
-
-# How many seed games to fan out for recommendations each run
-RECOMMENDATION_SEEDS = 10
 
 
 class TrendDetector:
@@ -66,45 +67,55 @@ class TrendDetector:
 
     async def _crawl_all_sources(self, client: RobloxClient) -> list[RobloxGame]:
         """
-        Seed-based discovery using only public Roblox endpoints.
+        Hidden-gem discovery using only public Roblox endpoints.
+
+        Seed games are excluded from the content pool — they are mega-famous
+        (Adopt Me, Blox Fruits, etc.) and would produce bad "hidden gem" content.
+        Seeds are used only to fan out recommendations.
         """
-        seen: set[str] = set()
+        # Pre-populate seen with all seed IDs so they are never added as content candidates.
+        seen: set[str] = set(SEED_UNIVERSE_IDS)
         games: list[RobloxGame] = []
 
-        # Step 1: fetch all seed games (public endpoint, always works)
-        log.info("trend_detector.fetching_seeds", count=len(SEED_UNIVERSE_IDS))
-        seed_games = await client.fetch_games_with_enrichment(SEED_UNIVERSE_IDS)
-        for g in seed_games:
-            if g.universe_id not in seen:
-                seen.add(g.universe_id)
-                games.append(g)
-        log.info("trend_detector.seeds_fetched", count=len(games))
-
-        # Step 2: expand via recommendations from a rotating subset of seeds
-        recommendation_seeds = SEED_UNIVERSE_IDS[:RECOMMENDATION_SEEDS]
+        # Step 1: Fan out recommendations from ALL seeds in parallel.
+        # 46 seeds × 20 recommendations = up to 920 unique candidate IDs.
+        log.info("trend_detector.fetching_recommendations", seeds=len(SEED_UNIVERSE_IDS))
         rec_tasks = [
             client.get_recommendations(uid, max_rows=20)
-            for uid in recommendation_seeds
+            for uid in SEED_UNIVERSE_IDS
         ]
         rec_results = await asyncio.gather(*rec_tasks, return_exceptions=True)
 
         extra_ids: list[str] = []
         for result in rec_results:
-            if isinstance(result, Exception):
+            if isinstance(result, list):
+                for uid in result:
+                    if uid and uid not in seen:
+                        seen.add(uid)
+                        extra_ids.append(uid)
+            elif isinstance(result, Exception):
                 log.warning("trend_detector.rec_failed", error=str(result))
-                continue
-            for uid in result:
-                if uid and uid not in seen:
-                    seen.add(uid)
-                    extra_ids.append(uid)
 
         if extra_ids:
-            log.info("trend_detector.fetching_recommendations", count=len(extra_ids))
+            log.info("trend_detector.fetching_rec_details", count=len(extra_ids))
             rec_games = await client.fetch_games_with_enrichment(extra_ids)
             games.extend(rec_games)
-            log.info("trend_detector.recommendations_fetched", total=len(games))
+            log.info("trend_detector.recommendations_fetched", count=len(rec_games), total=len(games))
 
-        # Step 3: optionally try the authenticated games/list endpoint (may 403)
+        # Step 2: Try genre-specific game lists as a supplementary source.
+        # These may 403 on some deployments; failures are silently skipped.
+        for genre_name, genre_id in list(GENRE_IDS.items())[:8]:
+            uids = await client.try_games_list(genre_id=genre_id, max_rows=60)
+            new_uids = [u for u in uids if u not in seen]
+            if new_uids:
+                log.info("trend_detector.genre_games_found", genre=genre_name, count=len(new_uids))
+                extra = await client.fetch_games_with_enrichment(new_uids[:40])
+                for g in extra:
+                    if g.universe_id not in seen:
+                        seen.add(g.universe_id)
+                        games.append(g)
+
+        # Step 3: Try sort-token lists (may 403 without auth).
         sort_ids = await client.try_get_sort_tokens()
         if sort_ids:
             log.info("trend_detector.sort_tokens_available", count=len(sort_ids))

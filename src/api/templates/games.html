@@ -3,11 +3,16 @@
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-4">
   <h4 class="mb-0"><i class="bi bi-controller me-2"></i>Discovered Games</h4>
-  <div class="btn-group">
-    <a href="/games?sort=viral_score" class="btn btn-sm {% if sort == 'viral_score' %}btn-primary{% else %}btn-outline-secondary{% endif %}">Viral Score</a>
-    <a href="/games?sort=visits" class="btn btn-sm {% if sort == 'visits' %}btn-primary{% else %}btn-outline-secondary{% endif %}">Visits</a>
-    <a href="/games?sort=active_players" class="btn btn-sm {% if sort == 'active_players' %}btn-primary{% else %}btn-outline-secondary{% endif %}">Active Now</a>
-    <a href="/games?sort=novelty_score" class="btn btn-sm {% if sort == 'novelty_score' %}btn-primary{% else %}btn-outline-secondary{% endif %}">Novelty</a>
+  <div class="d-flex gap-2 align-items-center">
+    <div class="btn-group">
+      <a href="/games?sort=viral_score" class="btn btn-sm {% if sort == 'viral_score' %}btn-primary{% else %}btn-outline-secondary{% endif %}">Viral Score</a>
+      <a href="/games?sort=visits" class="btn btn-sm {% if sort == 'visits' %}btn-primary{% else %}btn-outline-secondary{% endif %}">Visits</a>
+      <a href="/games?sort=active_players" class="btn btn-sm {% if sort == 'active_players' %}btn-primary{% else %}btn-outline-secondary{% endif %}">Active Now</a>
+      <a href="/games?sort=novelty_score" class="btn btn-sm {% if sort == 'novelty_score' %}btn-primary{% else %}btn-outline-secondary{% endif %}">Novelty</a>
+    </div>
+    <button class="btn btn-sm btn-danger" onclick="clearAllGames()">
+      🗑 Clear All Games
+    </button>
   </div>
 </div>
 
@@ -29,7 +34,7 @@
       </thead>
       <tbody>
       {% for game in games %}
-        <tr>
+        <tr id="game-row-{{ game.id }}">
           <td>
             {% if game.thumbnail_url %}
               <img src="{{ game.thumbnail_url }}" style="width:48px;height:27px;border-radius:4px;object-fit:cover;margin-right:8px">
@@ -75,10 +80,13 @@
               <span class="badge bg-secondary">Pending</span>
             {% endif %}
           </td>
-          <td>
-            <a href="{{ game.url }}" target="_blank" class="btn btn-sm btn-outline-secondary">
+          <td class="text-end" style="white-space:nowrap">
+            <a href="{{ game.url }}" target="_blank" class="btn btn-sm btn-outline-secondary me-1">
               <i class="bi bi-box-arrow-up-right"></i>
             </a>
+            <button class="btn btn-sm btn-outline-danger" onclick="deleteGame({{ game.id }}, '{{ game.name | replace("'", "\\'") }}', this)" title="Delete permanently">
+              <i class="bi bi-trash"></i>
+            </button>
           </td>
         </tr>
       {% endfor %}
@@ -86,4 +94,45 @@
     </table>
   </div>
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+async function deleteGame(id, name, btn) {
+  if (!confirm(`Permanently delete "${name}" and all its content?\n\nThis cannot be undone.`)) return;
+  btn.disabled = true;
+  try {
+    const r = await fetch(`/game/${id}`, { method: 'DELETE' });
+    if (r.ok) {
+      const row = document.getElementById(`game-row-${id}`);
+      row.style.transition = 'opacity 0.3s';
+      row.style.opacity = '0';
+      setTimeout(() => row.remove(), 300);
+    } else {
+      alert('Delete failed');
+      btn.disabled = false;
+    }
+  } catch (e) {
+    alert('Error: ' + e.message);
+    btn.disabled = false;
+  }
+}
+
+async function clearAllGames() {
+  const count = document.querySelectorAll('[id^="game-row-"]').length;
+  if (!confirm(`Permanently delete ALL ${count} games, their content, crawl logs, and carousels?\n\nThis cannot be undone. Run Discovery again after clearing.`)) return;
+  try {
+    const r = await fetch('/api/games/clear-all', { method: 'POST' });
+    const data = await r.json();
+    if (r.ok) {
+      alert(`Cleared ${data.deleted} games. Run Discovery to find new ones.`);
+      location.reload();
+    } else {
+      alert('Clear failed');
+    }
+  } catch (e) {
+    alert('Error: ' + e.message);
+  }
+}
+</script>
 {% endblock %}

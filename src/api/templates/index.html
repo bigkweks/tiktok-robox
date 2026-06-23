@@ -137,3 +137,30 @@
   </div>
 </div>
 {% endblock %}
+
+{% block scripts %}
+<script>
+// Override the global triggerDiscovery to show the actual result count.
+async function triggerDiscovery() {
+  const btn = document.getElementById('discoverBtn');
+  btn.disabled = true;
+  btn.innerHTML = '<i class="bi bi-hourglass-split me-1"></i> Searching...';
+  try {
+    const r = await post('/pipeline/run-discovery');
+    if (r.status === 'error') {
+      btn.innerHTML = '<i class="bi bi-x-circle me-1"></i> Failed';
+      btn.disabled = false;
+    } else {
+      const n = r.new || 0;
+      btn.innerHTML = n > 0
+        ? `<i class="bi bi-check-circle me-1"></i> Done! +${n} games found`
+        : '<i class="bi bi-check-circle me-1"></i> Done (no new games)';
+      setTimeout(() => location.reload(), 2500);
+    }
+  } catch (e) {
+    btn.innerHTML = '<i class="bi bi-x-circle me-1"></i> Error';
+    btn.disabled = false;
+  }
+}
+</script>
+{% endblock %}
