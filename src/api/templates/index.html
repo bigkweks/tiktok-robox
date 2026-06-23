@@ -1,136 +1,174 @@
 {% extends "base.html" %}
 {% block title %}Dashboard{% endblock %}
 {% block content %}
-<div class="row g-4 mb-4">
-  <div class="col-md-2">
+
+{# ── Stat strip ── #}
+<div class="row g-3 mb-4">
+  <div class="col-6 col-md-2">
     <div class="card stat-card h-100">
-      <div class="card-body text-center">
+      <div class="card-body text-center py-3">
         <div class="stat-number">{{ stats.total_games }}</div>
-        <div class="text-muted small">Games Discovered</div>
+        <div class="stat-label">Games Found</div>
       </div>
     </div>
   </div>
-  <div class="col-md-2">
-    <div class="card stat-card h-100" style="border-color:#22c55e">
-      <div class="card-body text-center">
-        <div class="stat-number" style="color:#22c55e">{{ stats.queue_size }}</div>
-        <div class="text-muted small">Approved Queue</div>
+  <div class="col-6 col-md-2">
+    <div class="card h-100" style="border-left:3px solid var(--success)">
+      <div class="card-body text-center py-3">
+        <div class="stat-number" style="color:var(--success)">{{ stats.queue_size }}</div>
+        <div class="stat-label">Approved Queue</div>
       </div>
     </div>
   </div>
-  <div class="col-md-2">
-    <div class="card stat-card h-100" style="border-color:#f59e0b">
-      <div class="card-body text-center">
-        <div class="stat-number" style="color:#f59e0b">{{ stats.pending }}</div>
-        <div class="text-muted small">Awaiting Review</div>
+  <div class="col-6 col-md-2">
+    <div class="card h-100" style="border-left:3px solid var(--warning)">
+      <div class="card-body text-center py-3">
+        <div class="stat-number" style="color:var(--warning)">{{ stats.pending }}</div>
+        <div class="stat-label">Awaiting Review</div>
       </div>
     </div>
   </div>
-  <div class="col-md-2">
-    <div class="card stat-card h-100" style="border-color:#a78bfa">
-      <div class="card-body text-center">
+  <div class="col-6 col-md-2">
+    <div class="card h-100" style="border-left:3px solid #a78bfa">
+      <div class="card-body text-center py-3">
         <div class="stat-number" style="color:#a78bfa">{{ stats.posted }}</div>
-        <div class="text-muted small">Posted</div>
+        <div class="stat-label">Posted</div>
       </div>
     </div>
   </div>
-  <div class="col-md-2">
-    <div class="card h-100" style="border-color:#06b6d4">
-      <div class="card-body text-center">
-        <div class="stat-number" style="color:#06b6d4">{{ (perf.avg_follow_conv_rate * 100) | round(2) }}%</div>
-        <div class="text-muted small">Avg Follow Rate</div>
+  <div class="col-6 col-md-2">
+    <div class="card h-100" style="border-left:3px solid var(--cyan)">
+      <div class="card-body text-center py-3">
+        <div class="stat-number" style="color:var(--cyan);font-size:1.5rem">{{ (perf.avg_follow_conv_rate * 100) | round(2) }}%</div>
+        <div class="stat-label">Avg Follow Rate</div>
       </div>
     </div>
   </div>
-  <div class="col-md-2">
-    <div class="card h-100">
-      <div class="card-body text-center">
-        <div class="stat-number" style="font-size:1.4rem">{{ stats.total_views | default(perf.total_views, true) | int }}</div>
-        <div class="text-muted small">Total Views</div>
+  <div class="col-6 col-md-2">
+    <div class="card h-100" style="border-left:3px solid var(--accent)">
+      <div class="card-body text-center py-3">
+        <div class="stat-number" style="font-size:1.5rem">{{ stats.total_views | default(perf.total_views, true) | int }}</div>
+        <div class="stat-label">Total Views</div>
       </div>
     </div>
   </div>
 </div>
 
-<div class="row g-4 mb-4">
-  <div class="col-md-8">
-    <div class="card">
+{# ── Pipeline controls + Top game ── #}
+<div class="row g-3 mb-4">
+  <div class="col-lg-8">
+    <div class="card h-100">
       <div class="card-header d-flex justify-content-between align-items-center">
-        <span><i class="bi bi-graph-up me-2"></i>Pipeline Controls</span>
+        <span><i class="bi bi-sliders me-2"></i>Pipeline Controls</span>
         <small class="text-muted">Last run: {{ now.strftime('%H:%M UTC') }}</small>
       </div>
       <div class="card-body">
         <div class="row g-3">
           <div class="col-md-4">
-            <button id="discoverBtn" class="btn btn-primary w-100" onclick="triggerDiscovery()">
-              <i class="bi bi-search me-1"></i> Run Discovery
+            <button id="discoverBtn" class="btn btn-primary w-100 py-2" onclick="triggerDiscovery()">
+              <i class="bi bi-search me-1"></i>Run Discovery
             </button>
-            <small class="text-muted d-block mt-1">Crawl Roblox for trending games</small>
+            <div class="text-muted mt-2" style="font-size:0.775rem">Crawl Roblox for trending hidden-gem games</div>
           </div>
           <div class="col-md-4">
-            <button id="contentBtn" class="btn btn-success w-100" onclick="triggerContent()">
-              <i class="bi bi-play-circle me-1"></i> Generate Content
+            <button id="contentBtn" class="btn btn-success w-100 py-2" onclick="triggerContent()">
+              <i class="bi bi-play-circle me-1"></i>Generate Content
             </button>
-            <small class="text-muted d-block mt-1">AI rate + thumbnail + video</small>
+            <div class="text-muted mt-2" style="font-size:0.775rem">AI scoring · thumbnail variants · TTS script</div>
           </div>
           <div class="col-md-4">
-            <a href="/queue?status=pending" class="btn w-100" style="background:#f59e0b;color:black">
-              <i class="bi bi-check2-square me-1"></i> Review Queue ({{ stats.pending }})
+            <a href="/queue?status=pending" class="btn w-100 py-2" style="background:var(--warning);color:#000;font-weight:600">
+              <i class="bi bi-check2-square me-1"></i>Review Queue
+              {% if stats.pending > 0 %}
+                <span class="badge ms-1 rounded-pill" style="background:rgba(0,0,0,0.25);color:#000;font-size:0.7rem">{{ stats.pending }}</span>
+              {% endif %}
             </a>
-            <small class="text-muted d-block mt-1">Approve or reject pending items</small>
+            <div class="text-muted mt-2" style="font-size:0.775rem">Approve or reject pending content</div>
           </div>
         </div>
       </div>
     </div>
   </div>
-  <div class="col-md-4">
+  <div class="col-lg-4">
     <div class="card h-100">
-      <div class="card-header"><i class="bi bi-trophy me-2"></i>Top Game</div>
-      <div class="card-body d-flex align-items-center justify-content-center">
-        <div class="text-center">
-          <div style="font-size:1.2rem;font-weight:600">{{ stats.top_game }}</div>
-          <div class="text-muted small">Highest viral score</div>
+      <div class="card-header"><i class="bi bi-trophy me-2" style="color:var(--accent)"></i>Top Game</div>
+      <div class="card-body d-flex align-items-center justify-content-center text-center">
+        <div>
+          <div style="font-size:1.1rem;font-weight:700;color:var(--text)">{{ stats.top_game }}</div>
+          <div class="text-muted mt-1" style="font-size:0.8rem">Highest viral score in database</div>
         </div>
       </div>
     </div>
   </div>
 </div>
 
-<div class="row g-4">
+{# ── Performance + 10K progress ── #}
+<div class="row g-3">
   <div class="col-md-6">
-    <div class="card">
+    <div class="card h-100">
       <div class="card-header"><i class="bi bi-bar-chart me-2"></i>Content Performance</div>
-      <div class="card-body">
-        <table class="table table-sm">
-          <tr><td class="text-muted">Total Posts</td><td class="text-end fw-bold">{{ perf.total_posts }}</td></tr>
-          <tr><td class="text-muted">Total Views</td><td class="text-end fw-bold">{{ perf.total_views | int }}</td></tr>
-          <tr><td class="text-muted">Total Follows</td><td class="text-end fw-bold">{{ perf.total_follows }}</td></tr>
-          <tr><td class="text-muted">Avg Completion Rate</td><td class="text-end fw-bold">{{ (perf.avg_completion_rate * 100) | round(1) }}%</td></tr>
-          <tr><td class="text-muted">Avg Engagement Rate</td><td class="text-end fw-bold">{{ (perf.avg_engagement_rate * 100) | round(2) }}%</td></tr>
-          <tr><td class="text-muted">Best Thumbnail</td><td class="text-end fw-bold">Variant {{ perf.top_performing_variant }}</td></tr>
+      <div class="card-body p-0">
+        <table class="table mb-0">
+          <tbody>
+            <tr>
+              <td class="text-muted ps-4">Total Posts</td>
+              <td class="text-end pe-4 fw-bold">{{ perf.total_posts }}</td>
+            </tr>
+            <tr>
+              <td class="text-muted ps-4">Total Views</td>
+              <td class="text-end pe-4 fw-bold">{{ perf.total_views | int }}</td>
+            </tr>
+            <tr>
+              <td class="text-muted ps-4">Total Follows</td>
+              <td class="text-end pe-4 fw-bold text-success">{{ perf.total_follows }}</td>
+            </tr>
+            <tr>
+              <td class="text-muted ps-4">Avg Completion Rate</td>
+              <td class="text-end pe-4 fw-bold">{{ (perf.avg_completion_rate * 100) | round(1) }}%</td>
+            </tr>
+            <tr>
+              <td class="text-muted ps-4">Avg Engagement Rate</td>
+              <td class="text-end pe-4 fw-bold">{{ (perf.avg_engagement_rate * 100) | round(2) }}%</td>
+            </tr>
+            <tr>
+              <td class="text-muted ps-4">Best Thumbnail</td>
+              <td class="text-end pe-4 fw-bold">
+                <span class="badge" style="background:var(--brand)">Variant {{ perf.top_performing_variant }}</span>
+              </td>
+            </tr>
+          </tbody>
         </table>
       </div>
     </div>
   </div>
   <div class="col-md-6">
-    <div class="card">
-      <div class="card-header"><i class="bi bi-info-circle me-2"></i>10K Follower Progress</div>
+    <div class="card h-100">
+      <div class="card-header"><i class="bi bi-bullseye me-2" style="color:var(--brand)"></i>10K Follower Goal</div>
       <div class="card-body">
         {% set follows = perf.total_follows %}
         {% set pct = [follows / 10000 * 100, 100] | min %}
         <div class="d-flex justify-content-between mb-2">
-          <span>{{ follows }} followers</span>
-          <span class="text-muted">Goal: 10,000</span>
+          <span class="fw-bold" style="font-size:1.1rem">{{ follows }} <small class="text-muted fw-normal" style="font-size:0.8rem">followers</small></span>
+          <span class="text-muted" style="font-size:0.875rem">Goal: 10,000</span>
         </div>
-        <div class="progress" style="height:20px;background:rgba(255,255,255,0.1)">
-          <div class="progress-bar" role="progressbar" style="width:{{ pct }}%;background:linear-gradient(90deg,#6C63FF,#FFD700)" aria-valuenow="{{ pct }}"></div>
+        <div class="progress mb-3" style="height:18px">
+          <div class="progress-bar" role="progressbar"
+               style="width:{{ pct }}%;background:linear-gradient(90deg,var(--brand),var(--accent))"
+               aria-valuenow="{{ pct | round(0) }}" aria-valuemin="0" aria-valuemax="100">
+            {% if pct > 10 %}<span style="font-size:0.7rem;font-weight:700">{{ pct | round(1) }}%</span>{% endif %}
+          </div>
         </div>
-        <div class="mt-3 text-muted small">
-          {% if perf.total_posts > 0 %}
-            Daily avg: {{ (follows / [perf.total_posts, 1] | max * 3) | round(0) | int }} follows/day needed to hit 10K in 30 days
-          {% else %}
-            Post your first video to start tracking progress
-          {% endif %}
+        <div class="d-flex justify-content-between">
+          <span class="text-muted" style="font-size:0.8rem">
+            <i class="bi bi-people me-1"></i>{{ 10000 - follows }} to go
+          </span>
+          <span class="text-muted" style="font-size:0.8rem">
+            {% if perf.total_posts > 0 %}
+              ~{{ ((10000 - follows) / [perf.avg_follow_conv_rate * 1000, 1] | max) | round(0) | int }} more videos needed
+            {% else %}
+              Post first video to project timeline
+            {% endif %}
+          </span>
         </div>
       </div>
     </div>
@@ -140,35 +178,35 @@
 
 {% block scripts %}
 <script>
-// Override the global triggerDiscovery to show the actual result count.
 async function triggerDiscovery() {
   const btn = document.getElementById('discoverBtn');
   btn.disabled = true;
-  btn.innerHTML = '<i class="bi bi-hourglass-split me-1"></i> Searching...';
+  btn.innerHTML = '<i class="bi bi-hourglass-split me-1"></i>Searching...';
   try {
     const r = await post('/pipeline/run-discovery');
     if (r.status === 'error') {
-      btn.innerHTML = '<i class="bi bi-x-circle me-1"></i> Failed';
+      btn.innerHTML = '<i class="bi bi-x-circle me-1"></i>Failed';
       btn.disabled = false;
     } else {
       const n = r.new || 0;
       const u = r.updated || 0;
       if (n === 0 && u === 0) {
-        // No games came back at all — almost always means this environment
-        // can't reach apis.roblox.com. Tell the user how to confirm.
         btn.classList.remove('btn-primary');
         btn.classList.add('btn-warning');
-        btn.innerHTML = '<i class="bi bi-exclamation-triangle me-1"></i> 0 found — run `python main.py diagnose`';
+        btn.style.color = '#000';
+        btn.innerHTML = '<i class="bi bi-exclamation-triangle me-1"></i>0 found — run diagnose';
         btn.disabled = false;
       } else {
+        btn.classList.remove('btn-primary');
+        btn.classList.add('btn-success');
         btn.innerHTML = n > 0
-          ? `<i class="bi bi-check-circle me-1"></i> Done! +${n} new (${u} updated)`
-          : `<i class="bi bi-check-circle me-1"></i> Done! ${u} updated`;
+          ? `<i class="bi bi-check-circle me-1"></i>+${n} new · ${u} updated`
+          : `<i class="bi bi-check-circle me-1"></i>${u} updated`;
         setTimeout(() => location.reload(), 2500);
       }
     }
   } catch (e) {
-    btn.innerHTML = '<i class="bi bi-x-circle me-1"></i> Error';
+    btn.innerHTML = '<i class="bi bi-x-circle me-1"></i>Error';
     btn.disabled = false;
   }
 }

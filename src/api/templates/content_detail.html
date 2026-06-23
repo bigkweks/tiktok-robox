@@ -1,31 +1,50 @@
 {% extends "base.html" %}
 {% block title %}Content #{{ content.id }}{% endblock %}
 {% block content %}
-<div class="d-flex align-items-center mb-4">
-  <a href="/queue" class="btn btn-outline-secondary btn-sm me-3"><i class="bi bi-arrow-left"></i> Back</a>
-  <h4 class="mb-0">{{ game.name }} — Post Package</h4>
+
+<div class="d-flex align-items-center gap-3 mb-4 flex-wrap">
+  <a href="/queue" class="btn btn-sm btn-outline-secondary">
+    <i class="bi bi-arrow-left me-1"></i>Back to Queue
+  </a>
+  <div>
+    <h1 class="page-title mb-0">{{ game.name }}</h1>
+    <div class="text-muted mt-0" style="font-size:0.8rem">Post Package #{{ content.id }}</div>
+  </div>
   {% if content.rating_score %}
-    <span class="ms-3 score-badge {% if content.rating_score >= 9 %}badge-gem{% elif content.rating_score >= 7 %}badge-good{% else %}badge-bad{% endif %}">
+    <span class="score-badge ms-auto
+      {% if content.rating_score >= 9 %}badge-gem
+      {% elif content.rating_score >= 7 %}badge-good
+      {% else %}badge-bad{% endif %}">
       {{ content.rating_score }}/10
     </span>
   {% endif %}
 </div>
 
-<div class="row g-4">
+<div class="row g-3">
+
+  {# ── Col 1: Thumbnails + Video ── #}
   <div class="col-lg-4">
-    <div class="card mb-4">
-      <div class="card-header">Thumbnails</div>
+    <div class="card mb-3">
+      <div class="card-header"><i class="bi bi-image me-2"></i>Thumbnails</div>
       <div class="card-body">
         <div class="mb-3">
-          <div class="small text-muted mb-1">Variant A — Rating Focus</div>
-          <a href="/output/thumbnails/{{ game.universe_id }}/variant_a.png" target="_blank">
-            <img src="/output/thumbnails/{{ game.universe_id }}/variant_a.png" class="img-fluid rounded" style="max-height:300px;object-fit:contain">
+          <div class="d-flex justify-content-between align-items-center mb-2">
+            <span class="text-muted" style="font-size:0.75rem;font-weight:600;text-transform:uppercase;letter-spacing:0.05em">Variant A — Rating Focus</span>
+          </div>
+          <a href="/output/thumbnails/{{ game.universe_id }}/variant_a.png" target="_blank" class="d-block">
+            <img src="/output/thumbnails/{{ game.universe_id }}/variant_a.png"
+                 class="img-fluid rounded"
+                 style="border:2px solid var(--border-hi);border-radius:8px;width:100%">
           </a>
         </div>
         <div>
-          <div class="small text-muted mb-1">Variant B — Hook Focus</div>
-          <a href="/output/thumbnails/{{ game.universe_id }}/variant_b.png" target="_blank">
-            <img src="/output/thumbnails/{{ game.universe_id }}/variant_b.png" class="img-fluid rounded" style="max-height:300px;object-fit:contain">
+          <div class="d-flex justify-content-between align-items-center mb-2">
+            <span class="text-muted" style="font-size:0.75rem;font-weight:600;text-transform:uppercase;letter-spacing:0.05em">Variant B — Hook Focus</span>
+          </div>
+          <a href="/output/thumbnails/{{ game.universe_id }}/variant_b.png" target="_blank" class="d-block">
+            <img src="/output/thumbnails/{{ game.universe_id }}/variant_b.png"
+                 class="img-fluid rounded"
+                 style="border:2px solid var(--border-hi);border-radius:8px;width:100%">
           </a>
         </div>
       </div>
@@ -33,12 +52,13 @@
 
     {% if content.video_path %}
     <div class="card">
-      <div class="card-header">Video</div>
+      <div class="card-header"><i class="bi bi-camera-video me-2"></i>Video</div>
       <div class="card-body">
-        <video controls class="w-100 rounded" style="max-height:400px">
+        <video controls class="w-100 rounded mb-2" style="max-height:360px">
           <source src="/output/videos/{{ game.universe_id }}.mp4" type="video/mp4">
         </video>
-        <a href="/output/videos/{{ game.universe_id }}.mp4" download class="btn btn-primary w-100 mt-2">
+        <a href="/output/videos/{{ game.universe_id }}.mp4" download
+           class="btn btn-primary btn-sm w-100">
           <i class="bi bi-download me-1"></i>Download Video
         </a>
       </div>
@@ -46,87 +66,134 @@
     {% endif %}
   </div>
 
+  {# ── Col 2: Captions ── #}
   <div class="col-lg-4">
-    <div class="card mb-4">
-      <div class="card-header">Caption A — Copy & Paste</div>
+    <div class="card mb-3">
+      <div class="card-header">
+        <i class="bi bi-chat-quote me-2"></i>Caption A — Rating Angle
+      </div>
       <div class="card-body">
-        <pre class="caption-box" id="captionA">{{ caption_a }}</pre>
-        <button class="btn btn-outline-secondary btn-sm w-100" onclick="copyText('captionA')">
+        <pre class="caption-box mb-3" id="captionA">{{ caption_a }}</pre>
+        <button class="btn btn-outline-secondary btn-sm w-100" onclick="copyText('captionA', this, 'Caption A')">
           <i class="bi bi-clipboard me-1"></i>Copy Caption A
         </button>
       </div>
     </div>
     <div class="card">
-      <div class="card-header">Caption B — Copy & Paste</div>
+      <div class="card-header">
+        <i class="bi bi-chat-quote me-2"></i>Caption B — Hook Angle
+      </div>
       <div class="card-body">
-        <pre class="caption-box" id="captionB">{{ caption_b }}</pre>
-        <button class="btn btn-outline-secondary btn-sm w-100" onclick="copyText('captionB')">
+        <pre class="caption-box mb-3" id="captionB">{{ caption_b }}</pre>
+        <button class="btn btn-outline-secondary btn-sm w-100" onclick="copyText('captionB', this, 'Caption B')">
           <i class="bi bi-clipboard me-1"></i>Copy Caption B
         </button>
       </div>
     </div>
   </div>
 
+  {# ── Col 3: AI breakdown + actions ── #}
   <div class="col-lg-4">
-    <div class="card mb-4">
-      <div class="card-header">AI Rating Breakdown</div>
+    <div class="card mb-3">
+      <div class="card-header"><i class="bi bi-robot me-2"></i>AI Rating Breakdown</div>
       <div class="card-body">
-        <div class="mb-3">
-          <span class="badge" style="background:#6C63FF;font-size:1rem">{{ content.rating_label }}</span>
-        </div>
-        <p class="text-muted">{{ content.rating_verdict }}</p>
+        {% if content.rating_label %}
+          <div class="mb-2">
+            <span class="badge" style="background:rgba(124,111,255,0.2);color:var(--brand);border:1px solid rgba(124,111,255,0.35);font-size:0.8rem;padding:0.35rem 0.75rem">
+              {{ content.rating_label }}
+            </span>
+          </div>
+        {% endif %}
+        <p class="text-muted mb-3" style="font-size:0.85rem;line-height:1.6">{{ content.rating_verdict }}</p>
         {% for k, v in breakdown.items() %}
-        <div class="d-flex justify-content-between mb-1">
-          <small class="text-muted">{{ k | replace('_', ' ') | title }}</small>
-          <small>{{ v }}/10</small>
+        <div class="d-flex justify-content-between mb-1 align-items-center">
+          <small class="text-muted" style="font-size:0.78rem">{{ k | replace('_', ' ') | title }}</small>
+          <small class="fw-semibold" style="font-size:0.82rem">{{ v }}/10</small>
         </div>
-        <div style="height:3px;background:rgba(255,255,255,0.1);border-radius:2px;margin-bottom:8px">
-          <div style="height:3px;width:{{ (v / 10 * 100) | round }}%;background:#6C63FF;border-radius:2px"></div>
+        <div class="score-bar mb-2">
+          <div class="score-bar-fill" style="width:{{ (v / 10 * 100) | round }}%"></div>
         </div>
         {% endfor %}
       </div>
     </div>
 
-    <div class="card mb-4">
-      <div class="card-header">TikTok Predictions</div>
-      <div class="card-body">
-        <table class="table table-sm mb-0">
-          <tr><td class="text-muted">Viral Score</td><td class="text-end">{{ (content.predicted_viral_score * 100) | round(1) }}%</td></tr>
-          <tr><td class="text-muted">Engagement</td><td class="text-end">{{ (content.predicted_engagement_score * 100) | round(1) }}%</td></tr>
-          <tr><td class="text-muted">Follow Conv.</td><td class="text-end">{{ (content.predicted_follow_conv_score * 100) | round(1) }}%</td></tr>
-          <tr><td class="text-muted">Novelty</td><td class="text-end">{{ (content.predicted_novelty_score * 100) | round(1) }}%</td></tr>
-          <tr class="fw-bold"><td>Queue Priority</td><td class="text-end">{{ (content.queue_priority * 100) | round(1) }}%</td></tr>
+    <div class="card mb-3">
+      <div class="card-header"><i class="bi bi-graph-up-arrow me-2"></i>TikTok Predictions</div>
+      <div class="card-body p-0">
+        <table class="table mb-0">
+          <tbody>
+            <tr>
+              <td class="text-muted ps-4" style="font-size:0.875rem">Viral Score</td>
+              <td class="text-end pe-4 fw-semibold">{{ (content.predicted_viral_score * 100) | round(1) }}%</td>
+            </tr>
+            <tr>
+              <td class="text-muted ps-4" style="font-size:0.875rem">Engagement</td>
+              <td class="text-end pe-4 fw-semibold">{{ (content.predicted_engagement_score * 100) | round(1) }}%</td>
+            </tr>
+            <tr>
+              <td class="text-muted ps-4" style="font-size:0.875rem">Follow Conversion</td>
+              <td class="text-end pe-4 fw-semibold">{{ (content.predicted_follow_conv_score * 100) | round(1) }}%</td>
+            </tr>
+            <tr>
+              <td class="text-muted ps-4" style="font-size:0.875rem">Novelty</td>
+              <td class="text-end pe-4 fw-semibold">{{ (content.predicted_novelty_score * 100) | round(1) }}%</td>
+            </tr>
+            <tr style="border-top:1px solid var(--border-hi)">
+              <td class="ps-4 fw-bold">Queue Priority</td>
+              <td class="text-end pe-4 fw-bold text-accent">{{ (content.queue_priority * 100) | round(1) }}%</td>
+            </tr>
+          </tbody>
         </table>
       </div>
     </div>
 
-    <div class="card mb-4">
-      <div class="card-header">TTS Script</div>
+    {% if content.tts_script %}
+    <div class="card mb-3">
+      <div class="card-header"><i class="bi bi-mic me-2"></i>TTS Script</div>
       <div class="card-body">
-        <pre class="caption-box" style="font-size:0.8rem">{{ content.tts_script or '—' }}</pre>
+        <pre class="caption-box" style="max-height:180px">{{ content.tts_script }}</pre>
       </div>
     </div>
+    {% endif %}
 
+    {# Action buttons #}
     {% if content.status == 'pending' %}
     <div class="d-flex gap-2">
-      <button class="btn btn-approve flex-grow-1" onclick="approve({{ content.id }})">Approve</button>
-      <button class="btn btn-reject" onclick="reject({{ content.id }})">Reject</button>
+      <button class="btn btn-approve flex-grow-1" onclick="approve({{ content.id }})">
+        <i class="bi bi-check-lg me-1"></i>Approve
+      </button>
+      <button class="btn btn-reject flex-grow-1" onclick="reject({{ content.id }})">
+        <i class="bi bi-x-lg me-1"></i>Reject
+      </button>
     </div>
     {% elif content.status == 'approved' %}
     <button class="btn btn-success w-100" onclick="markPosted()">
       <i class="bi bi-check2-all me-1"></i>Mark as Posted
     </button>
+    {% elif content.status == 'posted' %}
+    <div class="card" style="border-color:var(--success)">
+      <div class="card-body text-center py-3">
+        <i class="bi bi-check-circle-fill text-success" style="font-size:1.5rem;display:block;margin-bottom:0.5rem"></i>
+        <div class="fw-semibold text-success">Posted to TikTok</div>
+      </div>
+    </div>
     {% endif %}
   </div>
+
 </div>
 
 <script>
-function copyText(id) {
+function copyText(id, btn, label) {
   const el = document.getElementById(id);
   navigator.clipboard.writeText(el.textContent).then(() => {
-    const btn = el.nextElementSibling;
-    btn.textContent = '✓ Copied!';
-    setTimeout(() => btn.innerHTML = '<i class="bi bi-clipboard me-1"></i>Copy Caption ' + (id === 'captionA' ? 'A' : 'B'), 2000);
+    btn.innerHTML = '<i class="bi bi-check-lg me-1"></i>Copied!';
+    btn.classList.add('btn-success');
+    btn.classList.remove('btn-outline-secondary');
+    setTimeout(() => {
+      btn.innerHTML = '<i class="bi bi-clipboard me-1"></i>Copy ' + label;
+      btn.classList.remove('btn-success');
+      btn.classList.add('btn-outline-secondary');
+    }, 2000);
   });
 }
 async function markPosted() {

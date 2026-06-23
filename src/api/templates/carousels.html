@@ -1,103 +1,121 @@
 {% extends "base.html" %}
 {% block title %}Carousels{% endblock %}
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mb-4">
+
+<div class="page-header">
   <div>
-    <h4 class="mb-0">📸 Photo Carousels</h4>
-    <small class="text-muted">Viral format — 6 slides, 5 games per post</small>
+    <h1 class="page-title"><i class="bi bi-images me-2" style="color:var(--brand)"></i>Photo Carousels</h1>
+    <p class="page-subtitle">Viral format — 6 slides · 5 hidden-gem games per post</p>
   </div>
-  <div class="d-flex gap-2 align-items-center">
-    <button class="btn btn-sm btn-outline-light" onclick="triggerCarousel()" id="carouselBtn">
-      ⚡ Generate Now
-    </button>
-  </div>
+  <button class="btn btn-primary" onclick="triggerCarousel()" id="carouselBtn">
+    <i class="bi bi-lightning-charge me-1"></i>Generate Now
+  </button>
 </div>
 
-<div class="alert alert-info d-flex align-items-center gap-2 mb-4 py-2 small">
-  <span>📲</span>
-  <span>
-    Approve a carousel, then save its 6 slides and copy the caption below.
-    Upload them to TikTok yourself as a photo post, then hit
-    <strong>Mark as Posted</strong>.
-  </span>
+<div class="alert alert-info d-flex align-items-start gap-2 mb-4 py-3">
+  <i class="bi bi-phone mt-1" style="flex-shrink:0"></i>
+  <div style="font-size:0.875rem">
+    Approve a carousel, then <strong>save all 6 slides</strong> and copy the caption below.
+    Upload them to TikTok as a <strong>photo post</strong>, then hit <strong>Mark as Posted</strong>.
+  </div>
 </div>
 
 {% if not carousels %}
-<div class="card text-center py-5">
-  <div class="card-body">
-    <p class="text-muted mb-1">No carousels generated yet.</p>
-    <p class="text-muted small">Need at least 5 rated games in the queue first.<br>
-    Run Discovery + Content generation, then hit Generate Now.</p>
+<div class="card">
+  <div class="card-body text-center py-5">
+    <i class="bi bi-images" style="font-size:2.5rem;color:var(--text-dim);display:block;margin-bottom:1rem"></i>
+    <div class="fw-semibold mb-1">No carousels yet</div>
+    <p class="text-muted mb-0" style="font-size:0.875rem">
+      Need at least 5 AI-rated games in the queue.<br>
+      Run Discovery → Generate Content → then hit Generate Now.
+    </p>
   </div>
 </div>
 {% endif %}
 
 {% for post in carousels %}
-<div class="card mb-4">
-  <div class="card-header d-flex justify-content-between align-items-center">
-    <div>
-      <span class="fw-bold">Part {{ post.part_number }} — {{ post.edition }}</span>
-      <span class="badge ms-2
+<div class="card mb-3">
+  <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+    <div class="d-flex align-items-center gap-2">
+      <span class="fw-bold" style="font-size:0.95rem">Part {{ post.part_number }} — {{ post.edition }}</span>
+      <span class="badge
         {% if post.status == 'pending' %}bg-warning text-dark
         {% elif post.status == 'approved' %}bg-success
         {% elif post.status == 'posted' %}bg-primary
         {% else %}bg-secondary{% endif %}">
         {{ post.status }}
       </span>
+      <small class="text-muted">{{ post.created_at.strftime('%b %d · %H:%M') }}</small>
     </div>
-    <div class="d-flex gap-2 align-items-center">
-      <small class="text-muted">{{ post.created_at.strftime('%b %d %H:%M') }}</small>
+    <div class="d-flex gap-2">
       {% if post.status == 'pending' %}
-      <button class="btn btn-sm btn-approve" onclick="approveCarousel({{ post.id }})">Approve</button>
-      <button class="btn btn-sm btn-reject" onclick="rejectCarousel({{ post.id }})">Reject</button>
+        <button class="btn btn-sm btn-approve" onclick="approveCarousel({{ post.id }})">
+          <i class="bi bi-check-lg me-1"></i>Approve
+        </button>
+        <button class="btn btn-sm btn-reject" onclick="rejectCarousel({{ post.id }})">
+          <i class="bi bi-x-lg"></i>
+        </button>
       {% elif post.status == 'approved' %}
-      <button class="btn btn-sm btn-reject" onclick="rejectCarousel({{ post.id }})">Reject</button>
-      <button class="btn btn-sm btn-primary" onclick="markPosted({{ post.id }}, this)">
-        ✅ Mark as Posted
-      </button>
+        <button class="btn btn-sm btn-reject" onclick="rejectCarousel({{ post.id }})">
+          <i class="bi bi-x-lg"></i>
+        </button>
+        <button class="btn btn-sm btn-primary" onclick="markPosted({{ post.id }}, this)">
+          <i class="bi bi-check2-all me-1"></i>Mark as Posted
+        </button>
       {% endif %}
     </div>
   </div>
+
   <div class="card-body">
-    <!-- Slide previews -->
-    <div class="d-flex gap-2 overflow-auto pb-2 mb-3" style="scrollbar-width: thin;">
+    {# Slide strip #}
+    <div class="d-flex gap-2 overflow-auto pb-2 mb-3" style="scrollbar-width:thin">
       {% for path in post.slide_paths_list %}
       <div class="flex-shrink-0 text-center">
         {% if path %}
-        <img src="/output/{{ path | replace(settings.OUTPUT_DIR + '/', '') }}"
-             class="rounded" style="height:220px; width:auto; cursor:pointer; border:2px solid rgba(255,255,255,0.1);"
-             onclick="expandSlide(this.src)" title="Slide {{ loop.index }}">
+          <img src="/output/{{ path | replace(settings.OUTPUT_DIR + '/', '') }}"
+               class="rounded"
+               style="height:200px;width:auto;cursor:pointer;border:2px solid var(--border-hi);border-radius:8px;transition:border-color 0.15s"
+               onclick="expandSlide(this.src)"
+               onmouseenter="this.style.borderColor='var(--brand)'"
+               onmouseleave="this.style.borderColor='var(--border-hi)'"
+               title="Slide {{ loop.index }}">
         {% else %}
-        <div class="bg-secondary rounded d-flex align-items-center justify-content-center"
-             style="height:220px; width:100px;">
-          <small class="text-muted">No slide</small>
-        </div>
+          <div style="height:200px;width:90px;background:var(--surface-3);border-radius:8px;border:2px solid var(--border);display:flex;align-items:center;justify-content:center">
+            <small class="text-muted" style="font-size:0.7rem">No slide</small>
+          </div>
         {% endif %}
-        <small class="text-muted d-block mt-1">
+        <div class="text-muted mt-1" style="font-size:0.7rem;font-weight:600;text-transform:uppercase;letter-spacing:0.05em">
           {% if loop.index == 1 %}Title{% else %}Game {{ loop.index - 1 }}{% endif %}
-        </small>
+        </div>
       </div>
       {% endfor %}
     </div>
 
-    <!-- Caption -->
+    {# Caption #}
     {% if post.caption %}
-    <div class="mb-2">
-      <small class="text-muted d-block mb-1">TikTok Caption</small>
-      <pre class="caption-box">{{ post.caption }}
+    <div>
+      <div class="text-muted mb-2" style="font-size:0.75rem;font-weight:600;text-transform:uppercase;letter-spacing:0.06em">
+        <i class="bi bi-chat-text me-1"></i>TikTok Caption
+      </div>
+      <div style="position:relative">
+        <pre class="caption-box" id="caption-{{ post.id }}">{{ post.caption }}
 
 {{ post.hashtags_str }}</pre>
+        <button class="btn btn-sm btn-outline-secondary mt-2" onclick="copyCaption('caption-{{ post.id }}', this)">
+          <i class="bi bi-clipboard me-1"></i>Copy Caption
+        </button>
+      </div>
     </div>
     {% endif %}
   </div>
 </div>
 {% endfor %}
 
-<!-- Slide expand modal -->
+{# Slide expand modal #}
 <div class="modal fade" id="slideModal" tabindex="-1">
-  <div class="modal-dialog modal-dialog-centered" style="max-width:400px">
-    <div class="modal-content bg-dark border-0">
-      <div class="modal-body p-0 text-center">
+  <div class="modal-dialog modal-dialog-centered" style="max-width:420px">
+    <div class="modal-content border-0" style="background:var(--surface-2);border-radius:12px">
+      <div class="modal-body p-2 text-center">
         <img id="modalImg" src="" class="img-fluid rounded" style="max-height:85vh">
       </div>
     </div>
@@ -109,9 +127,19 @@
 <script>
 async function triggerCarousel() {
   const btn = document.getElementById('carouselBtn');
-  btn.disabled = true; btn.textContent = 'Generating...';
+  btn.disabled = true;
+  btn.innerHTML = '<i class="bi bi-hourglass-split me-1"></i>Generating...';
   const r = await post('/pipeline/run-carousel');
-  btn.textContent = r.carousels ? `Done! Part ${r.part} ✓` : 'Not enough games yet';
+  if (r.carousels) {
+    btn.innerHTML = `<i class="bi bi-check-circle me-1"></i>Done! Part ${r.part}`;
+    btn.classList.remove('btn-primary');
+    btn.classList.add('btn-success');
+  } else {
+    btn.innerHTML = '<i class="bi bi-exclamation-triangle me-1"></i>Not enough games yet';
+    btn.classList.add('btn-warning');
+    btn.style.color = '#000';
+    btn.disabled = false;
+  }
   setTimeout(() => location.reload(), 1500);
 }
 async function approveCarousel(id) {
@@ -124,14 +152,14 @@ async function rejectCarousel(id) {
 }
 async function markPosted(id, btn) {
   btn.disabled = true;
-  btn.textContent = '⏳ Saving...';
+  btn.innerHTML = '<i class="bi bi-hourglass-split me-1"></i>Saving...';
   try {
     await post(`/carousel/${id}/mark-posted`);
-    btn.textContent = '✓ Posted';
+    btn.innerHTML = '<i class="bi bi-check-circle me-1"></i>Posted';
     btn.classList.replace('btn-primary', 'btn-success');
     setTimeout(() => location.reload(), 1000);
   } catch (e) {
-    btn.textContent = '✗ Failed';
+    btn.innerHTML = '<i class="bi bi-x-circle me-1"></i>Failed';
     btn.disabled = false;
     alert('Failed: ' + (e.message || 'check logs'));
   }
@@ -139,6 +167,19 @@ async function markPosted(id, btn) {
 function expandSlide(src) {
   document.getElementById('modalImg').src = src;
   new bootstrap.Modal(document.getElementById('slideModal')).show();
+}
+function copyCaption(elId, btn) {
+  const el = document.getElementById(elId);
+  navigator.clipboard.writeText(el.textContent).then(() => {
+    btn.innerHTML = '<i class="bi bi-check-lg me-1"></i>Copied!';
+    btn.classList.add('btn-success');
+    btn.classList.remove('btn-outline-secondary');
+    setTimeout(() => {
+      btn.innerHTML = '<i class="bi bi-clipboard me-1"></i>Copy Caption';
+      btn.classList.remove('btn-success');
+      btn.classList.add('btn-outline-secondary');
+    }, 2000);
+  });
 }
 </script>
 {% endblock %}

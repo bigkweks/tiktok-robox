@@ -1,126 +1,190 @@
 {% extends "base.html" %}
 {% block title %}Analytics{% endblock %}
 {% block content %}
-<h4 class="mb-4"><i class="bi bi-graph-up me-2"></i>Analytics & Feedback Loop</h4>
 
-<div class="row g-4 mb-4">
-  <div class="col-md-3">
-    <div class="card text-center">
-      <div class="card-body">
+<div class="page-header mb-4">
+  <div>
+    <h1 class="page-title"><i class="bi bi-graph-up me-2" style="color:var(--brand)"></i>Analytics & Feedback Loop</h1>
+    <p class="page-subtitle">Log TikTok performance data to improve the AI scoring model</p>
+  </div>
+</div>
+
+{# ── Top stats ── #}
+<div class="row g-3 mb-4">
+  <div class="col-6 col-md-3">
+    <div class="card h-100">
+      <div class="card-body text-center py-3">
         <div class="stat-number">{{ perf.total_posts }}</div>
-        <div class="text-muted">Videos Posted</div>
+        <div class="stat-label">Videos Posted</div>
       </div>
     </div>
   </div>
-  <div class="col-md-3">
-    <div class="card text-center">
-      <div class="card-body">
-        <div class="stat-number">{{ perf.total_views | int }}</div>
-        <div class="text-muted">Total Views</div>
+  <div class="col-6 col-md-3">
+    <div class="card h-100">
+      <div class="card-body text-center py-3">
+        <div class="stat-number" style="font-size:1.75rem">{{ perf.total_views | int }}</div>
+        <div class="stat-label">Total Views</div>
       </div>
     </div>
   </div>
-  <div class="col-md-3">
-    <div class="card text-center">
-      <div class="card-body">
-        <div class="stat-number" style="color:#22c55e">{{ perf.total_follows }}</div>
-        <div class="text-muted">Total Follows Earned</div>
+  <div class="col-6 col-md-3">
+    <div class="card h-100" style="border-left:3px solid var(--success)">
+      <div class="card-body text-center py-3">
+        <div class="stat-number" style="color:var(--success)">{{ perf.total_follows }}</div>
+        <div class="stat-label">Follows Earned</div>
       </div>
     </div>
   </div>
-  <div class="col-md-3">
-    <div class="card text-center">
-      <div class="card-body">
-        <div class="stat-number">{{ (perf.avg_completion_rate * 100) | round(1) }}%</div>
-        <div class="text-muted">Avg Completion Rate</div>
+  <div class="col-6 col-md-3">
+    <div class="card h-100">
+      <div class="card-body text-center py-3">
+        <div class="stat-number" style="font-size:1.75rem">{{ (perf.avg_completion_rate * 100) | round(1) }}%</div>
+        <div class="stat-label">Avg Completion</div>
       </div>
     </div>
   </div>
 </div>
 
-<div class="row g-4 mb-4">
-  <div class="col-md-6">
-    <div class="card">
-      <div class="card-header">Log Analytics for a Video</div>
+{# ── Log form + A/B results ── #}
+<div class="row g-3 mb-4">
+  <div class="col-lg-7">
+    <div class="card h-100">
+      <div class="card-header"><i class="bi bi-cloud-upload me-2"></i>Log Analytics for a Video</div>
       <div class="card-body">
-        <form id="analyticsForm">
-          <div class="row g-2">
-            <div class="col-6"><label class="small text-muted">Content ID</label><input type="number" id="contentId" class="form-control" placeholder="From queue page"></div>
-            <div class="col-6"><label class="small text-muted">Views</label><input type="number" id="views" class="form-control" value="0"></div>
-            <div class="col-6"><label class="small text-muted">Likes</label><input type="number" id="likes" class="form-control" value="0"></div>
-            <div class="col-6"><label class="small text-muted">Comments</label><input type="number" id="comments" class="form-control" value="0"></div>
-            <div class="col-6"><label class="small text-muted">Shares</label><input type="number" id="shares" class="form-control" value="0"></div>
-            <div class="col-6"><label class="small text-muted">Saves</label><input type="number" id="saves" class="form-control" value="0"></div>
-            <div class="col-6"><label class="small text-muted">Follows from video</label><input type="number" id="follows" class="form-control" value="0"></div>
-            <div class="col-6"><label class="small text-muted">Avg watch time (sec)</label><input type="number" id="watchTime" class="form-control" value="0" step="0.1"></div>
-            <div class="col-6"><label class="small text-muted">Video duration (sec)</label><input type="number" id="duration" class="form-control" value="21.5" step="0.1"></div>
-            <div class="col-6"><label class="small text-muted">Thumbnail variant</label>
-              <select id="variant" class="form-select"><option>A</option><option>B</option></select>
-            </div>
+        <div class="row g-3">
+          <div class="col-sm-6">
+            <label class="small">Content ID</label>
+            <input type="number" id="contentId" class="form-control" placeholder="From queue page">
           </div>
-          <button type="button" class="btn btn-primary mt-3 w-100" onclick="submitAnalytics()">
-            <i class="bi bi-cloud-upload me-1"></i>Submit Analytics
-          </button>
-          <div id="submitResult" class="mt-2 small"></div>
-        </form>
+          <div class="col-sm-6">
+            <label class="small">Views</label>
+            <input type="number" id="views" class="form-control" value="0">
+          </div>
+          <div class="col-sm-6">
+            <label class="small">Likes</label>
+            <input type="number" id="likes" class="form-control" value="0">
+          </div>
+          <div class="col-sm-6">
+            <label class="small">Comments</label>
+            <input type="number" id="comments" class="form-control" value="0">
+          </div>
+          <div class="col-sm-6">
+            <label class="small">Shares</label>
+            <input type="number" id="shares" class="form-control" value="0">
+          </div>
+          <div class="col-sm-6">
+            <label class="small">Saves</label>
+            <input type="number" id="saves" class="form-control" value="0">
+          </div>
+          <div class="col-sm-6">
+            <label class="small">Follows from this video</label>
+            <input type="number" id="follows" class="form-control" value="0">
+          </div>
+          <div class="col-sm-6">
+            <label class="small">Avg watch time (sec)</label>
+            <input type="number" id="watchTime" class="form-control" value="0" step="0.1">
+          </div>
+          <div class="col-sm-6">
+            <label class="small">Video duration (sec)</label>
+            <input type="number" id="duration" class="form-control" value="21.5" step="0.1">
+          </div>
+          <div class="col-sm-6">
+            <label class="small">Thumbnail variant used</label>
+            <select id="variant" class="form-select">
+              <option>A</option>
+              <option>B</option>
+            </select>
+          </div>
+        </div>
+        <button type="button" class="btn btn-primary mt-3 w-100" onclick="submitAnalytics()">
+          <i class="bi bi-cloud-upload me-1"></i>Submit Analytics
+        </button>
+        <div id="submitResult" class="mt-2" style="font-size:0.85rem"></div>
       </div>
     </div>
   </div>
-  <div class="col-md-6">
-    <div class="card">
-      <div class="card-header">A/B Thumbnail Test Results</div>
+
+  <div class="col-lg-5">
+    <div class="card mb-3">
+      <div class="card-header"><i class="bi bi-trophy me-2" style="color:var(--accent)"></i>A/B Thumbnail Results</div>
       <div class="card-body">
-        <div class="text-center mb-3">
-          <span class="badge" style="background:#6C63FF;font-size:1.1rem;padding:0.6rem 1.5rem">
-            Best Variant: {{ perf.top_performing_variant }}
-          </span>
+        <div class="text-center mb-3 py-2" style="background:rgba(124,111,255,0.1);border-radius:8px;border:1px solid rgba(124,111,255,0.2)">
+          <div class="text-muted" style="font-size:0.75rem;letter-spacing:0.06em;text-transform:uppercase;margin-bottom:0.25rem">Best Performing</div>
+          <div style="font-size:1.75rem;font-weight:700;color:var(--brand)">Variant {{ perf.top_performing_variant }}</div>
         </div>
-        <table class="table table-sm">
-          <tr><td class="text-muted">Avg Follow Conversion</td><td class="text-end">{{ (perf.avg_follow_conv_rate * 100) | round(3) }}%</td></tr>
-          <tr><td class="text-muted">Avg Engagement Rate</td><td class="text-end">{{ (perf.avg_engagement_rate * 100) | round(2) }}%</td></tr>
+        <table class="table mb-0">
+          <tbody>
+            <tr>
+              <td class="text-muted ps-0" style="font-size:0.875rem">Avg Follow Conversion</td>
+              <td class="text-end fw-bold pe-0">{{ (perf.avg_follow_conv_rate * 100) | round(3) }}%</td>
+            </tr>
+            <tr>
+              <td class="text-muted ps-0" style="font-size:0.875rem">Avg Engagement Rate</td>
+              <td class="text-end fw-bold pe-0">{{ (perf.avg_engagement_rate * 100) | round(2) }}%</td>
+            </tr>
+          </tbody>
         </table>
-        <div class="text-muted small mt-3">
-          <i class="bi bi-info-circle me-1"></i>
-          The feedback loop automatically shifts queue priority toward game types and thumbnail styles that drive the most follows.
-          Minimum 10 samples needed to update model weights.
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-body">
+        <div class="d-flex align-items-start gap-2">
+          <i class="bi bi-info-circle mt-1" style="color:var(--cyan);flex-shrink:0"></i>
+          <p class="text-muted mb-0" style="font-size:0.82rem;line-height:1.6">
+            The feedback loop shifts queue priority toward game types and thumbnail styles that drive the most follows.
+            <br><br>
+            <strong style="color:var(--text)">Minimum 10 samples</strong> needed before model weights update.
+          </p>
         </div>
       </div>
     </div>
   </div>
 </div>
 
+{# ── Recent post performance ── #}
 <div class="card">
-  <div class="card-header">Recent Post Performance</div>
+  <div class="card-header"><i class="bi bi-clock-history me-2"></i>Recent Post Performance</div>
   <div class="card-body p-0">
     {% if not recent %}
-    <div class="text-center text-muted py-5">No analytics recorded yet. Submit your first video's metrics above.</div>
+    <div class="text-center text-muted py-5" style="font-size:0.875rem">
+      <i class="bi bi-bar-chart" style="font-size:2rem;display:block;margin-bottom:0.75rem;color:var(--text-dim)"></i>
+      No analytics recorded yet. Submit your first video's metrics above.
+    </div>
     {% else %}
-    <table class="table table-sm mb-0">
-      <thead>
-        <tr>
-          <th>Game</th>
-          <th class="text-end">Views</th>
-          <th class="text-end">Follows</th>
-          <th class="text-end">Completion</th>
-          <th class="text-end">Engagement</th>
-          <th class="text-center">Variant</th>
-          <th>Date</th>
-        </tr>
-      </thead>
-      <tbody>
-      {% for analytics, content, game in recent %}
-        <tr>
-          <td>{{ game.name[:25] }}</td>
-          <td class="text-end">{{ '{:,}'.format(analytics.views) }}</td>
-          <td class="text-end text-success fw-bold">+{{ analytics.follows_from_video }}</td>
-          <td class="text-end">{{ (analytics.completion_rate * 100) | round(1) }}%</td>
-          <td class="text-end">{{ (analytics.engagement_rate * 100) | round(2) }}%</td>
-          <td class="text-center"><span class="badge {% if analytics.thumbnail_variant == 'A' %}bg-primary{% else %}bg-warning text-dark{% endif %}">{{ analytics.thumbnail_variant }}</span></td>
-          <td><small class="text-muted">{{ analytics.recorded_at.strftime('%m/%d %H:%M') }}</small></td>
-        </tr>
-      {% endfor %}
-      </tbody>
-    </table>
+    <div class="table-responsive">
+      <table class="table table-hover mb-0">
+        <thead>
+          <tr>
+            <th style="padding-left:1.25rem">Game</th>
+            <th class="text-end">Views</th>
+            <th class="text-end">Follows</th>
+            <th class="text-end">Completion</th>
+            <th class="text-end">Engagement</th>
+            <th class="text-center">Variant</th>
+            <th style="padding-right:1.25rem">Date</th>
+          </tr>
+        </thead>
+        <tbody>
+        {% for analytics, content, game in recent %}
+          <tr>
+            <td style="padding-left:1.25rem;font-size:0.875rem">{{ game.name[:28] }}</td>
+            <td class="text-end fw-semibold" style="font-size:0.875rem">{{ '{:,}'.format(analytics.views) }}</td>
+            <td class="text-end fw-bold text-success" style="font-size:0.875rem">+{{ analytics.follows_from_video }}</td>
+            <td class="text-end" style="font-size:0.875rem">{{ (analytics.completion_rate * 100) | round(1) }}%</td>
+            <td class="text-end" style="font-size:0.875rem">{{ (analytics.engagement_rate * 100) | round(2) }}%</td>
+            <td class="text-center">
+              <span class="badge {% if analytics.thumbnail_variant == 'A' %}bg-primary{% else %}bg-warning text-dark{% endif %}">
+                {{ analytics.thumbnail_variant }}
+              </span>
+            </td>
+            <td style="padding-right:1.25rem">
+              <small class="text-muted">{{ analytics.recorded_at.strftime('%b %d · %H:%M') }}</small>
+            </td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
     {% endif %}
   </div>
 </div>
@@ -148,10 +212,10 @@ async function submitAnalytics() {
   const data = await r.json();
   const el = document.getElementById('submitResult');
   if (data.analytics_id) {
-    el.innerHTML = '<span class="text-success">✓ Recorded (ID: ' + data.analytics_id + '). Page reloading...</span>';
+    el.innerHTML = '<span class="text-success"><i class="bi bi-check-circle me-1"></i>Recorded (ID: ' + data.analytics_id + '). Reloading...</span>';
     setTimeout(() => location.reload(), 1500);
   } else {
-    el.innerHTML = '<span class="text-danger">Error: ' + JSON.stringify(data) + '</span>';
+    el.innerHTML = '<span class="text-danger"><i class="bi bi-x-circle me-1"></i>Error: ' + JSON.stringify(data) + '</span>';
   }
 }
 </script>

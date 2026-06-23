@@ -1,97 +1,128 @@
 {% extends "base.html" %}
 {% block title %}Games{% endblock %}
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mb-4">
-  <h4 class="mb-0"><i class="bi bi-controller me-2"></i>Discovered Games</h4>
-  <div class="d-flex gap-2 align-items-center">
+
+<div class="page-header">
+  <div>
+    <h1 class="page-title"><i class="bi bi-controller me-2" style="color:var(--brand)"></i>Discovered Games</h1>
+    <p class="page-subtitle">{{ games | length }} games in database · sorted by {{ sort | replace('_', ' ') }}</p>
+  </div>
+  <div class="d-flex gap-2 align-items-center flex-wrap">
     <div class="btn-group">
-      <a href="/games?sort=viral_score" class="btn btn-sm {% if sort == 'viral_score' %}btn-primary{% else %}btn-outline-secondary{% endif %}">Viral Score</a>
-      <a href="/games?sort=visits" class="btn btn-sm {% if sort == 'visits' %}btn-primary{% else %}btn-outline-secondary{% endif %}">Visits</a>
-      <a href="/games?sort=active_players" class="btn btn-sm {% if sort == 'active_players' %}btn-primary{% else %}btn-outline-secondary{% endif %}">Active Now</a>
-      <a href="/games?sort=novelty_score" class="btn btn-sm {% if sort == 'novelty_score' %}btn-primary{% else %}btn-outline-secondary{% endif %}">Novelty</a>
+      <a href="/games?sort=viral_score"    class="btn btn-sm {% if sort == 'viral_score' %}btn-primary{% else %}btn-outline-secondary{% endif %}">Viral</a>
+      <a href="/games?sort=visits"         class="btn btn-sm {% if sort == 'visits' %}btn-primary{% else %}btn-outline-secondary{% endif %}">Visits</a>
+      <a href="/games?sort=active_players" class="btn btn-sm {% if sort == 'active_players' %}btn-primary{% else %}btn-outline-secondary{% endif %}">Active</a>
+      <a href="/games?sort=novelty_score"  class="btn btn-sm {% if sort == 'novelty_score' %}btn-primary{% else %}btn-outline-secondary{% endif %}">Novelty</a>
     </div>
-    <button class="btn btn-sm btn-danger" onclick="clearAllGames()">
-      🗑 Clear All Games
+    <button class="btn btn-sm btn-outline-danger" onclick="clearAllGames()">
+      <i class="bi bi-trash me-1"></i>Clear All
     </button>
   </div>
 </div>
 
 <div class="card">
   <div class="card-body p-0">
-    <table class="table table-hover mb-0">
-      <thead style="border-bottom:1px solid rgba(255,255,255,0.1)">
-        <tr>
-          <th>Game</th>
-          <th>Genre</th>
-          <th class="text-end">Visits</th>
-          <th class="text-end">Active</th>
-          <th class="text-end">Favorites</th>
-          <th class="text-end">Viral Score</th>
-          <th class="text-end">Growth</th>
-          <th class="text-center">Content</th>
-          <th></th>
-        </tr>
-      </thead>
-      <tbody>
-      {% for game in games %}
-        <tr id="game-row-{{ game.id }}">
-          <td>
-            {% if game.thumbnail_url %}
-              <img src="{{ game.thumbnail_url }}" style="width:48px;height:27px;border-radius:4px;object-fit:cover;margin-right:8px">
-            {% endif %}
-            <a href="{{ game.url }}" target="_blank" class="text-decoration-none text-white fw-bold">{{ game.name[:30] }}</a>
-            <div class="text-muted small">{{ game.creator_name }}</div>
-          </td>
-          <td><span class="badge bg-secondary">{{ game.genre or '—' }}</span></td>
-          <td class="text-end">
-            {% if game.visits >= 1000000000 %}{{ (game.visits / 1000000000) | round(1) }}B
-            {% elif game.visits >= 1000000 %}{{ (game.visits / 1000000) | round(1) }}M
-            {% elif game.visits >= 1000 %}{{ (game.visits / 1000) | round(0) | int }}K
-            {% else %}{{ game.visits }}{% endif %}
-          </td>
-          <td class="text-end">
-            <span class="{% if game.active_players > 1000 %}text-success{% elif game.active_players > 100 %}text-warning{% else %}text-muted{% endif %}">
-              {{ game.active_players | int }}
-            </span>
-          </td>
-          <td class="text-end">
-            {% if game.favorites >= 1000000 %}{{ (game.favorites / 1000000) | round(1) }}M
-            {% elif game.favorites >= 1000 %}{{ (game.favorites / 1000) | round(0) | int }}K
-            {% else %}{{ game.favorites }}{% endif %}
-          </td>
-          <td class="text-end">
-            {% set vs = (game.viral_score * 100) | round(1) %}
-            <div class="fw-bold {% if vs > 70 %}text-success{% elif vs > 50 %}text-warning{% else %}text-muted{% endif %}">
-              {{ vs }}%
-            </div>
-            <div style="height:3px;background:rgba(255,255,255,0.1);border-radius:2px;margin-top:2px">
-              <div style="height:3px;width:{{ vs }}%;background:{% if vs > 70 %}#22c55e{% elif vs > 50 %}#f59e0b{% else %}#6b7280{% endif %};border-radius:2px"></div>
-            </div>
-          </td>
-          <td class="text-end">
-            <small class="{% if game.growth_velocity_score > 0.6 %}text-success{% elif game.growth_velocity_score > 0.3 %}text-warning{% else %}text-muted{% endif %}">
-              {{ (game.growth_velocity_score * 100) | round(0) | int }}%
-            </small>
-          </td>
-          <td class="text-center">
-            {% if game.content_generated %}
-              <span class="badge bg-success"><i class="bi bi-check-lg"></i></span>
-            {% else %}
-              <span class="badge bg-secondary">Pending</span>
-            {% endif %}
-          </td>
-          <td class="text-end" style="white-space:nowrap">
-            <a href="{{ game.url }}" target="_blank" class="btn btn-sm btn-outline-secondary me-1">
-              <i class="bi bi-box-arrow-up-right"></i>
-            </a>
-            <button class="btn btn-sm btn-outline-danger" onclick="deleteGame({{ game.id }}, '{{ game.name | replace("'", "\\'") }}', this)" title="Delete permanently">
-              <i class="bi bi-trash"></i>
-            </button>
-          </td>
-        </tr>
-      {% endfor %}
-      </tbody>
-    </table>
+    <div class="table-responsive">
+      <table class="table table-hover mb-0">
+        <thead>
+          <tr>
+            <th style="width:35%;padding-left:1.25rem">Game</th>
+            <th>Genre</th>
+            <th class="text-end">Visits</th>
+            <th class="text-end">Active</th>
+            <th class="text-end">Favorites</th>
+            <th class="text-end" style="min-width:120px">Viral Score</th>
+            <th class="text-end">Growth</th>
+            <th class="text-center">Content</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+        {% for game in games %}
+          <tr id="game-row-{{ game.id }}">
+            <td style="padding-left:1.25rem">
+              <div class="d-flex align-items-center gap-2">
+                {% if game.thumbnail_url %}
+                  <img src="{{ game.thumbnail_url }}"
+                       style="width:52px;height:29px;border-radius:5px;object-fit:cover;flex-shrink:0;border:1px solid var(--border-hi)"
+                       loading="lazy">
+                {% else %}
+                  <div style="width:52px;height:29px;border-radius:5px;background:var(--surface-3);flex-shrink:0;border:1px solid var(--border)"></div>
+                {% endif %}
+                <div style="min-width:0">
+                  <a href="{{ game.url }}" target="_blank" rel="noopener"
+                     class="text-decoration-none fw-semibold d-block"
+                     style="color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:220px"
+                     title="{{ game.name }}">{{ game.name }}</a>
+                  <div class="text-muted" style="font-size:0.75rem">{{ game.creator_name }}</div>
+                </div>
+              </div>
+            </td>
+            <td>
+              <span class="badge" style="background:var(--surface-3);color:var(--text-muted)">{{ game.genre or '—' }}</span>
+            </td>
+            <td class="text-end fw-semibold" style="font-size:0.875rem">
+              {% if game.visits >= 1000000000 %}{{ (game.visits / 1000000000) | round(1) }}B
+              {% elif game.visits >= 1000000 %}{{ (game.visits / 1000000) | round(1) }}M
+              {% elif game.visits >= 1000 %}{{ (game.visits / 1000) | round(0) | int }}K
+              {% else %}{{ game.visits }}{% endif %}
+            </td>
+            <td class="text-end" style="font-size:0.875rem">
+              <span class="fw-semibold {% if game.active_players > 1000 %}text-success{% elif game.active_players > 100 %}text-warning{% else %}text-muted{% endif %}">
+                {{ game.active_players | int }}
+              </span>
+            </td>
+            <td class="text-end" style="font-size:0.875rem">
+              {% if game.favorites >= 1000000 %}{{ (game.favorites / 1000000) | round(1) }}M
+              {% elif game.favorites >= 1000 %}{{ (game.favorites / 1000) | round(0) | int }}K
+              {% else %}{{ game.favorites }}{% endif %}
+            </td>
+            <td class="text-end" style="min-width:120px">
+              {% set vs = (game.viral_score * 100) | round(1) %}
+              <div class="fw-bold {% if vs > 70 %}text-success{% elif vs > 50 %}text-warning{% else %}text-muted{% endif %}"
+                   style="font-size:0.875rem">{{ vs }}%</div>
+              <div class="score-bar {% if vs > 70 %}score-bar-success{% elif vs > 50 %}score-bar-warning{% endif %}">
+                <div class="score-bar-fill" style="width:{{ vs }}%"></div>
+              </div>
+            </td>
+            <td class="text-end" style="font-size:0.8rem">
+              {% set gv = (game.growth_velocity_score * 100) | round(0) | int %}
+              <span class="{% if gv > 60 %}text-success{% elif gv > 30 %}text-warning{% else %}text-muted{% endif %}">
+                {{ gv }}%
+              </span>
+            </td>
+            <td class="text-center">
+              {% if game.content_generated %}
+                <span class="badge" style="background:var(--success-bg);color:var(--success);border:1px solid rgba(63,185,80,0.3)">
+                  <i class="bi bi-check-lg"></i> Done
+                </span>
+              {% else %}
+                <span class="badge" style="background:var(--surface-3);color:var(--text-muted)">Pending</span>
+              {% endif %}
+            </td>
+            <td class="text-end pe-3" style="white-space:nowrap">
+              <a href="{{ game.url }}" target="_blank" rel="noopener"
+                 class="btn btn-sm btn-outline-secondary me-1" title="Open in Roblox">
+                <i class="bi bi-box-arrow-up-right"></i>
+              </a>
+              <button class="btn btn-sm btn-outline-danger"
+                      onclick="deleteGame({{ game.id }}, '{{ game.name | replace("'", "\\'") }}', this)"
+                      title="Delete permanently">
+                <i class="bi bi-trash"></i>
+              </button>
+            </td>
+          </tr>
+        {% else %}
+          <tr>
+            <td colspan="9" class="text-center text-muted py-5">
+              <i class="bi bi-inbox fs-1 d-block mb-3 text-dim"></i>
+              No games discovered yet. Run Discovery from the Dashboard.
+            </td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
   </div>
 </div>
 {% endblock %}
@@ -105,8 +136,9 @@ async function deleteGame(id, name, btn) {
     const r = await fetch(`/game/${id}`, { method: 'DELETE' });
     if (r.ok) {
       const row = document.getElementById(`game-row-${id}`);
-      row.style.transition = 'opacity 0.3s';
+      row.style.transition = 'opacity 0.3s, transform 0.3s';
       row.style.opacity = '0';
+      row.style.transform = 'translateX(-10px)';
       setTimeout(() => row.remove(), 300);
     } else {
       alert('Delete failed');

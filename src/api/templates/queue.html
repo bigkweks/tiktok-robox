@@ -1,89 +1,141 @@
 {% extends "base.html" %}
 {% block title %}Content Queue{% endblock %}
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mb-4">
-  <h4 class="mb-0"><i class="bi bi-list-task me-2"></i>Content Queue — {{ status | capitalize }}</h4>
+
+<div class="page-header">
+  <div>
+    <h1 class="page-title"><i class="bi bi-list-check me-2" style="color:var(--brand)"></i>Content Queue</h1>
+    <p class="page-subtitle">{{ items | length }} {{ status }} items</p>
+  </div>
   <div class="btn-group">
     {% for s in statuses %}
-    <a href="/queue?status={{ s }}" class="btn btn-sm {% if s == status %}btn-primary{% else %}btn-outline-secondary{% endif %}">{{ s | capitalize }}</a>
+    <a href="/queue?status={{ s }}"
+       class="btn btn-sm {% if s == status %}btn-primary{% else %}btn-outline-secondary{% endif %}">
+      {{ s | capitalize }}
+    </a>
     {% endfor %}
   </div>
 </div>
 
 {% if not items %}
-<div class="card"><div class="card-body text-center text-muted py-5">
-  <i class="bi bi-inbox fs-1 d-block mb-3"></i>
-  No {{ status }} items. <a href="/pipeline/run-content" class="text-decoration-none" onclick="event.preventDefault();triggerContent()">Generate content</a> to fill the queue.
-</div></div>
+<div class="card">
+  <div class="card-body text-center py-5">
+    <i class="bi bi-inbox" style="font-size:2.5rem;color:var(--text-dim);display:block;margin-bottom:1rem"></i>
+    <div class="fw-semibold mb-1">No {{ status }} items</div>
+    <div class="text-muted" style="font-size:0.875rem">
+      {% if status == 'pending' %}
+        <a href="/" class="text-decoration-none" style="color:var(--brand)">Run Content Generation</a> to fill the review queue.
+      {% elif status == 'approved' %}
+        Approve some items from the <a href="/queue?status=pending" style="color:var(--brand)">pending queue</a>.
+      {% else %}
+        No {{ status }} content yet.
+      {% endif %}
+    </div>
+  </div>
+</div>
 {% endif %}
 
 <div class="row g-3">
 {% for content, game in items %}
 <div class="col-md-6 col-xl-4">
-  <div class="card h-100">
+  <div class="card h-100 d-flex flex-column">
+
+    {# Card header: game name + rating badge #}
     <div class="card-header d-flex justify-content-between align-items-center">
-      <span class="fw-bold text-truncate me-2" style="max-width:200px" title="{{ game.name }}">{{ game.name }}</span>
+      <span class="fw-semibold text-truncate me-2" style="max-width:195px;font-size:0.9rem" title="{{ game.name }}">
+        {{ game.name }}
+      </span>
       {% if content.rating_score %}
         {% if content.rating_score >= 9 %}
-          <span class="badge badge-gem">{{ content.rating_score }}/10</span>
+          <span class="badge badge-gem" style="font-size:0.8rem;padding:0.35rem 0.65rem">{{ content.rating_score }}/10</span>
         {% elif content.rating_score >= 7 %}
-          <span class="badge badge-good">{{ content.rating_score }}/10</span>
+          <span class="badge badge-good" style="font-size:0.8rem;padding:0.35rem 0.65rem">{{ content.rating_score }}/10</span>
         {% else %}
-          <span class="badge badge-bad">{{ content.rating_score }}/10</span>
+          <span class="badge badge-bad" style="font-size:0.8rem;padding:0.35rem 0.65rem">{{ content.rating_score }}/10</span>
         {% endif %}
       {% endif %}
     </div>
-    <div class="card-body">
+
+    <div class="card-body flex-grow-1">
+
+      {# Thumbnails #}
+      {% if content.thumbnail_a_path or content.thumbnail_b_path %}
       <div class="d-flex gap-2 mb-3">
         {% if content.thumbnail_a_path %}
-          <img src="/output/thumbnails/{{ game.universe_id }}/variant_a.png" class="thumbnail-preview" alt="Variant A" onclick="window.open(this.src)" title="Variant A">
+          <div class="text-center">
+            <img src="/output/thumbnails/{{ game.universe_id }}/variant_a.png"
+                 class="thumbnail-preview" alt="A" onclick="window.open(this.src)"
+                 style="width:110px;height:auto;border-radius:6px">
+            <div class="text-muted mt-1" style="font-size:0.7rem;letter-spacing:0.05em">VARIANT A</div>
+          </div>
         {% endif %}
         {% if content.thumbnail_b_path %}
-          <img src="/output/thumbnails/{{ game.universe_id }}/variant_b.png" class="thumbnail-preview" alt="Variant B" onclick="window.open(this.src)" title="Variant B">
+          <div class="text-center">
+            <img src="/output/thumbnails/{{ game.universe_id }}/variant_b.png"
+                 class="thumbnail-preview" alt="B" onclick="window.open(this.src)"
+                 style="width:110px;height:auto;border-radius:6px">
+            <div class="text-muted mt-1" style="font-size:0.7rem;letter-spacing:0.05em">VARIANT B</div>
+          </div>
         {% endif %}
       </div>
+      {% endif %}
 
+      {# Rating label + verdict #}
       {% if content.rating_label %}
-        <div class="mb-2"><span class="badge" style="background:#6C63FF">{{ content.rating_label }}</span></div>
+        <div class="mb-2">
+          <span class="badge" style="background:rgba(124,111,255,0.2);color:var(--brand);border:1px solid rgba(124,111,255,0.35);font-size:0.75rem">
+            {{ content.rating_label }}
+          </span>
+        </div>
       {% endif %}
-
       {% if content.rating_verdict %}
-        <p class="small text-muted mb-2">{{ content.rating_verdict }}</p>
+        <p class="text-muted mb-3" style="font-size:0.82rem;line-height:1.5">{{ content.rating_verdict }}</p>
       {% endif %}
 
-      <div class="mb-2">
-        <div class="d-flex justify-content-between small text-muted mb-1">
-          <span>Queue Priority</span>
-          <span>{{ (content.queue_priority * 100) | round(1) }}%</span>
+      {# Priority bar #}
+      <div class="mb-3">
+        <div class="d-flex justify-content-between mb-1">
+          <span class="text-muted" style="font-size:0.75rem;font-weight:600;text-transform:uppercase;letter-spacing:0.05em">Queue Priority</span>
+          <span class="text-muted" style="font-size:0.75rem">{{ (content.queue_priority * 100) | round(1) }}%</span>
         </div>
-        <div style="height:4px;background:rgba(255,255,255,0.1);border-radius:2px">
-          <div class="priority-bar" style="width:{{ (content.queue_priority * 100) | round(1) }}%"></div>
+        <div style="height:5px;background:var(--surface-3);border-radius:3px;overflow:hidden">
+          <div class="priority-bar" style="width:{{ (content.queue_priority * 100) | round(1) }}%;height:100%"></div>
         </div>
       </div>
 
-      <div class="small text-muted mb-3">
-        <span class="me-3"><i class="bi bi-eye me-1"></i>{{ '{:,}'.format(game.visits) }}</span>
-        <span class="me-3"><i class="bi bi-people me-1"></i>{{ '{:,}'.format(game.active_players) }}</span>
-        <span><i class="bi bi-star me-1"></i>{{ '{:,}'.format(game.favorites) }}</span>
+      {# Game stats #}
+      <div class="d-flex gap-3 mb-3">
+        <span class="text-muted" style="font-size:0.8rem"><i class="bi bi-eye me-1"></i>
+          {% if game.visits >= 1000000 %}{{ (game.visits / 1000000) | round(1) }}M
+          {% elif game.visits >= 1000 %}{{ (game.visits / 1000) | round(0) | int }}K
+          {% else %}{{ game.visits }}{% endif %}
+        </span>
+        <span class="text-muted" style="font-size:0.8rem"><i class="bi bi-people me-1"></i>{{ game.active_players }}</span>
+        <span class="text-muted" style="font-size:0.8rem"><i class="bi bi-star me-1"></i>
+          {% if game.favorites >= 1000 %}{{ (game.favorites / 1000) | round(0) | int }}K
+          {% else %}{{ game.favorites }}{% endif %}
+        </span>
       </div>
 
+      {# Caption preview #}
       {% if content.description_a %}
-        <details class="mb-2">
-          <summary class="small text-muted mb-1" style="cursor:pointer">Caption A</summary>
-          <pre class="caption-box">{{ content.description_a }}</pre>
+        <details>
+          <summary class="mb-2">Caption preview</summary>
+          <pre class="caption-box mt-2" style="max-height:120px;font-size:0.775rem">{{ content.description_a }}</pre>
         </details>
       {% endif %}
     </div>
 
+    {# Actions footer #}
     {% if status == 'pending' %}
     <div class="card-footer d-flex gap-2">
       <button class="btn btn-approve btn-sm flex-grow-1" onclick="approve({{ content.id }})">
         <i class="bi bi-check-lg me-1"></i>Approve
       </button>
-      <a href="/content/{{ content.id }}" class="btn btn-outline-secondary btn-sm">
+      <a href="/content/{{ content.id }}" class="btn btn-outline-secondary btn-sm" title="View full post package">
         <i class="bi bi-eye"></i>
       </a>
-      <button class="btn btn-reject btn-sm" onclick="reject({{ content.id }})">
+      <button class="btn btn-reject btn-sm" onclick="reject({{ content.id }})" title="Reject">
         <i class="bi bi-x-lg"></i>
       </button>
     </div>
@@ -92,7 +144,7 @@
       <a href="/content/{{ content.id }}" class="btn btn-primary btn-sm flex-grow-1">
         <i class="bi bi-download me-1"></i>Get Post Package
       </a>
-      <button class="btn btn-outline-success btn-sm" onclick="markPosted({{ content.id }})">
+      <button class="btn btn-outline-secondary btn-sm" onclick="markPosted({{ content.id }})" title="Mark as posted">
         <i class="bi bi-check2-all"></i>
       </button>
     </div>
