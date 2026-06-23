@@ -27,7 +27,7 @@ say "Step 0 of 7: Getting the latest updates..."
 # The database file is local-only; stop git tracking it so it never blocks pulls
 git rm --cached tiktok_robox.db 2>/dev/null || true
 git checkout -- tiktok_robox.db 2>/dev/null || true
-if git pull origin claude/handoff-continuation-ab99x3 2>&1; then
+if git pull origin claude/handoff-file-continue-nmksfs 2>&1; then
   ok "Code is up to date."
 else
   warn "Could not pull updates (no internet or not a git repo). Continuing anyway."

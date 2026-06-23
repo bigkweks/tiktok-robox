@@ -244,7 +244,7 @@ it in Step 4 below.
 4. A list of branches appears. Tap the one called:
 
    ```
-   claude/roblox-tiktok-pipeline-x5t414
+   claude/handoff-file-continue-nmksfs
    ```
 
    The page reloads showing your project files. ✅
@@ -257,7 +257,7 @@ it in Step 4 below.
 
 2. A small box pops up. Tap the tab that says **Codespaces**.
 
-3. Tap the button **"Create codespace on claude/roblox-tiktok-pipeline-x5t414"**.
+3. Tap the button **"Create codespace on claude/handoff-file-continue-nmksfs"**.
 
 4. A new tab opens. It loads for about 60 seconds — you'll see a spinning
    circle and a loading bar. **Wait. Don't close the tab.** ⏳
