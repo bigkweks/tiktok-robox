@@ -242,9 +242,20 @@ class Pipeline:
             game_names=[g.name for c, g in batch],
         )
         report = final["report"]
+        plan = final.get("plan")
         log.info("pipeline.carousel_factory.quality", part=part,
                  attempts=final.get("attempts", 1), **report.as_dict())
-        if report.top1pct_passed:
+        if plan is not None:
+            # The audience we inferred + the job every slide is doing. This is
+            # the "creator decision" record: who it's for and why each slide ships.
+            log.info("pipeline.carousel_factory.plan", part=part,
+                     audience=plan.brief.who, purposeful=plan.purposeful,
+                     purposes=[s.purpose for s in plan.slides],
+                     dead_slides=plan.dead_slides)
+            if not plan.purposeful:
+                log.warning("pipeline.carousel_factory.dead_slides",
+                            part=part, dead_slides=plan.dead_slides)
+        if report.top1pct_passed and (plan is None or plan.purposeful):
             log.info("pipeline.carousel_factory.elite_quality",
                      part=part, overall=report.overall)
         elif not report.passed:

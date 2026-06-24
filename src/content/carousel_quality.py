@@ -606,16 +606,19 @@ def finalize_carousel(
     """
     The single 'review before presenting' entry point. Returns a vetted cover
     hook, revised per-slide captions, a natural CTA, a de-templated post caption,
-    the QualityReport, and the number of attempts taken.
+    the QualityReport, the slide-purpose plan, and the number of attempts taken.
 
-    Runs up to `max_attempts` passes, escalating the caption-replacement
-    threshold (0.55 → 0.60 → 0.65) and rotating to a stronger hook on each
-    retry. Targets `top1pct_passed` (overall ≥ 0.80, strong hook, zero AI
-    fingerprints). If that bar can't be cleared it accepts anything that passes
-    the minimum quality gate — and always returns the best version it built,
-    never an un-revised draft.
+    Before scoring, the audience for the edition is inferred and every slide is
+    assigned an explicit purpose (`plan_carousel`). A slide whose content serves
+    no purpose — empty, generic, or AI — is a "dead slide" the loop must fix, not
+    ship. Runs up to `max_attempts` passes, escalating the caption-replacement
+    threshold (0.55 → 0.60 → 0.65) and rotating to a stronger hook on each retry.
+    Targets `top1pct_passed` AND a fully purposeful plan. If that bar can't be
+    cleared it accepts anything that passes the minimum quality gate — and always
+    returns the best version it built, never an un-revised draft.
     """
     from src.content.caption_utils import _candidates, dedupe_carousel_captions
+    from src.content.creator_brief import plan_carousel
 
     n = len(captions)
     genres_list = list(genres) if genres is not None else [None] * n
@@ -627,6 +630,7 @@ def finalize_carousel(
     # Working copy; improvements carry forward across attempts.
     current_caps: list[str] = [c or "" for c in captions]
     report: Optional[QualityReport] = None
+    plan = None
     attempts_taken = 0
 
     for attempt in range(max(1, max_attempts)):
@@ -661,10 +665,18 @@ def finalize_carousel(
                 cover_hook = alt
 
         report = review_carousel(cover_hook, caps, list(blurbs), cta)
+        plan = plan_carousel(edition, cover_hook, caps, list(blurbs), cta)
+        # A slide that serves no purpose is a generation failure, not a soft
+        # score — surface it so the post is never shipped with dead weight.
+        for idx in plan.dead_slides:
+            slide = plan.slides[idx] if idx < len(plan.slides) else None
+            if slide and slide.note:
+                report.issues.append(f"slide {idx} serves no purpose: {slide.note}")
         current_caps = caps   # carry improvements to the next attempt
 
-        # Stop early once we've hit the top-1% bar; always stop on the last attempt.
-        if report.top1pct_passed or attempt == max_attempts - 1:
+        # Stop early once we've hit the top-1% bar AND every slide has a job;
+        # always stop on the last attempt.
+        if (report.top1pct_passed and plan.purposeful) or attempt == max_attempts - 1:
             break
 
     post_caption = build_post_caption(edition, part, game_names_list)
@@ -675,6 +687,7 @@ def finalize_carousel(
         "cta": cta,
         "post_caption": post_caption,
         "report": report,
+        "plan": plan,
         "attempts": attempts_taken,
     }
 

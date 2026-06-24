@@ -161,9 +161,57 @@ src/api/templates/   base.html (dark theme + .id-chip + imgFallback helper),
   follows-per-post.
 - Pipeline batches carousels every 8h; manual "⚡ Generate Now" button.
 - Video + thumbnail pipeline intact (badge-overlap bug fixed).
-- **Test suite: 67 passing**. See "Testing" below.
+- **Test suite: 86 passing**. See "Testing" below.
 
-## Session changelog — app-wide authenticity audit (latest)
+## Session changelog — creator-decision model + top-1% quality gate (latest)
+Brief 1 (quality): treat every carousel as competing against the top 1% of
+Roblox TikTok accounts — score Hook, Curiosity, Readability, Saveability,
+Shareability, Follow conversion, Authenticity, Novelty; reject below threshold;
+auto-regenerate weak slides until the bar is met.
+Brief 2 (creator decisions): stop *generating carousels*, start *generating
+creator decisions* — before building, infer the audience (who's scrolling, why
+they care, what they know/believe, what surprises them, what makes them
+save/follow); give every slide an explicit purpose; remove any slide that
+serves none. The post should feel like a creator talking to an audience.
+
+- **8-dimension quality system (`carousel_quality.py`).** Added three scorers to
+  the existing six: `score_readability` (each caption scannable <2s — short,
+  varied openers, no walls of text), `score_saveability` (list-reference value —
+  concrete specificity + varied angles across the 5 slides), `score_novelty`
+  (no crutch word used 3+ times across the batch, no structural monotony like
+  every slide being "X in roblox"). `QualityReport` now carries all nine
+  dimensions with re-balanced weights and a `top1pct_passed` property — the elite
+  bar: overall ≥ 0.80 AND every checklist item AND hook ≥ 0.65 AND authenticity
+  ≥ 0.75. Three new checklist items (`readable_slides`, `saveworthy`,
+  `novel_language`) with their own issue messages.
+- **Auto-regeneration loop (`finalize_carousel`).** Now runs up to 3 passes,
+  escalating the caption-replacement threshold (0.55 → 0.60 → 0.65) and rotating
+  to a stronger cover hook on each retry, exiting early once the top-1% bar AND a
+  fully purposeful plan are both met. Always returns the best version it built
+  (never an un-revised draft) plus an `attempts` count. Pipeline logs elite vs
+  soft quality and the attempt count.
+- **Creator-decision layer (`creator_brief.py`, new).** `EDITION_BRIEFS` encodes
+  a real `AudienceBrief` per niche — the seven inference questions answered in
+  niche-specific language (a horror fan who's *already beaten Doors*, believes
+  *they've played everything scary*, would be surprised by *under-the-radar
+  horror that lands a real scare*). `plan_carousel()` assigns every slide an
+  explicit purpose from a fixed vocabulary (`stop_scrolling`, `create_curiosity`,
+  `build_credibility`, `deliver_value`, `challenge_assumptions`,
+  `reveal_information`, `trigger_saving`, `trigger_sharing`, `trigger_following`):
+  cover stops the scroll, slide 1 builds credibility, the middle reveals, the
+  standout slide challenges the "good = popular" belief, the closer triggers save
+  + follow. A slide whose content serves no purpose (empty / generic / AI) is a
+  **dead slide** — surfaced in `report.issues` so the regeneration loop replaces
+  it rather than shipping dead weight. `finalize_carousel` emits the `plan`; the
+  pipeline logs the inferred audience + the per-slide purpose sequence as the
+  "why each slide ships" record.
+- **Tests:** `test_creator_brief.py` (8) covers audience inference, fallback,
+  niche-distinctness, purpose assignment, dead-slide flagging, serialisation, and
+  finalize-emits-purposeful-plan. `test_quality.py` extended (+7) for the three
+  new scorers, the elite bar, `as_dict` shape, attempt count, and empty-caption
+  recovery. **Full suite: 86 passing.**
+
+## Session changelog — app-wide authenticity audit (prior)
 Brief: audit the whole app for patterns that read "AI/template-generated" and
 fix the ones that genuinely hurt perceived authenticity, so the whole thing
 feels like a real Roblox creator built it (not a SaaS startup). Two surfaces:
