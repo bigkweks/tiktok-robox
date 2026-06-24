@@ -232,6 +232,12 @@ class CarouselPost(Base):
     scheduled_post_time: Mapped[Optional[datetime]] = mapped_column(DateTime)
     posted_at: Mapped[Optional[datetime]] = mapped_column(DateTime)
 
+    # ── Mandatory approval (three-reviewer panel) ─────────────────────
+    # Only carousels that survive review are ever persisted, so a row's mere
+    # existence means it passed — these fields record HOW well it passed.
+    review_score: Mapped[Optional[float]] = mapped_column(Float)   # Final Quality Score 0–100
+    review_summary: Mapped[Optional[str]] = mapped_column(Text)    # JSON: reviewers + dimensions
+
     created_at: Mapped[datetime] = mapped_column(DateTime, default=func.now())
 
 

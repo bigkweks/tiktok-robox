@@ -65,6 +65,8 @@ async def init_db() -> None:
         # Migrate: add new columns to existing tables if they don't exist yet
         if "sqlite" in str(engine.url):
             await _sqlite_add_column_if_missing(conn, "content", "carousel_caption", "TEXT")
+            await _sqlite_add_column_if_missing(conn, "carousel_posts", "review_score", "FLOAT")
+            await _sqlite_add_column_if_missing(conn, "carousel_posts", "review_summary", "TEXT")
     log.info("database.initialized")
 
 

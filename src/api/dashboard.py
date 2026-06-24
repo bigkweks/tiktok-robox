@@ -270,6 +270,12 @@ async def carousels_page(request: Request):
             "/output/" + (sp[len(prefix):] if sp.startswith(prefix) else sp)
             for sp in slide_paths_list if sp
         ]
+        review = None
+        if getattr(p, "review_summary", None):
+            try:
+                review = json.loads(p.review_summary)
+            except Exception:
+                review = None
         enriched.append({
             "id": p.id,
             "edition": p.edition,
@@ -280,6 +286,8 @@ async def carousels_page(request: Request):
             "slide_paths_list": slide_paths_list,
             "slide_urls": slide_urls,
             "hashtags_str": " ".join(hashtags_list),
+            "review_score": getattr(p, "review_score", None),
+            "review": review,
         })
 
     return templates.TemplateResponse("carousels.html", {

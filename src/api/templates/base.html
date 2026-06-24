@@ -405,6 +405,38 @@
       font-size: 0.68rem; font-weight: 700;
     }
 
+    /* ── Approval / review panel (carousel survived the three reviewers) ── */
+    .review-panel {
+      background: var(--surface-3);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 0.75rem 1rem;
+    }
+    .review-head { display: flex; align-items: baseline; justify-content: space-between; }
+    .review-verdict {
+      font-size: 0.7rem; font-weight: 700; text-transform: uppercase;
+      letter-spacing: 0.07em; color: var(--success);
+    }
+    .review-score {
+      font-size: 1.5rem; font-weight: 700; color: var(--text);
+      letter-spacing: -0.02em; font-variant-numeric: tabular-nums;
+    }
+    .review-score-max { font-size: 0.8rem; font-weight: 400; color: var(--text-muted); }
+    .review-reviewers {
+      display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.6rem;
+    }
+    .review-reviewer {
+      flex: 1 1 0; min-width: 120px;
+      display: flex; align-items: center; justify-content: space-between;
+      gap: 0.5rem; padding: 0.35rem 0.6rem;
+      background: var(--surface-2); border: 1px solid var(--border); border-radius: 7px;
+    }
+    .review-reviewer-name { font-size: 0.72rem; color: var(--text-muted); }
+    .review-reviewer-score {
+      font-size: 0.85rem; font-weight: 700; color: var(--text);
+      font-variant-numeric: tabular-nums;
+    }
+
     /* ── Action hint (small line under a button) ── */
     .action-hint {
       color: var(--text-muted);

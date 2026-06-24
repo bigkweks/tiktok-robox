@@ -226,22 +226,23 @@ class Pipeline:
         part = self._carousel_part_counter
         self._carousel_part_counter += 1
 
-        # ── Internal quality review + auto-revision (runs BEFORE we render) ──
-        # Cleans AI tells / generic / duplicate captions, picks a vetted
-        # curiosity-first cover hook and a natural CTA, and scores the post.
+        # ── MANDATORY approval gate (runs BEFORE we render or persist) ──
+        # A carousel is not complete until it survives the three-reviewer panel.
+        # The approval system runs Generate→Critique→Revise→Re-score→Critique→
+        # Finalize (max 3 cycles); we ship ONLY what it approves. The user never
+        # sees a first draft. Generation is steered by the extracted Content DNA.
         from src.content.carousel_quality import (  # noqa: PLC0415
-            build_carousel_hashtags, finalize_carousel, pick_footer_cta,
+            build_carousel_hashtags, pick_footer_cta,
         )
-        # Drive generation from the extracted Content DNA: the consolidated
-        # blueprint of WHY proven carousels worked steers cover selection. Falls
-        # back to the seeded prior when no winners have been uploaded yet.
+        from src.content.content_approval import ContentApprovalSystem  # noqa: PLC0415
         dna_profile = None
         try:
             from src.content.dna_store import DNAStore  # noqa: PLC0415
             dna_profile = DNAStore().get_consolidated()
         except Exception as exc:
             log.warning("pipeline.carousel_factory.dna_load_failed", error=str(exc))
-        final = finalize_carousel(
+
+        approval = ContentApprovalSystem().approve(
             part=part,
             edition=edition,
             captions=[c.carousel_caption or "" for c, g in batch],
@@ -251,34 +252,38 @@ class Pipeline:
             game_names=[g.name for c, g in batch],
             dna=dna_profile,
         )
-        if final.get("dna_directives"):
-            log.info("pipeline.carousel_factory.dna_driven", part=part,
-                     cover_concept=final.get("cover_concept"),
-                     dna_source=(dna_profile.label if dna_profile else None),
-                     dna_confidence=(dna_profile.overall_confidence if dna_profile else 0.0))
-        report = final["report"]
-        plan = final.get("plan")
-        log.info("pipeline.carousel_factory.quality", part=part,
-                 attempts=final.get("attempts", 1), **report.as_dict())
+        # Log every review cycle (the critique trail).
+        for entry in approval.trail:
+            log.info("pipeline.carousel_factory.review_cycle", part=part, **entry)
+
+        report = approval.report
+        plan = approval.plan
         if plan is not None:
-            # The audience we inferred + the job every slide is doing. This is
-            # the "creator decision" record: who it's for and why each slide ships.
             log.info("pipeline.carousel_factory.plan", part=part,
                      audience=plan.brief.who, purposeful=plan.purposeful,
                      purposes=[s.purpose for s in plan.slides],
                      dead_slides=plan.dead_slides)
-            if not plan.purposeful:
-                log.warning("pipeline.carousel_factory.dead_slides",
-                            part=part, dead_slides=plan.dead_slides)
-        if report.top1pct_passed and (plan is None or plan.purposeful):
-            log.info("pipeline.carousel_factory.elite_quality",
-                     part=part, overall=report.overall)
-        elif not report.passed:
-            log.warning("pipeline.carousel_factory.quality_soft",
-                        part=part, overall=report.overall, issues=report.issues)
 
-        deduped_captions = final["captions"]
-        cover_hook = final["cover_hook"]
+        # ── The gate: if it didn't survive review, it does NOT ship. ──
+        if not approval.approved:
+            log.warning("pipeline.carousel_factory.rejected", part=part,
+                        final_score=approval.final_score,
+                        cycles=approval.cycles,
+                        hard_failures=approval.panel.hard_failures,
+                        reviewers={r.name: r.score for r in approval.panel.reviewers})
+            # Roll back the part counter so the rejected part number is reused by
+            # the next attempt — we don't burn a "Part N" on content nobody sees.
+            self._carousel_part_counter -= 1
+            return {"carousels": 0, "rejected": True, "part": part,
+                    "final_score": approval.final_score,
+                    "hard_failures": approval.panel.hard_failures}
+
+        log.info("pipeline.carousel_factory.approved", part=part,
+                 final_score=approval.final_score, cycles=approval.cycles,
+                 reviewers={r.name: r.score for r in approval.panel.reviewers})
+
+        deduped_captions = approval.captions
+        cover_hook = approval.cover_hook
         footer_cta = pick_footer_cta(part)
 
         carousel_games = [
@@ -315,7 +320,7 @@ class Pipeline:
         )
 
         # De-templated TikTok caption (keeps the proven search anchor) + CTA.
-        caption = f"{final['post_caption']}\n\n{final['cta']}"
+        caption = f"{approval.post_caption}\n\n{approval.cta}"
         # Per-post hashtags: proven search anchors pinned, the rest rotated by
         # part + matched to the edition so no two drops post the identical wall
         # (an automation tell that TikTok can suppress as repetitive).
@@ -332,14 +337,17 @@ class Pipeline:
                 caption=caption,
                 hashtags=_json.dumps(hashtags),
                 status="pending",
+                review_score=approval.final_score,
+                review_summary=_json.dumps(approval.panel.as_dict()),
             )
             session.add(post)
 
         log.info("pipeline.carousel_factory.complete", part=part, edition=edition,
-                 slides=len(slide_paths), quality=report.overall,
-                 games=[g.name for g in carousel_games])
+                 slides=len(slide_paths), final_score=approval.final_score,
+                 cycles=approval.cycles, games=[g.name for g in carousel_games])
         return {"carousels": 1, "part": part, "edition": edition,
-                "quality": report.overall}
+                "final_score": approval.final_score, "approved": True,
+                "cycles": approval.cycles}
 
     @staticmethod
     def _retention_order(items: list, key) -> list:

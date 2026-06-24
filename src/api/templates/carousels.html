@@ -66,6 +66,24 @@
   </div>
 
   <div class="card-body">
+    {# Approval panel: this carousel exists because it passed review — show how. #}
+    {% if post.review %}
+    <div class="review-panel mb-3">
+      <div class="review-head">
+        <span class="review-verdict">Passed review</span>
+        <span class="review-score">{{ post.review_score | round(0) | int }}<span class="review-score-max">/100</span></span>
+      </div>
+      <div class="review-reviewers">
+        {% for r in post.review.reviewers %}
+        <div class="review-reviewer">
+          <span class="review-reviewer-name">{{ r.name }}</span>
+          <span class="review-reviewer-score">{{ r.score | round(0) | int }}</span>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+    {% endif %}
+
     {# Slide strip #}
     <div class="d-flex gap-2 overflow-auto pb-2 mb-3" style="scrollbar-width:thin">
       {% for path in post.slide_paths_list %}
