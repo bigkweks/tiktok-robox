@@ -93,6 +93,17 @@ src/content/
                       hooks), pick_cta(), pick_footer_cta(), build_post_caption(),
                       build_carousel_hashtags(), banks COVER_HOOKS / CTA_LINES /
                       FOOTER_CTAS / ENGAGE_LINES / EDITION_HOOKS.
+  review_panel.py   ★ NEW. Three-reviewer approval panel. evaluate_panel() →
+                      PanelResult: 3 personas (Growth Strategist / Successful
+                      Roblox Creator / Skeptical Viewer) each 0–100, a weighted
+                      Final Quality Score (7 dims, FINAL_WEIGHTS), and
+                      detect_hard_failures(). compute_dimensions(). APPROVE bars
+                      (score≥80, every reviewer≥70, zero hard failures).
+  content_approval.py ★ NEW. ContentApprovalSystem.approve() runs the mandatory
+                      cycle Generate→Critique→Revise→Re-score→Critique→Finalize
+                      (max 3). Returns ApprovalResult (approved, final_score,
+                      panel, surviving content, per-cycle trail). Only approved
+                      content is ever shown.
   content_dna.py    ★ NEW. Content DNA Extraction System. ContentDNAExtractor
                       sends carousel screenshots to Claude vision (injectable
                       vision_fn → testable offline) and extracts 14 DIMENSIONS as
@@ -150,15 +161,17 @@ src/content/
 src/scheduler/pipeline.py  Orchestrator (APScheduler). Jobs: discovery (4h),
                       content_factory (4h), carousel_factory (8h),
                       queue_maintenance (12h), analytics_update (24h).
-                      run_carousel_factory() batches 5 rated games → CarouselPost,
-                      running dedupe_carousel_captions across the 5 captions first.
-                      Loads the consolidated Content DNA (DNAStore) and passes it
-                      to finalize_carousel so the cover is DNA-driven.
-src/api/dashboard.py  FastAPI. Pages: / , /carousels (review+approve slides +
-                      one-step "Save all to Photos"), /queue, /games, /analytics,
-                      /dna (upload winners → view extracted DNA: 5 formulas + 14
-                      patterns + confidence). Endpoints: /pipeline/run-carousel,
-                      /dna/extract (POST screenshots → extract+persist DNA),
+                      run_carousel_factory() batches 5 rated games, loads the
+                      consolidated Content DNA, runs the MANDATORY ContentApprovalSystem
+                      and persists a CarouselPost (status=approved, +review_score
+                      /review_summary) ONLY if it passes review. run_create_carousel()
+                      = the one-action orchestrator (build now / retry / warm up
+                      via _warmup_for_carousel).
+src/api/dashboard.py  FastAPI. Pages: / , /carousels (shows the review panel +
+                      one-tap "Save N slides + caption"), /queue, /games, /analytics,
+                      /dna (upload winners → 5 formulas + 14 patterns + confidence).
+                      Endpoints: /pipeline/create-carousel (the one-action CTA),
+                      /pipeline/run-carousel, /dna/extract (POST screenshots),
                       /api/dna/consolidated, /analytics/ingest (validates
                       content_id), /analytics?content_id=N (prefill),
                       /carousel/{id}/download (zip of all slides). build_slides_zip()
@@ -169,14 +182,17 @@ src/analytics/feedback_loop.py  Manual analytics ingest + weight update.
                       ingest_manual() rejects a non-existent content_id (was
                       silently writing orphan rows). get_performance_summary()
                       now also returns avg_follows_per_post.
-src/database/models.py  Game, Content (+carousel_caption col), CarouselPost,
-                      PostAnalytics, ModelWeights, CrawlLog.
-src/database/connection.py  init_db() creates tables + auto-migrates the
-                      carousel_caption column for existing DBs (SQLite WAL).
-src/api/templates/   base.html (dark theme + .id-chip + imgFallback helper + DNA
-                      nav), index.html, carousels.html, queue.html, games.html,
-                      analytics.html, content_detail.html, dna.html (DNA upload +
-                      5-formula/14-pattern blueprint view).
+src/database/models.py  Game, Content (+carousel_caption col), CarouselPost
+                      (+review_score / review_summary), PostAnalytics, ModelWeights,
+                      CrawlLog.
+src/database/connection.py  init_db() creates tables + auto-migrates
+                      content.carousel_caption and carousel_posts.review_score /
+                      review_summary for existing DBs (SQLite WAL).
+src/api/templates/   Premium dark theme (no template tells). base.html holds the
+                      design system: .metric/.kv/.workflow-steps/.count-pill/
+                      .action-hint/.review-panel + shared createCarousel(). index,
+                      carousels (review panel + one-tap export + Create CTA), queue,
+                      games, analytics, content_detail, dna.
 ```
 
 ## Environment constraints (important)
@@ -207,14 +223,78 @@ src/api/templates/   base.html (dark theme + .id-chip + imgFallback helper + DNA
   status + posted state shown, analytics deep-links from each posted item.
 - Analytics ingest validates the Content ID; the 10K-goal projection uses real
   follows-per-post.
-- Pipeline batches carousels every 8h; manual "⚡ Generate Now" button.
+- Pipeline batches carousels every 8h; one-click **"Create a carousel"** does the
+  whole chain (discover → rate → build → review) from any state.
 - Video + thumbnail pipeline intact (badge-overlap bug fixed).
-- **Test suite: 129 passing**. See "Testing" below.
+- **Every carousel passes a mandatory 3-reviewer approval panel** before it's
+  persisted — the user never sees a first draft, only survivors (shown with their
+  Final Quality Score + the three reviewer scores).
+- **Dashboard is a premium, restrained creator tool** (no template tells — no
+  gradient hero, no emoji labels, no rainbow borders, one accent, clean hierarchy).
+- **Test suite: 150 passing**. See "Testing" below.
 - **Content DNA system**: upload screenshots of a proven carousel → Claude vision
   extracts WHY it worked across 14 dimensions into 5 reusable formulas with
   confidence scores; consolidated DNA drives cover generation. Dashboard `/dna`.
 
-## Session changelog — Content DNA Extraction System (latest)
+## Session changelog — approval gate + premium UI + one-tap workflow (latest)
+Brief: three goals in one session — (1) transform the dashboard to feel trusted,
+professional, premium (not a template); (2) make content approval MANDATORY via
+three independent reviewer personas with a revision cycle, so only the strongest
+carousels ship; (3) collapse the create→export→publish workflow to the minimum
+number of actions so the app feels effortless.
+
+- **Mandatory three-reviewer approval gate (`review_panel.py` + `content_approval.py`,
+  new).** A carousel is no longer complete when generated — only when it survives
+  review. `review_panel.evaluate_panel` runs three independent personas, each
+  scoring 0–100 through its own lens: **Growth Strategist** (stop-scroll /
+  retention / saves / follows), **Successful Roblox Creator** (would I post /
+  authentic / on-culture / original), **Skeptical Viewer** (seen before / feels AI
+  / worth attention / keep swiping) — they're different weightings of shared
+  signals so they genuinely disagree. A single **Final Quality Score** (0–100) is
+  computed from the seven specified weights (Hook 20 · Curiosity 15 · Authenticity
+  20 · Readability 15 · Retention 15 · Saveability 10 · Follow 5; Retention is
+  derived from weakest-slide hold + novelty + slide-purpose + opener). `detect_hard_failures`
+  auto-rejects on repetitive phrasing, generic hook, AI wording, weak CTA, or a
+  low-value/purposeless/removable slide (read from the `creator_brief` plan).
+  `ContentApprovalSystem.approve` runs the cycle Generate→Critique→Revise→Re-score→
+  Critique→Finalize (max 3); between cycles it rotates away from a rejected cover
+  hook and swaps the weakest caption for a stronger unused bank line, so each pass
+  improves. Approval needs score ≥80 AND every reviewer ≥70 AND zero hard failures.
+- **Pipeline enforces the gate (`pipeline.py`).** `run_carousel_factory` now calls
+  the approval system and persists a `CarouselPost` ONLY when approved (rejected
+  drafts are never written, and the Part number is rolled back for reuse). The
+  surviving carousel records `review_score` + `review_summary` (new `CarouselPost`
+  columns + SQLite auto-migration). Since the AI panel already vetted quality,
+  carousels persist as `status="approved"` — the redundant human Approve click is
+  gone.
+- **One-action workflow (`pipeline.run_create_carousel` + `POST /pipeline/create-carousel`).**
+  Time-to-first-generation went from 4 clicks across 2 pages (Run discovery →
+  Generate content → switch page → Generate now, dead-ending at "not enough games")
+  to ONE button: it builds immediately when games are ready, retries once if the
+  panel rejects a draft, or warms up the discover→rate→build chain in the
+  background (`_warmup_for_carousel`) and reports it's on the way. Dashboard +
+  Carousels both lead with a single "Create a carousel" CTA (shared `createCarousel`
+  in base.html); the carousels empty state is that one button.
+- **One-tap export.** "Save N slides + caption" now copies the caption to the
+  clipboard AND opens the iPad share sheet in a single tap (was two separate taps),
+  so the caption is ready to paste the moment the slides save. Mark-as-posted sits
+  right beside it in the natural sequence. Removed the jarring `prompt()` modal for
+  an optional TikTok Video ID on mark-posted (queue + content detail) → direct tap.
+- **Premium UI redesign (all templates + `base.html`).** Audited every screen
+  through five lenses and stripped the template tells: the red gradient marketing
+  hero, emoji on every stat label (🎮✅⏳🚀❤️👀), rainbow colored card borders, a
+  decorative icon on every card header (incl. a 🤖 robot on "AI Rating"), and the
+  gold accent fighting the Roblox red on every number (page-level `var(--accent)`
+  usage is now 0). Fixed a real trust bug: the dashboard "Last run" line actually
+  showed page-load time — removed. New shared components: `.metric`, `.kv`,
+  `.workflow-steps`, `.count-pill`, `.action-hint`, `.review-panel`. Voice unified
+  to plain confident sentence case; loading states use a spinner. Also fixed a
+  duplicate `discoverBtn` id in the cold-start dashboard.
+- **Tests +21** (`test_review_panel.py` 16, `test_workflow.py` 6 incl. orchestrator
+  build/retry/warm-up/no-double-warm, `test_carousel_download` updated for the
+  combined export button). **Full suite: 150 passing.**
+
+## Session changelog — Content DNA Extraction System (prior)
 Brief: the platform's purpose is not to generate carousels but to identify *why*
 previously successful carousels performed well and replicate those underlying
 patterns — when screenshots are uploaded, extract the DNA (hook structure,
@@ -723,10 +803,9 @@ existed only to get the posting app audited).
    Add `/analytics/ingest-carousel` and extend CarouselPost with view/like fields.
 2. **Caption A/B**: generate 2 caption variants per carousel and track which
    caption voice (genre-specific vs. score-tier vs. neutral) drives more saves.
-3. **Expose quality/plan in dashboard**: the `/carousels` review page currently
-   shows slides + caption. Add a quality panel: overall score, which checklist
-   items failed, the inferred audience, and the per-slide purpose sequence. Makes
-   the "creator decision" visible at review time, not just in logs.
+3. ~~Expose quality/plan in dashboard~~ — **DONE** (the /carousels review panel
+   now shows the Final Quality Score + the three reviewer scores). Could still add
+   the inferred audience + per-slide purpose sequence to that panel.
 4. **AudienceBrief → rating prompt injection**: feed `brief.surprise` and
    `brief.save_trigger` into the `RATING_PROMPT` so Claude's `carousel_caption`
    already writes toward what makes *this* audience save, not a generic voice.
@@ -750,7 +829,7 @@ existed only to get the posting app audited).
     corroboration count).
 
 ## Testing
-Run `python -m pytest -q` (**129 passing**). Test files:
+Run `python -m pytest -q` (**150 passing**). Test files:
 - `tests/test_scoring.py`, `tests/test_discovery.py`, `tests/test_content.py`
   — original suites (scoring, Roblox client/trend detector, rating/captions).
   `test_content.py` extended: fallback verdict no AI tell, score-tiered variety.
@@ -793,6 +872,14 @@ Run `python -m pytest -q` (**129 passing**). Test files:
   selection (and dna=None matches the base call).
 - `tests/test_dna_dashboard.py` (**new**) — dna.html renders the 5 formulas + all
   14 dimensions in the prior state and the extracted-profiles state.
+- `tests/test_review_panel.py` (**new**) — three named independent reviewers,
+  the 7 FINAL_WEIGHTS match spec + sum to 1, final-score range, each hard-failure
+  condition trips, strong carousel has none, weak carousel rejected, panel as_dict
+  shape, and the approval cycle runs / terminates ≤3 / keeps the best / records the
+  per-cycle trail.
+- `tests/test_workflow.py` (**new**) — the one-action orchestrator builds
+  immediately when ready, retries once on panel rejection, reports retry when both
+  drafts fail, warms up when games are scarce, and never double-warms.
 
 Sandbox verification pattern: render PNG slides and view them (no real network /
 moviepy needed). Templates are validated by parsing all of them and rendering
