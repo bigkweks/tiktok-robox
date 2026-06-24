@@ -228,6 +228,8 @@ class CarouselGenerator:
         part_number: int = 1,
         output_dir: Optional[Path] = None,
         slug: str = "carousel",
+        cover_hook: Optional[str] = None,
+        final_cta: Optional[str] = None,
     ) -> list[Path]:
         if output_dir is None:
             output_dir = Path(self._settings.OUTPUT_DIR, "carousels", slug)
@@ -237,15 +239,21 @@ class CarouselGenerator:
         ed_meta = next((e for e in EDITIONS if e[0] == edition), EDITIONS[0])
 
         slides: list[Path] = []
+        chosen = games[:5]
 
         title_path = output_dir / "slide_00_title.png"
-        self._make_title_slide(ed_meta, part_number, count=len(games[:5])).save(str(title_path))
+        self._make_title_slide(
+            ed_meta, part_number, count=len(chosen), cover_hook=cover_hook,
+        ).save(str(title_path))
         slides.append(title_path)
 
-        for i, game in enumerate(games[:5]):
+        for i, game in enumerate(chosen):
             safe = "".join(c for c in game.name[:20] if c.isalnum() or c in " _").replace(" ", "_")
             path = output_dir / f"slide_{i+1:02d}_{safe}.png"
-            self._make_game_slide(game).save(str(path))
+            # The last slide carries a creator-native follow nudge (the payoff
+            # slide — viewers who reach it are the most likely to convert).
+            cta = final_cta if (i == len(chosen) - 1) else None
+            self._make_game_slide(game, final_cta=cta).save(str(path))
             slides.append(path)
             log.info("carousel.slide_saved", slide=i + 1, game=game.name)
 
@@ -259,6 +267,7 @@ class CarouselGenerator:
         ed_meta: tuple[str, str, list[str]],
         part_number: int,
         count: int = 5,
+        cover_hook: Optional[str] = None,
     ) -> Image.Image:
         edition, theme_emoji, stickers = ed_meta
         # Off-white background — pattern-interrupts the dark TikTok feed and
@@ -271,21 +280,29 @@ class CarouselGenerator:
         BRAND = (124, 111, 255)   # the pipeline purple — pops on white
 
         # ── Scroll-stopper kicker pill (top) ──────────────────────────────
-        # A bold colored chip that reads like a creator caption; rotates per
-        # part so the series never looks copy-pasted.
-        kicker = TITLE_KICKERS[part_number % len(TITLE_KICKERS)]
-        f_kick = load_font("extrabold", 52)
+        # The quality layer supplies a vetted, curiosity-first cover hook; we
+        # fall back to the local rotation only if none was passed.
+        kicker = (cover_hook or "").strip() or TITLE_KICKERS[part_number % len(TITLE_KICKERS)]
         kdraw = ImageDraw.Draw(img)
-        kw = measure_mixed(kdraw, kicker, f_kick, 52)
         kpad = 46
+        kmax = W - 80 - kpad * 2     # keep the pill clear of the edges
+        # Shrink the hook font until it fits on one line (cover hooks vary in
+        # length); never let it tofu off the slide.
+        k_size = 52
+        while k_size > 36:
+            f_kick = load_font("extrabold", k_size)
+            kw = measure_mixed(kdraw, kicker, f_kick, k_size)
+            if kw <= kmax:
+                break
+            k_size -= 3
         kpill_w = kw + kpad * 2
-        kpill_h = 104
+        kpill_h = int(k_size * 1.55) + 22
         kx = (W - kpill_w) // 2
         ky = 250
         draw = ImageDraw.Draw(img)
-        draw.rounded_rectangle([kx, ky, kx + kpill_w, ky + kpill_h], radius=52, fill=(18, 18, 22))
+        draw.rounded_rectangle([kx, ky, kx + kpill_w, ky + kpill_h], radius=kpill_h // 2, fill=(18, 18, 22))
         img = draw_mixed(img, (W // 2, ky + kpill_h // 2), kicker, f_kick,
-                         (255, 255, 255), emoji_size=52, anchor="mm")
+                         (255, 255, 255), emoji_size=k_size, anchor="mm")
         draw = ImageDraw.Draw(img)
 
         # Type stack — Poppins, tight leading like the viral post
@@ -358,7 +375,7 @@ class CarouselGenerator:
 
     # ── Game slide ────────────────────────────────────────────────────
 
-    def _make_game_slide(self, game: CarouselGame) -> Image.Image:
+    def _make_game_slide(self, game: CarouselGame, final_cta: Optional[str] = None) -> Image.Image:
         img = Image.new("RGB", (W, H), (255, 255, 255))
         draw = ImageDraw.Draw(img)
 
@@ -496,6 +513,23 @@ class CarouselGenerator:
         draw.line([(0, foot_y), (W, foot_y)], fill=(238, 239, 242), width=2)
         f_foot = load_font("medium", 40)
         draw.text((48, foot_y + 40), f"{_format_active(game.visits)} visits", font=f_foot, fill=(150, 152, 160))
+
+        # On the final slide only: a tasteful, right-aligned follow nudge. This
+        # is the payoff slide, so it's where a natural CTA converts best —
+        # rendered as a soft brand chip, not a desperate "FOLLOW!!!" banner.
+        if final_cta:
+            f_cta = load_font("semibold", 38)
+            es = _emoji_px(f_cta)
+            cta_w = measure_mixed(draw, final_cta, f_cta, es)
+            chip_pad = 26
+            chip_w = cta_w + chip_pad * 2
+            chip_h = 72
+            chip_x = W - 48 - chip_w
+            chip_y = foot_y + 28
+            draw.rounded_rectangle([chip_x, chip_y, chip_x + chip_w, chip_y + chip_h],
+                                   radius=chip_h // 2, fill=(238, 235, 255))
+            img = draw_mixed(img, (chip_x + chip_pad, chip_y + (chip_h - es) // 2 - 2),
+                             final_cta, f_cta, (90, 78, 200), emoji_size=es, anchor="la")
 
         return img
 

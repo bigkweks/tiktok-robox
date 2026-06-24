@@ -41,6 +41,72 @@ _GENERIC_BANNED = frozenset({
     "play this", "check this out", "must play", "so fun", "very fun",
 })
 
+# Phrases that scream "AI / marketing copy" — the fingerprints we want gone from
+# captions, hooks, blurbs and CTAs. Deliberately does NOT include genuine
+# teen-creator slang ("fr", "ngl", "lowkey") or our brand search-anchor
+# ("actually good ... games to play"); those are authentic voice, not tells.
+_AI_TELLS: tuple[str, ...] = (
+    "dive into", "dive in", "delve", "look no further", "buckle up",
+    "without further ado", "let's explore", "lets explore", "in the world of",
+    "when it comes to", "elevate your", "unleash", "unlock the", "game-changer",
+    "game changer", "you won't believe", "you wont believe", "prepare to",
+    "get ready to", "the ultimate", "must-have", "level up your", "next level",
+    "treasure trove", "plethora", "seamless", "robust", "leverage",
+    "supercharge", "revolutionary", "mind-blowing", "embark", "in today's",
+    "this is everything", "say goodbye to", "look no further than",
+    "trust me you", "thank me later", "literally changed my life",
+)
+
+# Markers that signal a genuine curiosity gap / information gap.
+_CURIOSITY_MARKERS: tuple[str, ...] = (
+    "why", "how", "no one", "nobody", "secret", "hidden", "actually",
+    "underrated", "still", "before", "what", "the one", "turns out",
+    "never", "heard of", "sleeping on", "don't know", "dont know",
+    "gatekeep", "should be", "your fyp", "you've been", "youve been",
+)
+
+# Weak/over-promise hype the hook should avoid (sounds spammy / clickbait).
+_OVERPROMISE: tuple[str, ...] = (
+    "shocking", "insane", "crazy", "unbelievable", "jaw-dropping",
+    "you need to see", "will blow your mind", "best ever", "#1", "guaranteed",
+)
+
+
+def has_ai_tell(text: Optional[str]) -> bool:
+    """True if the text contains a known AI / marketing-copy fingerprint."""
+    t = normalize_caption(text)
+    return any(tell in t for tell in _AI_TELLS)
+
+
+def specificity_score(text: Optional[str]) -> int:
+    """
+    Count concrete-detail markers: digits, a 'X but/in roblox' comparison, a
+    caps-for-emphasis word, or a vivid concrete noun. Higher = more memorable,
+    less generic. Used to reject vague captions and rank alternatives.
+    """
+    t = (text or "").strip()
+    if not t:
+        return 0
+    score = 0
+    if re.search(r"\d", t):
+        score += 2  # numbers are the strongest specificity signal
+    low = t.lower()
+    if " but " in low or " in roblox" in low or low.endswith(" roblox"):
+        score += 1  # genre comparison ("gta in roblox", "valorant but roblox")
+    if re.search(r"\b[A-Z]{2,}\b", t):
+        score += 1  # one capped word for emphasis ("MUST", "HUGE")
+    concrete = (
+        "hours", "solo", "co-op", "coop", "map", "ending", "story", "combos",
+        "waves", "drift", "physics", "abilities", "progression", "build",
+        "stages", "entity", "puzzle", "lobby", "scared", "gunplay", "movement",
+        "brain", "grind", "immersion", "addictive", "challenged", "exploring",
+        "open world", "horror", "rpg", "obby", "tycoon", "td", "wave", "aim",
+        "handling", "tracks", "prestige", "clicker",
+    )
+    if any(w in low for w in concrete):
+        score += 1
+    return score
+
 # Game-appropriate alternatives, ordered most-specific first. Kept in the same
 # lowercase player voice as the prompt. No emojis, no trailing punctuation.
 _GENRE_LINES: dict[str, tuple[str, ...]] = {
@@ -183,6 +249,8 @@ def dedupe_carousel_captions(
             if norm in _GENERIC_BANNED:
                 return False
             if has_internal_repetition(text):
+                return False
+            if has_ai_tell(text):           # kill AI / marketing fingerprints
                 return False
             tag = crutch_tag(text)
             if tag and tag in used_tags:

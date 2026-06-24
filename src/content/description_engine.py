@@ -78,6 +78,11 @@ Requirements for BOTH captions:
 - Use 2-3 emojis, placed where they punch (not all clumped at the end)
 - Every caption must feel different from the last — vary the opening words,
   sentence rhythm, and the call to action. Do NOT start both variants the same way.
+- BANNED AI/marketing tells (instant giveaway, never use): "dive into",
+  "look no further", "the ultimate", "unlock", "game-changer", "elevate",
+  "without further ado", "in today's", "you won't believe", "level up".
+- Self-check before output: if a line sounds like brand copy or a press
+  release, rewrite it in the voice of a real player texting a friend.
 - Must make viewers want to comment their opinion
 
 Variant A: curiosity/mystery angle (builds tension around the rating)

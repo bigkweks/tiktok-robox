@@ -217,20 +217,39 @@ class Pipeline:
             log.info("pipeline.carousel_factory.not_enough_games", count=len(candidates))
             return {"carousels": 0}
 
-        # Take top 5
-        batch = candidates[:5]
+        # Sequence the 5 games for a RETENTION ARC instead of a flat
+        # highest-first ranking (predictable = scrollable). Open strong, dip,
+        # build back, and save the single best game for the last slide so
+        # finishing the carousel feels rewarded — which lifts completion rate.
+        batch = self._retention_order(candidates[:5], key=lambda cg: cg[0].rating_score or 0.0)
         edition = EDITIONS[self._carousel_part_counter % len(EDITIONS)][0]
         part = self._carousel_part_counter
         self._carousel_part_counter += 1
 
-        # Guard against repeated phrasing across the 5 slides ("X if ukuk",
-        # "Y if ukuk", …) — rewrite duplicates/crutch repeats to varied lines.
-        from src.content.caption_utils import dedupe_carousel_captions  # noqa: PLC0415
-        deduped_captions = dedupe_carousel_captions(
-            [c.carousel_caption or "" for c, g in batch],
+        # ── Internal quality review + auto-revision (runs BEFORE we render) ──
+        # Cleans AI tells / generic / duplicate captions, picks a vetted
+        # curiosity-first cover hook and a natural CTA, and scores the post.
+        from src.content.carousel_quality import (  # noqa: PLC0415
+            finalize_carousel, pick_footer_cta,
+        )
+        final = finalize_carousel(
+            part=part,
+            edition=edition,
+            captions=[c.carousel_caption or "" for c, g in batch],
+            blurbs=[c.rating_verdict or "" for c, g in batch],
             genres=[g.genre for c, g in batch],
             scores=[c.rating_score for c, g in batch],
+            game_names=[g.name for c, g in batch],
         )
+        report = final["report"]
+        log.info("pipeline.carousel_factory.quality", part=part, **report.as_dict())
+        if not report.passed:
+            log.warning("pipeline.carousel_factory.quality_soft",
+                        part=part, overall=report.overall, issues=report.issues)
+
+        deduped_captions = final["captions"]
+        cover_hook = final["cover_hook"]
+        footer_cta = pick_footer_cta(part)
 
         carousel_games = [
             CarouselGame(
@@ -260,11 +279,13 @@ class Pipeline:
                 edition=edition,
                 part_number=part,
                 slug=slug,
+                cover_hook=cover_hook,
+                final_cta=footer_cta,
             ),
         )
 
-        # Build TikTok caption targeting search queries
-        caption = self._build_carousel_caption(edition, part, carousel_games)
+        # De-templated TikTok caption (keeps the proven search anchor) + CTA.
+        caption = f"{final['post_caption']}\n\n{final['cta']}"
         hashtags = [
             "#roblox", "#robloxgames", "#robloxgamestoplywithfriends",
             "#robloxfyp", "#gamestoplywithfriends", "#robloxhiddengems",
@@ -284,17 +305,37 @@ class Pipeline:
             session.add(post)
 
         log.info("pipeline.carousel_factory.complete", part=part, edition=edition,
-                 slides=len(slide_paths), games=[g.name for g in carousel_games])
-        return {"carousels": 1, "part": part, "edition": edition}
+                 slides=len(slide_paths), quality=report.overall,
+                 games=[g.name for g in carousel_games])
+        return {"carousels": 1, "part": part, "edition": edition,
+                "quality": report.overall}
 
     @staticmethod
-    def _build_carousel_caption(edition: str, part: int, games: list) -> str:
-        names = ", ".join(g.name for g in games[:3])
-        return (
-            f"actually good roblox games to play — {edition} part {part} 🎮\n\n"
-            f"rating {names} and more\n\n"
-            f"drop your fav roblox game below 👇"
-        )
+    def _retention_order(items: list, key) -> list:
+        """
+        Reorder a batch for a curiosity arc: strong opener, a dip in the middle
+        for contrast, and the single best item LAST (completion payoff). Avoids
+        the predictable monotonic high→low ordering that reads as templated.
+        """
+        if len(items) <= 2:
+            return list(items)
+        ranked = sorted(items, key=key, reverse=True)
+        best = ranked[0]
+        rest = ranked[1:]
+        # rest[0] is the 2nd best → strong opener; then alternate weak/strong so
+        # scores zig-zag instead of descending; best is appended at the end.
+        opener = rest[0]
+        middle = rest[1:]
+        zig: list = []
+        lo, hi = len(middle) - 1, 0
+        take_low = True
+        while hi <= lo:
+            if take_low:
+                zig.append(middle[lo]); lo -= 1
+            else:
+                zig.append(middle[hi]); hi += 1
+            take_low = not take_low
+        return [opener, *zig, best]
 
     # ── Content generation ────────────────────────────────────────────
 

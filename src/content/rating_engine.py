@@ -138,6 +138,14 @@ Hard rules for carousel_caption:
       * pure hype (only for 9.5+): "MUST check out", "actual masterpiece"
       * niche callout: "horror that actually scared me", "puzzle game that broke my brain"
   - Never generic like "fun game", "good game", or "if ukuk" on its own.
+  - BANNED AI/marketing phrases (instant tell, never use): "dive into",
+    "unlock the", "the ultimate", "game-changer", "you won't believe",
+    "look no further", "level up", "next level", "must-have", "elevate".
+
+CAROUSEL CAPTION ANTI-PATTERN CHECK — before you output it, ask: "would a real
+14-year-old type this in a TikTok comment, or does it sound like an ad?" If it
+sounds like an ad, rewrite it. Lead with the one concrete thing that makes THIS
+game different. Two different games must never get interchangeable captions.
 
 HOOK RULES (this is the single most important field — most viewers leave in 1.5s):
 - Be concrete and specific, never generic. BAD: "This game is amazing".
@@ -151,6 +159,10 @@ HOOK RULES (this is the single most important field — most viewers leave in 1.
 - Reference a real number or the genre when it sharpens the hook.
 - Never reveal the score in the hook — the score is the payoff.
 - No hashtags, no emojis in hook_text.
+- Earn curiosity honestly. BANNED spammy/over-promise words: "shocking",
+  "insane", "you need to see this", "will blow your mind", "#1", "best ever".
+  A real, specific detail beats hype every time.
+- Vary the hook's sentence shape — do not open every hook with the game name.
 
 Scoring rules:
 - 9.0–10.0: Elite tier — exceptional quality AND underexposed (< 10M visits preferred)

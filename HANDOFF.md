@@ -73,10 +73,19 @@ src/content/
                       contains_emoji() / strip_emoji() / measure_mixed() /
                       EMOJI_PATTERN. Arrows like "→" are deliberately NOT treated
                       as emoji.
-  caption_utils.py    ★ NEW. Carousel caption safeguards. dedupe_carousel_captions()
-                      rewrites duplicate / slang-crutch / stuttering captions so no
-                      two slides in one post read the same. has_internal_repetition(),
-                      crutch_tag(), is_generic(), normalize_caption().
+  caption_utils.py    ★ Carousel caption safeguards. dedupe_carousel_captions()
+                      rewrites duplicate / slang-crutch / stuttering / AI-tell
+                      captions so no two slides read the same. has_internal_repetition(),
+                      crutch_tag(), is_generic(), normalize_caption(),
+                      has_ai_tell(), specificity_score(), _AI_TELLS,
+                      _CURIOSITY_MARKERS, _OVERPROMISE.
+  carousel_quality.py ★ NEW. The "review before presenting" gate. Scores a
+                      carousel (hook/curiosity/authenticity/specificity/
+                      shareability/follow) + checklist, auto-revises weak pieces.
+                      finalize_carousel() is the pipeline entry point; also
+                      review_carousel(), score_hook/caption/cta, pick_cover_hook(),
+                      pick_cta(), pick_footer_cta(), build_post_caption(), banks
+                      COVER_HOOKS / CTA_LINES / FOOTER_CTAS / ENGAGE_LINES.
   rating_engine.py    Claude rates a game → RatingResult(score, label, verdict,
                       tts_script, hook_text, carousel_caption, ...). Prompt has
                       HOOK RULES + CAROUSEL CAPTION VOICE. Prompt was de-seeded so
@@ -152,9 +161,55 @@ src/api/templates/   base.html (dark theme + .id-chip + imgFallback helper),
   follows-per-post.
 - Pipeline batches carousels every 8h; manual "⚡ Generate Now" button.
 - Video + thumbnail pipeline intact (badge-overlap bug fixed).
-- **Test suite: 54 passing**. See "Testing" below.
+- **Test suite: 66 passing**. See "Testing" below.
 
-## Session changelog — Roblox-fidelity game slide (latest session)
+## Session changelog — quality engine + authenticity (latest session)
+Goal: make carousels read like a top human creator, not an AI template.
+Added an internal quality gate that reviews + auto-revises every post first.
+
+- **★ NEW `src/content/carousel_quality.py` — the review-before-presenting gate.**
+  Deterministic, heuristic (no extra API calls). Scores a carousel 0..1 on
+  hook / curiosity / authenticity / specificity / shareability / follow, runs
+  the explicit review checklist ("would a creator post this?", "does the cover
+  stop the scroll?", "any AI sentence?", "any repeated wording?", "specific
+  enough?"), and **auto-revises** weak pieces before anything is shown:
+  - `finalize_carousel(...)` — single entry point. Dedupes + de-AI-tells the
+    captions, strengthens soft ones from genre/score banks, picks a vetted
+    curiosity-first **cover hook** and a natural **CTA**, builds a de-templated
+    **post caption**, and returns the `QualityReport`.
+  - Banks (rotated, never one template): `COVER_HOOKS`, `CTA_LINES`,
+    `FOOTER_CTAS`, `ENGAGE_LINES`. `build_post_caption` keeps the proven SEARCH
+    anchor ("roblox games to play") but rotates everything around it.
+  - Scorers: `score_hook/score_caption/score_cta`, `review_carousel`.
+- **AI-fingerprint detection in `caption_utils`.** `_AI_TELLS` ("dive into",
+  "unlock the", "the ultimate", "game-changer", "you won't believe"…),
+  `has_ai_tell()`, `specificity_score()` (numbers / genre comparison / named
+  mechanic), `_CURIOSITY_MARKERS`, `_OVERPROMISE`. `dedupe_carousel_captions`
+  now rejects AI tells too. Slang ("fr", "ngl") is NOT treated as a tell.
+- **Retention-arc sequencing** (`Pipeline._retention_order`). Slides no longer
+  run highest→lowest (predictable = scrollable). Open strong, dip for contrast,
+  **save the single best game for the LAST slide** (completion payoff).
+- **Last-slide follow CTA.** The final game slide renders a soft brand chip
+  ("part N+1 soon — follow") next to the visits footer — natural, not desperate.
+  `CarouselGenerator.generate(..., cover_hook=, final_cta=)` threads both;
+  `_make_title_slide(cover_hook=)` (adaptive font so long hooks fit);
+  `_make_game_slide(final_cta=)`.
+- **Prompts hardened** (rating + description engines): explicit BANNED AI/
+  marketing phrase lists, an anti-pattern self-check ("would a real 14-yo type
+  this or does it sound like an ad?"), and sentence-shape variation rules.
+- **Pipeline wiring**: `run_carousel_factory` orders the batch, calls
+  `finalize_carousel`, logs the `QualityReport` (`pipeline.carousel_factory
+  .quality`), warns when a post is still soft, and passes the vetted hook/CTA
+  into the renderer. The old `_build_carousel_caption` template is removed.
+- **Before → after** (same broken batch): overall quality **0.27 → 0.89**;
+  captions "fun game / dive into this / fun game" → genre-specific lines; cover
+  "stop scrolling 🛑" → "the ones your friends don't know yet"; CTA "follow for
+  more!!!" → "which one are you opening first?".
+- Tests +12 (`tests/test_quality.py`): fingerprint + specificity, element
+  scores, good-passes / bad-fails review, finalize cleans a messy batch, hook/
+  CTA/post-caption variety, retention order saves best for last.
+
+## Session changelog — Roblox-fidelity game slide (prior session)
 Goal: make the carousel game slide look like a real Roblox game page.
 Driven by two reference screenshots the user sent (Sell Lemons page).
 
@@ -323,6 +378,9 @@ Run `python -m pytest -q` (49 passing). Test files:
   orphan rows) and marks valid content posted with correct KPIs.
 - `tests/test_dashboard_views.py` — 10K projection branches + analytics prefill
   render (template-level).
+- `tests/test_quality.py` — AI-fingerprint + specificity primitives, hook/
+  caption/CTA scoring, good-passes/bad-fails review, finalize auto-revises a
+  messy batch, hook/CTA/post-caption variety, retention-arc ordering.
 - `tests/test_carousel_download.py` — zip bundling (ordering, skips missing) +
   the "Save all to Photos" button render + Web Share wiring.
 
