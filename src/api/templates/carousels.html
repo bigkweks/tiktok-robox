@@ -92,6 +92,26 @@
       {% endfor %}
     </div>
 
+    {# One-step save: Web Share (→ iPad Photos) with zip fallback #}
+    {% if post.slide_urls %}
+    <div class="d-flex align-items-center gap-2 flex-wrap mb-3">
+      <button class="btn btn-primary btn-sm"
+              data-slides='{{ post.slide_urls | tojson }}'
+              data-part="{{ post.part_number }}"
+              data-cid="{{ post.id }}"
+              onclick="saveCarouselToPhotos(this)">
+        <i class="bi bi-phone me-1"></i>Save all {{ post.slide_urls | length }} slides to Photos
+      </button>
+      <a class="btn btn-outline-secondary btn-sm" href="/carousel/{{ post.id }}/download"
+         title="Download all slides as a .zip">
+        <i class="bi bi-file-zip me-1"></i>.zip
+      </a>
+      <small class="text-muted" style="font-size:0.72rem">
+        On iPad, tap <strong>Save {{ post.slide_urls | length }} Images</strong> in the share sheet.
+      </small>
+    </div>
+    {% endif %}
+
     {# Caption #}
     {% if post.caption %}
     <div>
@@ -126,6 +146,46 @@
 
 {% block scripts %}
 <script>
+// One-step save of every slide. On iPad/iPhone this opens the share sheet
+// where "Save N Images" drops them all into Photos at once; elsewhere it
+// falls back to a .zip download so no slide has to be saved by hand.
+async function saveCarouselToPhotos(btn) {
+  let urls = [];
+  try { urls = JSON.parse(btn.dataset.slides || '[]'); } catch (e) {}
+  const part = btn.dataset.part || '';
+  const cid = btn.dataset.cid;
+  if (!urls.length) { alert('No slides to save yet.'); return; }
+
+  const original = btn.innerHTML;
+  const zipFallback = () => { window.location.href = `/carousel/${cid}/download`; };
+  btn.disabled = true;
+  btn.innerHTML = '<i class="bi bi-hourglass-split me-1"></i>Preparing…';
+
+  try {
+    const files = [];
+    for (let i = 0; i < urls.length; i++) {
+      const resp = await fetch(urls[i]);
+      if (!resp.ok) throw new Error('fetch failed');
+      const blob = await resp.blob();
+      files.push(new File([blob], `slide_${i + 1}.png`, {type: blob.type || 'image/png'}));
+    }
+
+    if (navigator.canShare && navigator.canShare({files})) {
+      await navigator.share({files, title: `Roblox Carousel Part ${part}`});
+      btn.innerHTML = '<i class="bi bi-check-circle me-1"></i>Saved to Photos';
+    } else {
+      zipFallback();
+      btn.innerHTML = '<i class="bi bi-download me-1"></i>Downloaded .zip';
+    }
+  } catch (e) {
+    if (e && e.name === 'AbortError') {  // user dismissed the share sheet
+      btn.innerHTML = original; btn.disabled = false; return;
+    }
+    zipFallback();
+    btn.innerHTML = '<i class="bi bi-download me-1"></i>Downloaded .zip';
+  }
+  setTimeout(() => { btn.innerHTML = original; btn.disabled = false; }, 2500);
+}
 async function triggerCarousel() {
   const btn = document.getElementById('carouselBtn');
   btn.disabled = true;

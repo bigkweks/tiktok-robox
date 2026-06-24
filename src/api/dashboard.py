@@ -23,7 +23,7 @@ from fastapi.middleware.gzip import GZipMiddleware
 from src.logging_config import configure_logging as _configure_logging
 _configure_logging()
 
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
@@ -264,6 +264,12 @@ async def carousels_page(request: Request):
             hashtags_list = json.loads(p.hashtags or "[]")
         except Exception:
             pass
+        # Public URLs (served via the /output mount) for the one-step save.
+        prefix = _settings.OUTPUT_DIR.rstrip("/") + "/"
+        slide_urls = [
+            "/output/" + (sp[len(prefix):] if sp.startswith(prefix) else sp)
+            for sp in slide_paths_list if sp
+        ]
         enriched.append({
             "id": p.id,
             "edition": p.edition,
@@ -272,6 +278,7 @@ async def carousels_page(request: Request):
             "caption": p.caption,
             "created_at": p.created_at,
             "slide_paths_list": slide_paths_list,
+            "slide_urls": slide_urls,
             "hashtags_str": " ".join(hashtags_list),
         })
 
@@ -311,6 +318,61 @@ async def mark_carousel_posted(carousel_id: int):
         post.status = "posted"
         post.posted_at = datetime.now(timezone.utc)
     return {"status": "posted", "carousel_id": carousel_id}
+
+
+def build_slides_zip(slide_paths: list[str]) -> bytes:
+    """Zip the slide image files that exist on disk, ordered slide_1, slide_2…
+
+    Returns empty bytes if nothing on disk could be added.
+    """
+    import io
+    import zipfile
+
+    buf = io.BytesIO()
+    added = 0
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        for i, sp in enumerate(slide_paths):
+            if not sp:
+                continue
+            path = Path(sp)
+            if path.exists():
+                zf.write(str(path), arcname=f"slide_{i + 1}{path.suffix or '.png'}")
+                added += 1
+    return buf.getvalue() if added else b""
+
+
+@app.get("/carousel/{carousel_id}/download")
+async def download_carousel_zip(carousel_id: int):
+    """
+    Bundle every slide of a carousel into a single .zip.
+
+    This is the fallback path for the one-step save: browsers that support the
+    Web Share API drop all slides straight into Photos, but desktop / older
+    browsers grab this zip instead of downloading each slide by hand.
+    """
+    async with get_session() as session:
+        post = await session.get(CarouselPost, carousel_id)
+        if not post:
+            raise HTTPException(404, "Carousel not found")
+        try:
+            slide_paths = json.loads(post.slide_paths or "[]")
+        except Exception:
+            slide_paths = []
+        part = post.part_number
+
+    if not slide_paths:
+        raise HTTPException(404, "This carousel has no slides yet")
+
+    data = build_slides_zip(slide_paths)
+    if not data:
+        raise HTTPException(404, "Slide image files are missing on disk")
+
+    filename = f"roblox_carousel_part{part:03d}.zip"
+    return Response(
+        content=data,
+        media_type="application/zip",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 # ── Analytics ingestion ───────────────────────────────────────────────
