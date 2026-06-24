@@ -230,7 +230,7 @@ class Pipeline:
         # Cleans AI tells / generic / duplicate captions, picks a vetted
         # curiosity-first cover hook and a natural CTA, and scores the post.
         from src.content.carousel_quality import (  # noqa: PLC0415
-            finalize_carousel, pick_footer_cta,
+            build_carousel_hashtags, finalize_carousel, pick_footer_cta,
         )
         final = finalize_carousel(
             part=part,
@@ -286,11 +286,12 @@ class Pipeline:
 
         # De-templated TikTok caption (keeps the proven search anchor) + CTA.
         caption = f"{final['post_caption']}\n\n{final['cta']}"
-        hashtags = [
-            "#roblox", "#robloxgames", "#robloxgamestoplywithfriends",
-            "#robloxfyp", "#gamestoplywithfriends", "#robloxhiddengems",
-            "#fyp", "#gaming",
-        ]
+        # Per-post hashtags: proven search anchors pinned, the rest rotated by
+        # part + matched to the edition so no two drops post the identical wall
+        # (an automation tell that TikTok can suppress as repetitive).
+        hashtags = build_carousel_hashtags(
+            part, edition, game_names=[g.name for c, g in batch],
+        )
 
         async with get_session() as session:
             post = CarouselPost(

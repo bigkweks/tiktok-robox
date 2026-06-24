@@ -131,6 +131,26 @@ def test_ctas_vary_across_parts():
     assert len(set(picks)) >= 3
 
 
+def test_carousel_hashtags_pin_anchors_but_rotate():
+    """Every post keeps the proven search anchors, but the full set differs drop
+    to drop (an identical hashtag wall is an automation tell TikTok suppresses)
+    and reads on-topic for the edition."""
+    from src.content.carousel_quality import build_carousel_hashtags
+    eds = ["Horror edition", "Friends edition", "Hidden Gems", "Anime edition", "Solo edition"]
+    sets = [tuple(build_carousel_hashtags(p, eds[p], game_names=["Backrooms Escape"]))
+            for p in range(5)]
+    # Proven search anchors are on every post…
+    assert all("#robloxgames" in s and "#robloxgamestoplywithfriends" in s for s in sets)
+    # …but no two consecutive drops post the identical wall.
+    assert len(set(sets)) == len(sets)
+    # Edition niche tag shows up (on-topic, not generic).
+    assert "#robloxhorror" in sets[0]
+    assert "#robloxanime" in sets[3]
+    # No duplicates within a single post.
+    for s in sets:
+        assert len(s) == len(set(s))
+
+
 def test_post_caption_keeps_search_anchor_but_varies():
     caps = [build_post_caption("Hidden Gems", p, ["Sell Lemons", "Drift Kings"]) for p in range(5)]
     # The proven search phrase is always present (23.9% of traffic was search)…

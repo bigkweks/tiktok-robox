@@ -163,7 +163,47 @@ src/api/templates/   base.html (dark theme + .id-chip + imgFallback helper),
 - Video + thumbnail pipeline intact (badge-overlap bug fixed).
 - **Test suite: 67 passing**. See "Testing" below.
 
-## Session changelog — performance-first cover redesign (latest)
+## Session changelog — app-wide authenticity audit (latest)
+Brief: audit the whole app for patterns that read "AI/template-generated" and
+fix the ones that genuinely hurt perceived authenticity, so the whole thing
+feels like a real Roblox creator built it (not a SaaS startup). Two surfaces:
+the content the tool PRODUCES (audience-facing) and the tool ITSELF (dashboard).
+
+- **Identical hashtag wall every post → rotated.** The carousel pipeline pinned
+  the SAME 8 hashtags on every drop. A fixed tag wall is both a human-readable
+  template tell and a repetitive-content signal TikTok can suppress — and it
+  caps reach. New `carousel_quality.build_carousel_hashtags(part, edition,
+  game_names)`: keeps the two proven SEARCH anchors (`#robloxgames`,
+  `#robloxgamestoplywithfriends`) on every post, then rotates a tail pool by
+  part and adds the edition's niche tag + a lead-game slug tag, so every drop
+  gets a distinct, on-topic set without losing the SEO. Wired into
+  `pipeline.run_carousel_factory` (the hardcoded list is gone). Test asserts
+  anchors-on-every-post + all sets distinct + niche tag present + no dupes.
+- **Dashboard de-SaaS'd into a creator's first-person voice.** The tool read
+  like a corporate product: brand "💎 RoboxPipeline — TikTok Automation", hero
+  "💎 Roblox Hidden-Gem Factory 🚀 / Find underrated games → AI-rate them → drop
+  scroll-stopping TikTok carousels", arrow-chain instructions, "in database"
+  dev-speak. Arrow-chain value props, noun-stacked product names and "X Factory
+  🚀" taglines are the fingerprint of AI-generated landing copy. Rewrote the
+  brand → **"the gemvault"**, the hero into first person ("finding the roblox
+  games before they blow up / i dig up the underrated ones, rate them honestly,
+  and turn the best 5 into a carousel…"), the empty-state + "Top Game" + games
+  subtitle into a creator's own words, and removed the prose arrow-chains. CTA
+  "Review Carousels" → "review today's drop".
+- **Deliberately KEPT (not tells):** the game slide's repeated structure (icon /
+  name / thumb / score / pills / description) is *authentic* — it mimics a real
+  Roblox game page, which is the whole point; identical-by-design ≠ templated.
+  The 🔥 "hot pick" marker on each callout is a consistent creator brand signal,
+  not a repetition tell. Stat-label emoji on the dashboard were left (they add
+  personality; the SaaS *voice* was the real problem, now fixed).
+- **Known lower-priority follow-up:** the secondary VIDEO path
+  (`description_engine._build_hashtags`) still builds a near-identical tag set
+  per genre — same tell, but video is the secondary format; rotate it the same
+  way if/when video gets prioritised.
+- Tests: **71 passing** (+1 hashtag rotation). Templates still render (covered by
+  `test_dashboard_views`).
+
+## Session changelog — performance-first cover redesign (prior)
 Brief: stop making the cover *prettier* — optimise it for stop-scroll, swipe-
 through, saves and follows while staying minimal/premium and creator-made. The
 old cover was a dead-centred, perfectly symmetrical "actually good ROBLOX games

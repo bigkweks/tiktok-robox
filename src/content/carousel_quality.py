@@ -376,6 +376,74 @@ def pick_footer_cta(part: int) -> str:
     return FOOTER_CTAS[part % len(FOOTER_CTAS)].format(next=part + 1)
 
 
+# ── Hashtags ───────────────────────────────────────────────────────────────
+# A bot reuses the EXACT same hashtag wall on every upload; a real creator's
+# tags drift post to post. Identical tag sets are both a template tell to a
+# human AND a repetitive-content signal TikTok can suppress. So: pin the proven
+# search anchors (they drove 23.9% of the reference post's traffic) on every
+# drop, then rotate the rest by part and match the edition's niche — every post
+# gets a distinct, on-topic set without losing the SEO that works.
+
+# Always present — the exact search queries the proven post ranked for.
+_HASHTAG_ANCHORS: tuple[str, ...] = ("#robloxgames", "#robloxgamestoplywithfriends")
+
+# Rotated tail pool — varied by part so no two consecutive drops match.
+_HASHTAG_POOL: tuple[str, ...] = (
+    "#roblox", "#robloxfyp", "#robloxgamestoplay", "#robloxhiddengems",
+    "#robloxgems", "#robloxtrending", "#robloxtok", "#robloxrecommendations",
+    "#fyp", "#gaming",
+)
+
+# Edition → niche tag(s), so the set reads on-topic for the drop.
+_EDITION_TAGS: dict[str, tuple[str, ...]] = {
+    "Horror edition": ("#robloxhorror", "#robloxhorrorgames"),
+    "Friends edition": ("#robloxwithfriends",),
+    "Hidden Gems": ("#robloxhiddengems",),
+    "Solo edition": ("#robloxsolo",),
+    "Anime edition": ("#robloxanime",),
+    "PvP edition": ("#robloxpvp",),
+    "Underrated edition": ("#underratedroblox",),
+    "Brainrot edition": ("#robloxbrainrot",),
+}
+
+
+def build_carousel_hashtags(
+    part: int,
+    edition: str,
+    game_names: Optional[Sequence[str]] = None,
+    limit: int = 9,
+) -> list[str]:
+    """A per-post hashtag set that keeps the proven search anchors but rotates
+    everything else, so the series never posts the identical wall twice."""
+    tags: list[str] = list(_HASHTAG_ANCHORS)
+    tags.extend(_EDITION_TAGS.get(edition, ()))
+
+    # A game-specific tag drawn from the lead game — varies naturally per drop
+    # and helps people searching that exact game find the post.
+    if game_names:
+        slug = re.sub(r"[^a-z0-9]", "", (game_names[0] or "").lower())
+        if len(slug) > 2:
+            tags.append(f"#{slug}")
+
+    # Rotate the tail pool by part so consecutive posts don't repeat.
+    rotated = [_HASHTAG_POOL[(part + i) % len(_HASHTAG_POOL)]
+               for i in range(len(_HASHTAG_POOL))]
+    for t in rotated:
+        if len(tags) >= limit:
+            break
+        if t not in tags:
+            tags.append(t)
+
+    # De-dup, preserve order.
+    seen: set[str] = set()
+    out: list[str] = []
+    for t in tags:
+        if t not in seen:
+            seen.add(t)
+            out.append(t)
+    return out[:limit]
+
+
 def build_post_caption(edition: str, part: int, game_names: Sequence[str]) -> str:
     """
     De-templated TikTok caption. Keeps the proven SEARCH anchor ("roblox games
@@ -470,6 +538,6 @@ def finalize_carousel(
 __all__ = [
     "QualityReport", "review_carousel", "finalize_carousel", "score_hook",
     "score_caption", "score_cta", "pick_cover_hook", "pick_cta",
-    "pick_footer_cta", "build_post_caption", "COVER_HOOKS", "CTA_LINES",
-    "EDITION_HOOKS",
+    "pick_footer_cta", "build_post_caption", "build_carousel_hashtags",
+    "COVER_HOOKS", "CTA_LINES", "EDITION_HOOKS",
 ]
