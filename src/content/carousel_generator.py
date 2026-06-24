@@ -330,15 +330,26 @@ class CarouselGenerator:
 
         # "actually good" sits a little lower; the ROBLOX wordmark + the lines
         # under it tuck up just below it so the phrase reads as one tight unit.
-        block_top = 760
-        ag_gap = 104  # space between "actually good" and the ROBLOX wordmark
-        _centered(draw, "actually good", W // 2, block_top, f_pre, ink)
-        _centered(draw, "ROBLOX", W // 2, block_top + ag_gap, f_hero, ROBLOX_RED)
-        _centered(draw, "games to play", W // 2, block_top + ag_gap + hero_size + 30, f_mid, ink)
+        # ROBLOX is the visual anchor. We measure real glyph boxes and place
+        # "actually good" so the whitespace ABOVE ROBLOX (its baseline → top of R)
+        # equals the whitespace BELOW ROBLOX (bottom of X → top of "games").
+        block_top = 625
+        rob_y = block_top + 104
+        games_y = rob_y + hero_size + 30
+        sub_y = rob_y + hero_size + 180
+
+        _, rob_top_ink, _, rob_bot_ink = draw.textbbox((0, rob_y), "ROBLOX", font=f_hero)
+        _, games_top_ink, _, _ = draw.textbbox((0, games_y), "games to play", font=f_mid)
+        gap = games_top_ink - rob_bot_ink                 # whitespace below ROBLOX
+        ag_y = rob_top_ink - gap - f_pre.getmetrics()[0]  # baseline of "actually good" sits `gap` above ROBLOX
+
+        _centered(draw, "actually good", W // 2, ag_y, f_pre, ink)
+        _centered(draw, "ROBLOX", W // 2, rob_y, f_hero, ROBLOX_RED)
+        _centered(draw, "games to play", W // 2, games_y, f_mid, ink)
 
         # ── 3. Supporting line: part + edition (quiet grey, no pill) ────────
         sub = f"part {part_number}  ·  {edition.lower()}"
-        _centered(draw, sub, W // 2, block_top + ag_gap + hero_size + 180, load_font("semibold", 52), grey)
+        _centered(draw, sub, W // 2, sub_y, load_font("semibold", 52), grey)
 
         # ── 4. CTA — text + a crisp red arrow (on-brand, no tofu, no emoji) ──
         cy = H - 200
