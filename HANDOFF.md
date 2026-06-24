@@ -163,7 +163,24 @@ src/api/templates/   base.html (dark theme + .id-chip + imgFallback helper),
 - Video + thumbnail pipeline intact (badge-overlap bug fixed).
 - **Test suite: 67 passing**. See "Testing" below.
 
-## Session changelog — minimal Roblox-red redesign (latest session)
+## Session changelog — cover spacing finalization (latest)
+Incremental user-approved spacing tweaks to the cover slide after the minimal
+redesign landed.
+
+- **Block position** tuned to `block_top = 625` — the anchor for the ROBLOX
+  wordmark. Moved the whole title block up from 715 in six approved increments.
+- **Equal glyph-box whitespace around ROBLOX.** Measured the exact glyph boxes
+  of "actually good" and "games to play" using Pillow `textbbox()`, then computed
+  `ag_y` (the "actually good" baseline) so the gap between the bottom of the "g"
+  in "actually good" and the top of "R" in ROBLOX equals the gap between the
+  bottom of "X" in ROBLOX and the top of "g" in "games to play" — both 45 px.
+- **Adaptive hook font** on cover: long curiosity hooks (e.g. "the ones your
+  friends don't know yet") shrink from 38 px down in 2 px steps until the text
+  fits within `W − 80 − kpad×2` pixels so nothing clips on any hook from the
+  quality bank.
+- Commits: `9031695` (breathe), `7048ec5` (tuck), `9c7500e` (even spacing).
+
+## Session changelog — minimal Roblox-red redesign (prior)
 Brief: clean, premium, minimal carousel with Roblox red as the ONLY accent.
 
 - **Cover slide rebuilt as minimal/premium.** Removed the dark top "header bar"
@@ -392,7 +409,7 @@ existed only to get the posting app audited).
 5. ~~Per-slide download buttons~~ — **DONE** (replaced by one-step save).
 
 ## Testing
-Run `python -m pytest -q` (49 passing). Test files:
+Run `python -m pytest -q` (67 passing). Test files:
 - `tests/test_scoring.py`, `tests/test_discovery.py`, `tests/test_content.py`
   — original suites (scoring, Roblox client/trend detector, rating/captions).
 - `tests/test_emoji_rendering.py` — emoji detection/strip/segment, mixed render
