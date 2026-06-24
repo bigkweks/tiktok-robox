@@ -79,13 +79,27 @@ src/content/
                       crutch_tag(), is_generic(), normalize_caption(),
                       has_ai_tell(), specificity_score(), _AI_TELLS,
                       _CURIOSITY_MARKERS, _OVERPROMISE.
-  carousel_quality.py ★ NEW. The "review before presenting" gate. Scores a
-                      carousel (hook/curiosity/authenticity/specificity/
-                      shareability/follow) + checklist, auto-revises weak pieces.
-                      finalize_carousel() is the pipeline entry point; also
-                      review_carousel(), score_hook/caption/cta, pick_cover_hook(),
-                      pick_cta(), pick_footer_cta(), build_post_caption(), banks
-                      COVER_HOOKS / CTA_LINES / FOOTER_CTAS / ENGAGE_LINES.
+  carousel_quality.py ★ Quality gate + auto-reviser. Scores 9 dimensions:
+                      hook, curiosity, authenticity, specificity, shareability,
+                      follow, readability, saveability, novelty. QualityReport
+                      has passed (≥0.70) and top1pct_passed (≥0.80, hook≥0.65,
+                      authenticity≥0.75). finalize_carousel() runs up to 3 passes,
+                      escalating caption-replacement threshold and rotating hooks,
+                      targeting top1pct_passed + a fully purposeful plan.
+                      Also: review_carousel(), score_hook/caption/cta/readability/
+                      saveability/novelty, pick_cover_hook() (edition-aware niche
+                      hooks), pick_cta(), pick_footer_cta(), build_post_caption(),
+                      build_carousel_hashtags(), banks COVER_HOOKS / CTA_LINES /
+                      FOOTER_CTAS / ENGAGE_LINES / EDITION_HOOKS.
+  creator_brief.py  ★ NEW. Creator-decision layer. EDITION_BRIEFS answers the
+                      7 audience-inference questions per niche (who, why_care,
+                      knows, believes, surprise, save_trigger, follow_trigger)
+                      in niche-specific language. plan_carousel() assigns every
+                      slide an explicit purpose (stop_scrolling, create_curiosity,
+                      build_credibility, deliver_value, challenge_assumptions,
+                      reveal_information, trigger_saving, trigger_sharing,
+                      trigger_following). Dead slides (empty/generic/AI content)
+                      flagged in report.issues. brief_for(edition) → AudienceBrief.
   rating_engine.py    Claude rates a game → RatingResult(score, label, verdict,
                       tts_script, hook_text, carousel_caption, ...). Prompt has
                       HOOK RULES + CAROUSEL CAPTION VOICE. Prompt was de-seeded so
@@ -571,20 +585,29 @@ existed only to get the posting app audited).
 1. **Feedback loop on carousels**: PostAnalytics is wired for videos; extend
    to carousels so the scorer learns which editions/games/captions land.
    Add `/analytics/ingest-carousel` and extend CarouselPost with view/like fields.
-2. **Caption A/B**: generate 2 caption variants per carousel and track.
-3. **More edition variety / scheduling cadence** (currently 8 editions rotate).
-4. **Verify the iPad "Save all to Photos" flow end-to-end on a real device**
+2. **Caption A/B**: generate 2 caption variants per carousel and track which
+   caption voice (genre-specific vs. score-tier vs. neutral) drives more saves.
+3. **Expose quality/plan in dashboard**: the `/carousels` review page currently
+   shows slides + caption. Add a quality panel: overall score, which checklist
+   items failed, the inferred audience, and the per-slide purpose sequence. Makes
+   the "creator decision" visible at review time, not just in logs.
+4. **AudienceBrief → rating prompt injection**: feed `brief.surprise` and
+   `brief.save_trigger` into the `RATING_PROMPT` so Claude's `carousel_caption`
+   already writes toward what makes *this* audience save, not a generic voice.
+5. **More edition variety / scheduling cadence** (currently 8 editions rotate).
+6. **Verify the iPad "Save all to Photos" flow end-to-end on a real device**
    (logic + zip fallback are tested; the share-sheet step is iOS-only and can't
    be exercised in the sandbox).
-5. ~~Per-slide download buttons~~ — **DONE** (replaced by one-step save).
+7. ~~Per-slide download buttons~~ — **DONE** (replaced by one-step save).
 
 ## Testing
-Run `python -m pytest -q` (67 passing). Test files:
+Run `python -m pytest -q` (**86 passing**). Test files:
 - `tests/test_scoring.py`, `tests/test_discovery.py`, `tests/test_content.py`
   — original suites (scoring, Roblox client/trend detector, rating/captions).
+  `test_content.py` extended: fallback verdict no AI tell, score-tiered variety.
 - `tests/test_emoji_rendering.py` — emoji detection/strip/segment, mixed render
   produces real color glyphs, ✔️ vs ✓, video stats/features slides, carousel
-  title slide, arrow handling.
+  title slide, arrow handling. Extended: cover value phrase, cover credibility/CTA.
 - `tests/test_captions.py` — cross-slide dedup, stutter + crutch detection,
   generic-filler blocklist, genre-aware replacement.
 - `tests/test_analytics_ingest.py` — ingest rejects missing content_id (no
@@ -593,9 +616,16 @@ Run `python -m pytest -q` (67 passing). Test files:
   render (template-level).
 - `tests/test_quality.py` — AI-fingerprint + specificity primitives, hook/
   caption/CTA scoring, good-passes/bad-fails review, finalize auto-revises a
-  messy batch, hook/CTA/post-caption variety, retention-arc ordering.
+  messy batch, hook/CTA/post-caption variety, retention-arc ordering, niche-
+  specific edition hooks, hashtag rotation. Extended: 3 new scorer functions
+  (readability/saveability/novelty), top-1% bar, `as_dict` shape, attempt count,
+  empty-caption recovery.
 - `tests/test_carousel_download.py` — zip bundling (ordering, skips missing) +
   the "Save all to Photos" button render + Web Share wiring.
+- `tests/test_creator_brief.py` (**new**) — every edition has a full 7-question
+  brief, unknown/None falls back cleanly, briefs are niche-distinct, purpose
+  assignment covers all slide roles, dead slides flagged with reasons,
+  serialisation, finalize emits a purposeful plan.
 
 Sandbox verification pattern: render PNG slides and view them (no real network /
 moviepy needed). Templates are validated by parsing all of them and rendering
@@ -607,3 +637,7 @@ with mock contexts.
 - Don't put the model ID in commits/code.
 - Commits use a `Co-Authored-By: Claude <noreply@anthropic.com>` trailer
   (model name per the active session) plus the session link trailer.
+- **`/handoff` skill**: at the end of any session run `/handoff`. The skill
+  at `.claude/skills/handoff/SKILL.md` documents what changed, merges the
+  new changelog entry into `HANDOFF.md`, and commits + pushes. This keeps the
+  file current so the next session never starts cold.
