@@ -328,14 +328,17 @@ class CarouselGenerator:
             hero_size -= 8
             f_hero = load_font("black", hero_size)
 
-        block_top = 720
+        # "actually good" sits a little lower with more breathing room above
+        # ROBLOX, so the three lines read as a balanced unit instead of crowding.
+        block_top = 760
+        ag_gap = 138  # space between "actually good" and the ROBLOX wordmark
         _centered(draw, "actually good", W // 2, block_top, f_pre, ink)
-        _centered(draw, "ROBLOX", W // 2, block_top + 118, f_hero, ROBLOX_RED)
-        _centered(draw, "games to play", W // 2, block_top + 118 + hero_size + 30, f_mid, ink)
+        _centered(draw, "ROBLOX", W // 2, block_top + ag_gap, f_hero, ROBLOX_RED)
+        _centered(draw, "games to play", W // 2, block_top + ag_gap + hero_size + 30, f_mid, ink)
 
         # ── 3. Supporting line: part + edition (quiet grey, no pill) ────────
         sub = f"part {part_number}  ·  {edition.lower()}"
-        _centered(draw, sub, W // 2, block_top + 118 + hero_size + 180, load_font("semibold", 52), grey)
+        _centered(draw, sub, W // 2, block_top + ag_gap + hero_size + 180, load_font("semibold", 52), grey)
 
         # ── 4. CTA — text + a crisp red arrow (on-brand, no tofu, no emoji) ──
         cy = H - 200
