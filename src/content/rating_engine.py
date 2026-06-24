@@ -274,11 +274,40 @@ class RatingEngine:
         return RatingResult(
             score=round(score, 1),
             label=_get_label(score),
-            verdict=f"{name} shows strong engagement metrics.",
+            verdict=self._fallback_verdict(name, score),
             breakdown={},
             tts_script=self._fallback_tts(name, score, visits),
             controversy_angle="",
         )
+
+    @staticmethod
+    def _fallback_verdict(name: str, score: float) -> str:
+        # This line gets burned onto the game slide as the "why it slaps"
+        # callout, so the fallback must sound like a hyped player, never like a
+        # corporate metric ("shows strong engagement metrics" was an instant AI
+        # tell). Score-tiered, name-hashed so a batch doesn't repeat one line.
+        if score >= 9.0:
+            pool = (
+                "this one deserves way more players than it has",
+                "genuinely one of the best i've found lately",
+                "criminally slept on, go play it now",
+                "no idea how this isn't everywhere yet",
+            )
+        elif score >= 7.5:
+            pool = (
+                "way better than the visit count suggests",
+                "quietly one of the more polished ones out here",
+                "surprised me way more than i expected",
+                "the kind of game you replay for hours",
+            )
+        else:
+            pool = (
+                "rough in spots but there's something here",
+                "not perfect, still worth a look",
+                "has its moments if you give it time",
+                "decent pick when you've run out of others",
+            )
+        return pool[sum(ord(c) for c in (name or "x")) % len(pool)]
 
     @staticmethod
     def _fallback_tts(name: str, score: float, visits: int) -> str:

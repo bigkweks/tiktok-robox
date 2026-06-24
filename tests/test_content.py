@@ -39,6 +39,15 @@ def test_fallback_rating_within_bounds():
     assert 0.0 <= result.score <= 10.0
     assert result.label
     assert result.tts_script
+    # The fallback verdict is burned onto the game slide, so it must read like a
+    # player, not a corporate metric ("shows strong engagement metrics").
+    from src.content.caption_utils import has_ai_tell
+    assert not has_ai_tell(result.verdict)
+    assert "engagement metrics" not in result.verdict.lower()
+    # Score-tiered + name-hashed: different games don't all get the same line.
+    verdicts = {engine._fallback_rating(n, 1_000_000, 0.7).verdict
+                for n in ("Alpha", "Bravo", "Charlie", "Delta")}
+    assert len(verdicts) >= 2
 
 
 # ── Description tests ─────────────────────────────────────────────────

@@ -196,12 +196,47 @@ the content the tool PRODUCES (audience-facing) and the tool ITSELF (dashboard).
   The 🔥 "hot pick" marker on each callout is a consistent creator brand signal,
   not a repetition tell. Stat-label emoji on the dashboard were left (they add
   personality; the SaaS *voice* was the real problem, now fixed).
+- **Corporate fallback verdict → creator voice.** `rating_engine._fallback_rating`
+  burned `"{name} shows strong engagement metrics."` as the verdict — and the
+  verdict becomes the 🔥 "why it slaps" callout on the game slide, so an AI-call
+  failure put a corporate metric line straight in front of the audience. New
+  `_fallback_verdict(name, score)`: score-tiered, name-hashed, hyped-player voice
+  ("criminally slept on, go play it now"). Tested: no AI tell, varies by game.
+
+### Complete surface-by-surface audit (what was reviewed, not just what changed)
+Every audience- and creator-facing surface was read end to end. Findings:
+- **Cover slide** — fixed in the prior redesign (asymmetric, niche hook,
+  credibility, natural CTA).
+- **Carousel hashtags** — FIXED (rotation, above).
+- **Rating fallback verdict** — FIXED (above).
+- **Dashboard brand + hero + empty states** — FIXED (creator voice, above).
+- **`caption_utils` genre/score/neutral banks** — reviewed, KEPT. Already
+  specific, lowercase, varied teen-creator lines ("horror that actually scared
+  me", "60 hours deep no regrets"); de-dup guarantees no repeat within a post.
+  Not generic — no change earns its place.
+- **`rating_engine` + `description_engine` prompts** — reviewed, KEPT. Both
+  already carry explicit BANNED-AI-phrase lists, the "would a real 14-yo type
+  this?" self-check, and sentence-shape variation rules. The AI-path fallbacks
+  (`_fallback_a/_b`, `_fallback_tts/_hook`) are already in player voice.
+- **Game-slide structure** — reviewed, KEPT (intentionally mirrors a real Roblox
+  game page; identical-by-design ≠ templated).
+- **Channel branding (`config.CHANNEL_NAME/HANDLE`)** — reviewed, KEPT. Generic
+  placeholders ("RobloxGems") but env-overridable — that's the creator's real
+  handle to set, not ours to invent.
+- **Thumbnail "Follow @handle for more" CTA (video path)** — reviewed, KEPT.
+  Generic-looking, but a "follow for more" cover label is standard real-creator
+  practice, not an AI tell.
+- **Remaining templates (queue / analytics / content_detail)** — reviewed,
+  KEPT. Plain functional UI labels ("Content Queue", "Log Analytics for a
+  Video"); a real creator's own tool has utilitarian labels too. Slang-ifying
+  every label would be a forced change, not an authenticity gain.
 - **Known lower-priority follow-up:** the secondary VIDEO path
   (`description_engine._build_hashtags`) still builds a near-identical tag set
-  per genre — same tell, but video is the secondary format; rotate it the same
-  way if/when video gets prioritised.
-- Tests: **71 passing** (+1 hashtag rotation). Templates still render (covered by
-  `test_dashboard_views`).
+  per genre — same tell as the carousel wall was, but video is secondary; rotate
+  it the same way (reuse `build_carousel_hashtags`’s approach) if/when video is
+  prioritised.
+- Tests: **71 passing** (+1 hashtag rotation; fallback-verdict assertions folded
+  into the existing rating test). Templates still render (`test_dashboard_views`).
 
 ## Session changelog — performance-first cover redesign (prior)
 Brief: stop making the cover *prettier* — optimise it for stop-scroll, swipe-
