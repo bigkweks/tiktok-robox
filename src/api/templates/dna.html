@@ -1,0 +1,181 @@
+{% extends "base.html" %}
+{% block title %}Content DNA · the gemvault{% endblock %}
+{% block content %}
+
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Content DNA</h1>
+    <p class="page-subtitle">
+      not "what does a good carousel look like" — "why did the winners work".
+      upload screenshots of a carousel that actually performed; i extract the
+      underlying patterns and drive every future drop from them.
+    </p>
+  </div>
+</div>
+
+<div class="row g-4">
+
+  <!-- Upload -->
+  <div class="col-lg-4">
+    <div class="card">
+      <div class="card-header"><i class="bi bi-upload"></i> extract DNA from a winner</div>
+      <div class="card-body">
+        <form id="dnaForm" onsubmit="return submitDna(event)">
+          <label class="form-label">label (optional)</label>
+          <input class="form-control mb-3" name="label" id="dnaLabel"
+                 placeholder="e.g. horror pt 4 — 90k saves">
+          <label class="form-label">carousel slide screenshots</label>
+          <input class="form-control mb-3" type="file" id="dnaFiles" name="files"
+                 accept="image/*" multiple required>
+          <button class="btn btn-primary w-100" type="submit" id="dnaBtn">
+            <i class="bi bi-fingerprint me-1"></i> extract DNA
+          </button>
+        </form>
+        <div id="dnaResult" class="mt-3" style="display:none"></div>
+        <p class="text-muted mt-3 mb-0" style="font-size:0.75rem">
+          one carousel = a guess (confidence is capped). the more proven winners
+          you feed it, the more the recurring patterns harden into high-confidence
+          laws the generator follows.
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Consolidated blueprint -->
+  <div class="col-lg-8">
+    <div class="card">
+      <div class="card-header">
+        <i class="bi bi-diagram-3"></i> active blueprint
+        <span class="id-chip ms-2">{{ consolidated.label }}</span>
+        {% if consolidated.is_prior %}
+          <span class="badge bg-secondary ms-2">prior — no uploads yet</span>
+        {% else %}
+          <span class="badge badge-gem ms-2">{{ consolidated.source_count }} source(s)</span>
+        {% endif %}
+        <span class="ms-auto text-accent" style="font-weight:700">
+          {{ (consolidated.overall_confidence * 100) | round(0) | int }}% conf
+        </span>
+      </div>
+      <div class="card-body">
+        {% if consolidated.notes %}
+          <div class="alert {% if consolidated.is_prior %}alert-warning{% else %}alert-info{% endif %} py-2 mb-3" style="font-size:0.8rem">
+            {{ consolidated.notes | join(' ') }}
+          </div>
+        {% endif %}
+
+        <!-- The five formulas -->
+        <div class="row g-3">
+          {% for key, f in consolidated.formulas.items() %}
+          <div class="col-md-6">
+            <div class="card h-100" style="background:var(--surface-3)">
+              <div class="card-body py-3">
+                <div class="d-flex align-items-center mb-1">
+                  <strong>{{ f.name }}</strong>
+                  <span class="ms-auto" style="font-size:0.75rem;font-weight:700;
+                    color:{% if f.confidence >= 0.7 %}var(--success){% elif f.confidence >= 0.4 %}var(--warning){% else %}var(--text-dim){% endif %}">
+                    {{ (f.confidence * 100) | round(0) | int }}%
+                  </span>
+                </div>
+                <div class="score-bar mb-2">
+                  <div class="score-bar-fill" style="width:{{ (f.confidence * 100) | round(0) | int }}%"></div>
+                </div>
+                {% if f.template %}
+                  <div class="text-muted" style="font-size:0.74rem;line-height:1.5">
+                    {{ f.template }}
+                  </div>
+                {% else %}
+                  <div class="text-dim" style="font-size:0.74rem">not yet evidenced</div>
+                {% endif %}
+              </div>
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+
+        <!-- The 14 dimensions -->
+        <details class="mt-3">
+          <summary>all 14 extracted patterns + confidence</summary>
+          <table class="table table-hover mt-2">
+            <thead><tr><th>dimension</th><th>why it works</th><th>conf</th><th>seen</th></tr></thead>
+            <tbody>
+              {% for dim in dimensions %}
+                {% set p = consolidated.patterns.get(dim) %}
+                <tr>
+                  <td style="white-space:nowrap"><code style="color:var(--cyan)">{{ dim }}</code></td>
+                  <td style="font-size:0.78rem">{{ p.observation if p else '—' }}</td>
+                  <td>
+                    {% if p %}
+                      <span style="font-weight:700;color:{% if p.confidence >= 0.7 %}var(--success){% elif p.confidence >= 0.4 %}var(--warning){% else %}var(--text-dim){% endif %}">
+                        {{ (p.confidence * 100) | round(0) | int }}%
+                      </span>
+                    {% else %}—{% endif %}
+                  </td>
+                  <td class="text-muted">{{ p.sample_count if p else 0 }}</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </details>
+      </div>
+    </div>
+
+    {% if profiles %}
+    <div class="card mt-4">
+      <div class="card-header"><i class="bi bi-collection"></i> extracted profiles ({{ profiles|length }})</div>
+      <div class="card-body">
+        <table class="table table-hover">
+          <thead><tr><th>label</th><th>slides</th><th>overall</th><th>when</th></tr></thead>
+          <tbody>
+            {% for p in profiles %}
+            <tr>
+              <td>{{ p.label }}</td>
+              <td class="text-muted">{{ p.source_count }}</td>
+              <td><span class="text-accent" style="font-weight:700">{{ (p.overall_confidence*100)|round(0)|int }}%</span></td>
+              <td class="text-muted" style="font-size:0.75rem">{{ p.created_at[:16] }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+{% block scripts %}
+<script>
+async function submitDna(e) {
+  e.preventDefault();
+  const btn = document.getElementById('dnaBtn');
+  const files = document.getElementById('dnaFiles').files;
+  if (!files.length) return false;
+  const fd = new FormData();
+  for (const f of files) fd.append('files', f);
+  fd.append('label', document.getElementById('dnaLabel').value || '');
+  btn.disabled = true;
+  btn.innerHTML = '<i class="bi bi-hourglass-split me-1"></i> extracting…';
+  try {
+    const r = await fetch('/dna/extract', { method:'POST', body: fd });
+    const data = await r.json();
+    const box = document.getElementById('dnaResult');
+    box.style.display = 'block';
+    if (data.error) {
+      box.innerHTML = '<div class="alert alert-warning py-2 mb-0">' + data.error + '</div>';
+    } else {
+      box.innerHTML = '<div class="alert alert-info py-2 mb-0">extracted ' +
+        data.slides + ' slide(s) · ' + Math.round(data.overall_confidence*100) +
+        '% confidence' + (data.is_prior ? ' (prior)' : '') + '. reloading…</div>';
+      setTimeout(() => location.reload(), 1200);
+    }
+  } catch (err) {
+    document.getElementById('dnaResult').style.display = 'block';
+    document.getElementById('dnaResult').innerHTML =
+      '<div class="alert alert-warning py-2 mb-0">' + err + '</div>';
+  }
+  btn.disabled = false;
+  btn.innerHTML = '<i class="bi bi-fingerprint me-1"></i> extract DNA';
+  return false;
+}
+</script>
+{% endblock %}
+{% endblock %}

@@ -516,10 +516,39 @@ def generate_cover_concepts(edition: str = "", part: int = 1) -> list[CoverConce
 
 # ── Selection ─────────────────────────────────────────────────────────────
 
+def _dna_bonus(concept: "CoverConcept", dna) -> float:
+    """Additive bonus to a concept's composite, derived from the extracted DNA
+    directives. Lets the *learned* pattern model — not a generic rule — decide
+    which archetype fits best. Magnitude scales with the DNA's confidence
+    (`dna.weight`) so a weakly-evidenced DNA only nudges the ranking.
+    """
+    if dna is None or not getattr(dna, "active", False) or not concept.score:
+        return 0.0
+    s = concept.score
+    bonus = 0.0
+    if getattr(dna, "prefer_curiosity_gap", False):
+        bonus += 0.10 * s.curiosity
+    if getattr(dna, "prefer_specificity", False):
+        bonus += 0.10 * s.specificity
+    low = concept.hook.lower()
+    if getattr(dna, "prefer_first_person", False) and ("i " in low or low.startswith("i")):
+        bonus += 0.06
+    # Penalise hooks longer than the DNA's observed reading pace.
+    max_words = getattr(dna, "max_hook_words", 9) or 9
+    if len(concept.hook.split()) > max_words:
+        bonus -= 0.06
+    # Reward hooks that echo a signal word the DNA's hook drivers emphasised.
+    for kw in getattr(dna, "hook_keywords", ()):  # already a small, vetted set
+        if kw in low:
+            bonus += 0.03
+    return bonus * float(getattr(dna, "weight", 0.0) or 0.0)
+
+
 def select_cover_concept(
     edition: str = "",
     part: int = 1,
     used_hooks: Optional[set[str]] = None,
+    dna=None,
 ) -> CoverConcept:
     """
     Generate 10 cover concepts, reject weak ones, and return the best.
@@ -528,11 +557,15 @@ def select_cover_concept(
     concept — prevents a one-dimensionally-strong entry from winning with a
     fatal weakness elsewhere.
 
-    Selection: highest weighted composite score among passing candidates.
+    Selection: highest weighted composite score among passing candidates,
+    plus an optional DNA bonus. When `dna` (a GenerationDirectives derived from
+    the extracted Content DNA) is supplied and active, the winner is the concept
+    whose archetype best matches what the *proven* carousels actually did —
+    generation is driven by the extracted DNA, not a generic heuristic.
+
     If used_hooks prevents all passing candidates, the constraint is dropped
     (never blocks generation). If no concept passes the REJECT_FLOOR across
-    all dimensions, the highest composite is returned with the understanding
-    that the base archetypes are designed to pass.
+    all dimensions, the highest-ranked is returned.
     """
     used = used_hooks or set()
     concepts = generate_cover_concepts(edition, part)
@@ -549,7 +582,11 @@ def select_cover_concept(
         # Final fallback: all concepts (shouldn't happen with well-designed archetypes)
         candidates = concepts
 
-    return max(candidates, key=lambda c: c.score.composite if c.score else 0.0)
+    def rank(c: "CoverConcept") -> float:
+        base = c.score.composite if c.score else 0.0
+        return base + _dna_bonus(c, dna)
+
+    return max(candidates, key=rank)
 
 
 __all__ = [

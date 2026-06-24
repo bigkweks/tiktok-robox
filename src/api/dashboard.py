@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import Optional
 
 import structlog
-from fastapi import BackgroundTasks, FastAPI, Form, HTTPException, Request
+from fastapi import BackgroundTasks, FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.middleware.gzip import GZipMiddleware
 
 from src.logging_config import configure_logging as _configure_logging
@@ -373,6 +373,70 @@ async def download_carousel_zip(carousel_id: int):
         media_type="application/zip",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
+
+
+# ── Content DNA ────────────────────────────────────────────────────────
+
+@app.get("/dna", response_class=HTMLResponse)
+async def dna_page(request: Request):
+    """View the extracted Content DNA — the blueprint of *why* proven carousels
+    worked — plus every per-upload profile feeding it."""
+    from src.content.content_dna import DIMENSIONS
+    from src.content.dna_store import DNAStore
+    store = DNAStore()
+    consolidated = store.get_consolidated()
+    profiles = store.list_profiles()
+    return templates.TemplateResponse("dna.html", {
+        "request": request,
+        "consolidated": consolidated.as_dict(),
+        "profiles": [p.as_dict() for p in profiles],
+        "dimensions": list(DIMENSIONS),
+    })
+
+
+@app.post("/dna/extract")
+async def dna_extract(files: list[UploadFile] = File(...), label: str = Form(default="")):
+    """Upload screenshots of a successful carousel → extract its Content DNA.
+
+    Saves the screenshots, runs the vision extractor, persists the profile, and
+    rebuilds the consolidated blueprint that future generation reads from.
+    """
+    from src.content.content_dna import ContentDNAExtractor
+    from src.content.dna_store import DNAStore
+
+    payloads: list[tuple[str, bytes]] = []
+    for f in files:
+        data = await f.read()
+        if data:
+            payloads.append((f.filename or "slide.png", data))
+    if not payloads:
+        return JSONResponse(status_code=400, content={"error": "no files uploaded"})
+
+    store = DNAStore()
+    saved_paths = store.save_screenshots(payloads)
+
+    # Vision extraction can hit the network — run it off the event loop.
+    extractor = ContentDNAExtractor()
+    profile = await asyncio.get_event_loop().run_in_executor(
+        None, extractor.extract, saved_paths, label,
+    )
+    pid = store.save_profile(profile)
+
+    return {
+        "status": "extracted",
+        "profile_id": pid,
+        "slides": len(saved_paths),
+        "overall_confidence": profile.overall_confidence,
+        "is_prior": profile.is_prior,
+        "profile": profile.as_dict(),
+    }
+
+
+@app.get("/api/dna/consolidated")
+async def api_dna_consolidated():
+    """The active consolidated DNA blueprint generation reads from."""
+    from src.content.dna_store import DNAStore
+    return DNAStore().get_consolidated().as_dict()
 
 
 # ── Analytics ingestion ───────────────────────────────────────────────

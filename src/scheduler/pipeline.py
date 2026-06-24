@@ -232,6 +232,15 @@ class Pipeline:
         from src.content.carousel_quality import (  # noqa: PLC0415
             build_carousel_hashtags, finalize_carousel, pick_footer_cta,
         )
+        # Drive generation from the extracted Content DNA: the consolidated
+        # blueprint of WHY proven carousels worked steers cover selection. Falls
+        # back to the seeded prior when no winners have been uploaded yet.
+        dna_profile = None
+        try:
+            from src.content.dna_store import DNAStore  # noqa: PLC0415
+            dna_profile = DNAStore().get_consolidated()
+        except Exception as exc:
+            log.warning("pipeline.carousel_factory.dna_load_failed", error=str(exc))
         final = finalize_carousel(
             part=part,
             edition=edition,
@@ -240,7 +249,13 @@ class Pipeline:
             genres=[g.genre for c, g in batch],
             scores=[c.rating_score for c, g in batch],
             game_names=[g.name for c, g in batch],
+            dna=dna_profile,
         )
+        if final.get("dna_directives"):
+            log.info("pipeline.carousel_factory.dna_driven", part=part,
+                     cover_concept=final.get("cover_concept"),
+                     dna_source=(dna_profile.label if dna_profile else None),
+                     dna_confidence=(dna_profile.overall_confidence if dna_profile else 0.0))
         report = final["report"]
         plan = final.get("plan")
         log.info("pipeline.carousel_factory.quality", part=part,

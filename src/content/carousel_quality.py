@@ -602,6 +602,7 @@ def finalize_carousel(
     game_names: Optional[Sequence[str]] = None,
     used_hooks: Optional[set[str]] = None,
     max_attempts: int = 3,
+    dna=None,
 ) -> dict:
     """
     The single 'review before presenting' entry point. Returns a vetted cover
@@ -616,6 +617,10 @@ def finalize_carousel(
     Targets `top1pct_passed` AND a fully purposeful plan. If that bar can't be
     cleared it accepts anything that passes the minimum quality gate — and always
     returns the best version it built, never an un-revised draft.
+
+    When `dna` (a ContentDNAProfile extracted from proven carousels) is supplied,
+    the cover hook is chosen by what those winners actually did, not a generic
+    heuristic — generation is driven by the extracted DNA.
     """
     from src.content.caption_utils import _candidates, dedupe_carousel_captions
     from src.content.creator_brief import plan_carousel
@@ -625,8 +630,17 @@ def finalize_carousel(
     scores_list = list(scores) if scores is not None else [None] * n
     game_names_list = list(game_names) if game_names is not None else []
 
+    # Translate the extracted DNA (if any) into concrete generation directives
+    # that steer cover selection toward the proven patterns.
+    directives = None
+    if dna is not None:
+        from src.content.dna_directives import derive_directives
+        directives = derive_directives(dna)
+
     from src.content.cover_generator import select_cover_concept
-    _concept = select_cover_concept(edition=edition, part=part, used_hooks=used_hooks)
+    _concept = select_cover_concept(
+        edition=edition, part=part, used_hooks=used_hooks, dna=directives,
+    )
     cover_hook = _concept.hook
     cta = pick_cta(part)
     # Working copy; improvements carry forward across attempts.
@@ -691,6 +705,8 @@ def finalize_carousel(
         "report": report,
         "plan": plan,
         "attempts": attempts_taken,
+        "dna_directives": directives.as_dict() if directives is not None else None,
+        "cover_concept": _concept.name,
     }
 
 
