@@ -366,6 +366,10 @@ class ThumbnailGenerator:
         thumbnail_url: Optional[str],
     ) -> tuple[Path, Path]:
         """Generate both variants and return (path_a, path_b)."""
+        from src.content.fonts import strip_emoji  # noqa: PLC0415
+        # Roblox names / AI hooks may carry emoji the text font can't draw → tofu.
+        game_name = strip_emoji(game_name) or game_name
+        hook_text = strip_emoji(hook_text) if hook_text else hook_text
         thumb_dir = Path(self._settings.OUTPUT_DIR, "thumbnails", universe_id)
         path_a = thumb_dir / "variant_a.png"
         path_b = thumb_dir / "variant_b.png"

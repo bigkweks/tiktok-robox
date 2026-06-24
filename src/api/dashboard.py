@@ -319,19 +319,22 @@ class AnalyticsPayload(BaseModel):
 
 @app.post("/analytics/ingest")
 async def ingest_analytics(payload: AnalyticsPayload):
-    record = await _feedback.ingest_manual(
-        content_id=payload.content_id,
-        views=payload.views,
-        likes=payload.likes,
-        comments=payload.comments,
-        shares=payload.shares,
-        saves=payload.saves,
-        follows=payload.follows,
-        profile_visits=payload.profile_visits,
-        avg_watch_time_s=payload.avg_watch_time_s,
-        video_duration_s=payload.video_duration_s,
-        thumbnail_variant=payload.thumbnail_variant,
-    )
+    try:
+        record = await _feedback.ingest_manual(
+            content_id=payload.content_id,
+            views=payload.views,
+            likes=payload.likes,
+            comments=payload.comments,
+            shares=payload.shares,
+            saves=payload.saves,
+            follows=payload.follows,
+            profile_visits=payload.profile_visits,
+            avg_watch_time_s=payload.avg_watch_time_s,
+            video_duration_s=payload.video_duration_s,
+            thumbnail_variant=payload.thumbnail_variant,
+        )
+    except ValueError as exc:
+        return JSONResponse(status_code=400, content={"error": str(exc)})
     return {"status": "recorded", "analytics_id": record.id}
 
 

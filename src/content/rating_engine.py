@@ -112,27 +112,32 @@ Generate a JSON rating with this exact structure:
 
 CAROUSEL CAPTION VOICE (this single line sits on the game's screenshot — it MUST sound like a real teenage Roblox player typing fast, never like a brand or a marketer):
 
-These are REAL captions from a carousel that hit 118K views — match this voice EXACTLY:
+These are REAL captions from a carousel that hit 118K views — match this VOICE (do not copy them verbatim):
   - "only escape room thats actually challenging"
   - "well made game i spent 30+ hours in"
   - "GTA in roblox"
-  - "minecraft dropper if ukuk"
+  - "horror that actually scared me"
   - "MUST check out"
-  - "anime pvp if u know u know"
+  - "criminally underrated"
 
 Hard rules for carousel_caption:
   - 3 to 8 words. Shorter is better.
   - all lowercase EXCEPT you may CAPS one word for hype ("MUST", "INSANE").
   - NO ending punctuation. NO emojis. NO hashtags.
   - drop apostrophes ("thats", "dont", "its") — it reads as authentic.
-  - slang is good: "if ukuk", "if u know u know", "fr", "ngl", "no cap", "lowkey", "hits different".
+  - Write something SPECIFIC to THIS game. Lead with what makes it stand out
+    (its mechanic, genre, or vibe), not a filler slang tag.
+  - Slang ("fr", "ngl", "no cap", "lowkey", "hits different", "if u know u know")
+    is OK as seasoning, but use it sparingly — AT MOST one slang tag, and never
+    as a crutch you reach for every time. A plain specific caption beats a
+    generic slang one.
   - Pick ONE of these angles, whichever fits the game best:
       * genre comparison: "GTA in roblox", "minecraft dropper", "valorant but roblox"
       * personal flex: "spent 30+ hours in this", "cant stop playing this"
       * underrated: "no one talks about this", "criminally underrated"
       * pure hype (only for 9.5+): "MUST check out", "actual masterpiece"
-      * niche callout: "anime pvp if ukuk", "horror that actually scared me"
-  - Make it specific to THIS game's genre/vibe — never generic like "fun game" or "good game".
+      * niche callout: "horror that actually scared me", "puzzle game that broke my brain"
+  - Never generic like "fun game", "good game", or "if ukuk" on its own.
 
 HOOK RULES (this is the single most important field — most viewers leave in 1.5s):
 - Be concrete and specific, never generic. BAD: "This game is amazing".
@@ -217,6 +222,11 @@ class RatingEngine:
             tts_script = data.get("tts_script", self._fallback_tts(name, score, visits))
             hook_text = data.get("hook_text", self._fallback_hook(name, visits))
             carousel_caption = data.get("carousel_caption", self._fallback_carousel_caption(name, score, visits))
+
+            # Reject stuttering / empty captions ("... if ukuk ukuk") at the source.
+            from src.content.caption_utils import has_internal_repetition  # noqa: PLC0415
+            if not (carousel_caption or "").strip() or has_internal_repetition(carousel_caption):
+                carousel_caption = self._fallback_carousel_caption(name, score, visits)
 
             # Override label with hook if hook_text is empty
             if not hook_text:

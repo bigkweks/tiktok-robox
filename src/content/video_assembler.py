@@ -121,6 +121,20 @@ def _draw_centered(draw, text, cx, cy, font, fill, shadow_offset=4):
     draw.text((x, y), text, font=font, fill=fill)
 
 
+def _draw_centered_mixed(img: Image.Image, text, cx, cy, font, fill, shadow_offset=4) -> Image.Image:
+    """
+    Centered text that may contain emoji. Emoji are composited as real color
+    glyphs (never tofu); pure-text strings use the fast in-place path. Returns
+    the image — callers that draw afterwards must rebind their ImageDraw to it.
+    """
+    from src.content.fonts import contains_emoji, draw_mixed  # noqa: PLC0415
+    if contains_emoji(text):
+        return draw_mixed(img, (cx, cy), text, font, fill,
+                          anchor="mm", shadow_offset=shadow_offset)
+    _draw_centered(ImageDraw.Draw(img), text, cx, cy, font, fill, shadow_offset)
+    return img
+
+
 def _wrap_lines(text: str, max_chars: int = 22) -> list[str]:
     return textwrap.fill(text, width=max_chars).split("\n")
 
@@ -233,6 +247,13 @@ class VideoAssembler:
         except ImportError:
             log.error("video.moviepy_not_available")
             return None
+
+        # Free-text fields may carry emoji the burn-in font can't render → tofu.
+        from src.content.fonts import strip_emoji  # noqa: PLC0415
+        game_name = strip_emoji(game_name) or game_name
+        verdict = strip_emoji(verdict) if verdict else verdict
+        hook_text = strip_emoji(hook_text) if hook_text else hook_text
+        features = [strip_emoji(f) for f in features] if features else features
 
         output_dir = Path(self._settings.OUTPUT_DIR, "videos")
         output_dir.mkdir(parents=True, exist_ok=True)
@@ -443,7 +464,7 @@ class VideoAssembler:
             y = start_y + i * 120
             _draw_centered(draw, line, W // 2, y, font_large, (255, 255, 255))
 
-        _draw_centered(draw, "Rating reveal at the end 👀", W // 2, H - 220, font_small, (255, 215, 0))
+        bg = _draw_centered_mixed(bg, "Rating reveal at the end 👀", W // 2, H - 220, font_small, (255, 215, 0))
         return bg
 
     def _slide_reveal(self, name: str, game_img: Optional[Image.Image], score: float) -> Image.Image:
@@ -470,7 +491,7 @@ class VideoAssembler:
             _draw_centered(draw, line, W // 2, name_y + i * 100, title_font, (255, 255, 255))
 
         tag_font = _load_font(50)
-        _draw_centered(draw, "Reviewing 🔍", W // 2, int(H * 0.12), tag_font, (200, 200, 200))
+        bg = _draw_centered_mixed(bg, "Reviewing 🔍", W // 2, int(H * 0.12), tag_font, (200, 200, 200))
         return bg
 
     def _slide_stats(
@@ -508,7 +529,8 @@ class VideoAssembler:
             draw.rounded_rectangle(
                 [60, cy - 100, W - 60, cy + 130], radius=20, fill=(20, 22, 40),
             )
-            _draw_centered(draw, stat_label, W // 2, cy - 50, label_font, (170, 170, 200))
+            bg = _draw_centered_mixed(bg, stat_label, W // 2, cy - 50, label_font, (170, 170, 200))
+            draw = ImageDraw.Draw(bg)
             _draw_centered(draw, stat_val, W // 2, cy + 40, value_font, stat_color)
 
         return bg
@@ -556,7 +578,7 @@ class VideoAssembler:
 
         for i, feat in enumerate(display):
             y = int(H * 0.60) + i * 120
-            _draw_centered(draw, f"✓ {feat[:40]}", W // 2, y, feat_font, (220, 240, 255))
+            bg = _draw_centered_mixed(bg, f"✔️ {feat[:40]}", W // 2, y, feat_font, (220, 240, 255))
 
         return bg
 
@@ -635,6 +657,7 @@ class VideoAssembler:
 
         _draw_centered(draw, "Follow us for", W // 2, H // 2 - 200, sub_font, (200, 200, 240))
         _draw_centered(draw, "daily Roblox", W // 2, H // 2 - 90, cta_font, (255, 255, 255))
-        _draw_centered(draw, "hidden gems 💎", W // 2, H // 2 + 60, cta_font, accent)
+        bg = _draw_centered_mixed(bg, "hidden gems 💎", W // 2, H // 2 + 60, cta_font, accent)
+        draw = ImageDraw.Draw(bg)
         _draw_centered(draw, settings.CHANNEL_HANDLE, W // 2, H // 2 + 220, handle_font, (255, 255, 255))
         return bg

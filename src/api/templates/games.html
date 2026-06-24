@@ -43,7 +43,8 @@
             <td style="padding-left:1.25rem">
               <div class="d-flex align-items-center gap-2">
                 {% if game.thumbnail_url %}
-                  <img src="{{ game.thumbnail_url }}"
+                  <img src="{{ game.thumbnail_url }}" alt="{{ game.name }} thumbnail"
+                       width="52" height="29" onerror="imgFallback(this)"
                        style="width:52px;height:29px;border-radius:5px;object-fit:cover;flex-shrink:0;border:1px solid var(--border-hi)"
                        loading="lazy">
                 {% else %}

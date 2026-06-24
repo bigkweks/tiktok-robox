@@ -32,7 +32,7 @@ import structlog
 from PIL import Image, ImageDraw, ImageFilter
 
 from src.config import get_settings
-from src.content.fonts import emoji_image, load_font, paste_emoji
+from src.content.fonts import draw_mixed, emoji_image, load_font, paste_emoji, strip_emoji
 
 log = structlog.get_logger(__name__)
 
@@ -200,10 +200,10 @@ class CarouselGenerator:
         img = paste_emoji(img, stickers[0], W - 230, 250, 360, anchor="center", rotate=-12)
         img = paste_emoji(img, stickers[1], 230, H - 320, 360, anchor="center", rotate=10)
 
-        # subtle swipe hint
-        draw = ImageDraw.Draw(img)
+        # subtle swipe hint — use the Noto color arrow (➡️); the plain "→" has
+        # no glyph in the Poppins text font and would render as a tofu box.
         f_hint = load_font("medium", 50)
-        _centered(draw, "swipe →", W // 2, H - 150, f_hint, (190, 192, 200))
+        img = draw_mixed(img, (W // 2, H - 150), "swipe ➡️", f_hint, (190, 192, 200), anchor="mm")
 
         return img
 
@@ -228,15 +228,15 @@ class CarouselGenerator:
         f_creator = load_font("regular", 46)
         f_badge = load_font("semibold", 40)
 
-        # Fit name
-        name = game.name
+        # Fit name (strip emoji from the raw Roblox name so it never tofus)
+        name = strip_emoji(game.name) or game.name
         f_use = f_name if _text_w(draw, name, f_name) <= W - name_x - 40 else f_name_sm
         while _text_w(draw, name, f_use) > W - name_x - 40 and len(name) > 4:
             name = name[:-1]
         if name != game.name:
             name = name.rstrip() + "…"
         draw.text((name_x, 86), name, font=f_use, fill=(15, 15, 17))
-        draw.text((name_x, 162), game.creator or "Roblox", font=f_creator, fill=(120, 122, 130))
+        draw.text((name_x, 162), strip_emoji(game.creator or "") or "Roblox", font=f_creator, fill=(120, 122, 130))
 
         mat_label, mat_color = _maturity(game.genre)
         mtxt = f"Maturity: {mat_label}"
@@ -270,7 +270,7 @@ class CarouselGenerator:
         f_score = load_font("extrabold", 88)
         f_cap = load_font("bold", 62)
 
-        cap = game.carousel_caption or ""
+        cap = strip_emoji(game.carousel_caption or "")
         cap_lines = textwrap.wrap(cap, width=27)[:2] if cap else []
 
         # Anchor the whole block so the last caption line clears the stats bar
@@ -317,7 +317,7 @@ class CarouselGenerator:
         f_desc_h = load_font("bold", 48)
         draw.text((48, desc_y), "Description", font=f_desc_h, fill=(20, 20, 22))
 
-        desc = (game.description or "").strip().replace("\n", " ")
+        desc = strip_emoji((game.description or "").strip().replace("\n", " "))
         if desc:
             f_desc = load_font("regular", 44)
             wrapped = textwrap.wrap(desc, width=42)[:6]

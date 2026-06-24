@@ -80,12 +80,18 @@ class FeedbackLoop:
         )
 
         async with get_session() as session:
+            # Validate the content exists first — otherwise we'd write an orphan
+            # analytics row that silently vanishes from every join (the bug where
+            # users logged metrics against a wrong/blank ID and lost the data).
+            content = await session.get(Content, content_id)
+            if content is None:
+                raise ValueError(
+                    f"Content #{content_id} does not exist. Use the Content ID "
+                    f"shown on the Content Queue card or post-package page."
+                )
             session.add(record)
             await session.flush()
-
-            content = await session.get(Content, content_id)
-            if content:
-                content.status = "posted"
+            content.status = "posted"
 
         log.info(
             "feedback.ingested",

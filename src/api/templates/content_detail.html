@@ -8,7 +8,17 @@
   </a>
   <div>
     <h1 class="page-title mb-0">{{ game.name }}</h1>
-    <div class="text-muted mt-0" style="font-size:0.8rem">Post Package #{{ content.id }}</div>
+    <div class="d-flex align-items-center gap-2 mt-1 flex-wrap">
+      <span class="id-chip" title="Content / Generation ID — use this when logging analytics">Content #{{ content.id }}</span>
+      <span class="badge
+        {% if content.status == 'pending' %}bg-warning text-dark
+        {% elif content.status == 'approved' %}bg-success
+        {% elif content.status == 'posted' %}bg-primary
+        {% else %}bg-secondary{% endif %}" style="font-size:0.68rem">{{ content.status }}</span>
+      {% if content.posted_at %}
+        <small class="text-muted" style="font-size:0.72rem"><i class="bi bi-check2-all me-1"></i>posted {{ content.posted_at.strftime('%b %d') }}</small>
+      {% endif %}
+    </div>
   </div>
   {% if content.rating_score %}
     <span class="score-badge ms-auto
@@ -33,7 +43,7 @@
           </div>
           <a href="/output/thumbnails/{{ game.universe_id }}/variant_a.png" target="_blank" class="d-block">
             <img src="/output/thumbnails/{{ game.universe_id }}/variant_a.png"
-                 class="img-fluid rounded"
+                 class="img-fluid rounded" alt="Thumbnail variant A" onerror="imgFallback(this)"
                  style="border:2px solid var(--border-hi);border-radius:8px;width:100%">
           </a>
         </div>
@@ -43,7 +53,7 @@
           </div>
           <a href="/output/thumbnails/{{ game.universe_id }}/variant_b.png" target="_blank" class="d-block">
             <img src="/output/thumbnails/{{ game.universe_id }}/variant_b.png"
-                 class="img-fluid rounded"
+                 class="img-fluid rounded" alt="Thumbnail variant B" onerror="imgFallback(this)"
                  style="border:2px solid var(--border-hi);border-radius:8px;width:100%">
           </a>
         </div>

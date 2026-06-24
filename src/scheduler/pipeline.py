@@ -206,12 +206,21 @@ class Pipeline:
         part = self._carousel_part_counter
         self._carousel_part_counter += 1
 
+        # Guard against repeated phrasing across the 5 slides ("X if ukuk",
+        # "Y if ukuk", …) — rewrite duplicates/crutch repeats to varied lines.
+        from src.content.caption_utils import dedupe_carousel_captions  # noqa: PLC0415
+        deduped_captions = dedupe_carousel_captions(
+            [c.carousel_caption or "" for c, g in batch],
+            genres=[g.genre for c, g in batch],
+            scores=[c.rating_score for c, g in batch],
+        )
+
         carousel_games = [
             CarouselGame(
                 name=g.name,
                 creator=g.creator_name or "",
                 score=c.rating_score,
-                carousel_caption=c.carousel_caption or "",
+                carousel_caption=deduped_captions[idx],
                 like_ratio=g.like_ratio,
                 active_players=g.active_players,
                 thumbnail_url=g.thumbnail_url,
@@ -220,7 +229,7 @@ class Pipeline:
                 visits=g.visits,
                 description=g.description or "",
             )
-            for c, g in batch
+            for idx, (c, g) in enumerate(batch)
         ]
 
         slug = f"part{part:03d}"

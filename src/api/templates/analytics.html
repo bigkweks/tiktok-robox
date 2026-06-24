@@ -52,9 +52,13 @@
       <div class="card-header"><i class="bi bi-cloud-upload me-2"></i>Log Analytics for a Video</div>
       <div class="card-body">
         <div class="row g-3">
-          <div class="col-sm-6">
-            <label class="small">Content ID</label>
-            <input type="number" id="contentId" class="form-control" placeholder="From queue page">
+          <div class="col-12">
+            <label class="small">Content ID <span class="text-danger" style="font-size:0.7rem">required</span></label>
+            <input type="number" id="contentId" class="form-control" placeholder="e.g. 42" min="1">
+            <div class="text-muted" style="font-size:0.73rem;margin-top:0.35rem;text-transform:none;letter-spacing:0;font-weight:400">
+              <i class="bi bi-info-circle me-1"></i>The <strong style="color:var(--text)">Content #N</strong> shown on each
+              <a href="/queue" style="color:var(--brand)">Content Queue</a> card and the post-package page — this links your TikTok metrics to that exact post.
+            </div>
           </div>
           <div class="col-sm-6">
             <label class="small">Views</label>
@@ -191,8 +195,14 @@
 
 <script>
 async function submitAnalytics() {
+  const cid = parseInt(document.getElementById('contentId').value);
+  const el = document.getElementById('submitResult');
+  if (!cid || cid < 1) {
+    el.innerHTML = '<span class="text-danger"><i class="bi bi-x-circle me-1"></i>Enter the Content ID (the <strong>Content #N</strong> from the Queue) before submitting.</span>';
+    return;
+  }
   const payload = {
-    content_id: parseInt(document.getElementById('contentId').value) || 0,
+    content_id: cid,
     views: parseInt(document.getElementById('views').value) || 0,
     likes: parseInt(document.getElementById('likes').value) || 0,
     comments: parseInt(document.getElementById('comments').value) || 0,
@@ -210,12 +220,11 @@ async function submitAnalytics() {
     body: JSON.stringify(payload),
   });
   const data = await r.json();
-  const el = document.getElementById('submitResult');
   if (data.analytics_id) {
-    el.innerHTML = '<span class="text-success"><i class="bi bi-check-circle me-1"></i>Recorded (ID: ' + data.analytics_id + '). Reloading...</span>';
+    el.innerHTML = '<span class="text-success"><i class="bi bi-check-circle me-1"></i>Recorded for Content #' + cid + ' (analytics ID ' + data.analytics_id + '). Reloading...</span>';
     setTimeout(() => location.reload(), 1500);
   } else {
-    el.innerHTML = '<span class="text-danger"><i class="bi bi-x-circle me-1"></i>Error: ' + JSON.stringify(data) + '</span>';
+    el.innerHTML = '<span class="text-danger"><i class="bi bi-x-circle me-1"></i>' + (data.error || ('Error: ' + JSON.stringify(data))) + '</span>';
   }
 }
 </script>
