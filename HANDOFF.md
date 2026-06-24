@@ -152,9 +152,31 @@ src/api/templates/   base.html (dark theme + .id-chip + imgFallback helper),
   follows-per-post.
 - Pipeline batches carousels every 8h; manual "⚡ Generate Now" button.
 - Video + thumbnail pipeline intact (badge-overlap bug fixed).
-- **Test suite: 53 passing**. See "Testing" below.
+- **Test suite: 54 passing**. See "Testing" below.
 
-## Session changelog — engagement blitz (latest session)
+## Session changelog — Roblox-fidelity game slide (latest session)
+Goal: make the carousel game slide look like a real Roblox game page.
+Driven by two reference screenshots the user sent (Sell Lemons page).
+
+- **Stat row rebuilt to match Roblox exactly** (the "like / active / notify /
+  favorite" control bar). Was a centered 4-column row of color emoji framed by
+  hairlines; now a **left-aligned row of light-grey rounded pills** with **flat
+  monochrome glyphs** (Roblox uses grey icons, not playful color emoji). The
+  like pill shows **👍 % 👎** together; then **👥 82.3K active**, **🔔 Notify**,
+  **⭐**. Helpers: `_mono_icon` (recolors a Noto emoji silhouette to one grey),
+  `_draw_stat_pills`, `_active_label` ("82.3K active" style), `_emoji_px`.
+- **Color emoji kept in the game name + description** (was stripped). The real
+  Roblox name "Sell Lemons 👍" and emoji-rich descriptions (🍋 💵 🤑 …) now render
+  via `draw_mixed`, matching the live page. Name still fits/truncates (measured
+  with `measure_mixed`).
+- **Maturity is now plain grey text** ("Maturity: Minimal") under the creator,
+  like Roblox — dropped the colored pill.
+- **No Events section** (user asked not to include it) — slide never had one.
+- Font: Roblox's "Builder Sans" isn't available in the sandbox (only Poppins +
+  DejaVu); kept Poppins. If we want a closer face we'd have to bundle one.
+- Test +1: name + description retain real color emoji on the game slide.
+
+## Session changelog — engagement blitz (prior session)
 Focused on watch-time / follow-rate maximisation + a real duplicate bug.
 All on `claude/handoff-file-continue-nmksfs`.
 

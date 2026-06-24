@@ -168,3 +168,24 @@ def test_game_slide_without_blurb_still_renders():
     )
     slide = gen._make_game_slide(game)
     assert slide.size == (1080, 1920)
+
+
+def test_game_slide_keeps_color_emoji_in_name_and_description():
+    """Roblox-fidelity: the real name + description keep their color emoji."""
+    from src.content.carousel_generator import CarouselGenerator, CarouselGame
+    from src.config import get_settings
+    gen = CarouselGenerator.__new__(CarouselGenerator)
+    gen._settings = get_settings()
+    game = CarouselGame(
+        name="Sell Lemons 👍", creator="BloxByte Games", score=8.6,
+        carousel_caption="sell lemons get rich", like_ratio=0.95,
+        active_players=82_300, thumbnail_url=None, icon_url=None, genre="simulator",
+        visits=216_000_000,
+        description="Sell Lemons 🍋 Make 💵🤑 Unlock unique powers 💪 Make deals 🤝",
+        blurb="",  # no callout → description starts right under the stat pills
+    )
+    slide = gen._make_game_slide(game)
+    # Header band carries the name's color emoji (👍).
+    assert _emoji_band_is_colorful(slide.crop((0, 70, 1080, 170)))
+    # Description band carries the real Roblox color emoji.
+    assert _emoji_band_is_colorful(slide.crop((0, 1230, 1080, 1560)))

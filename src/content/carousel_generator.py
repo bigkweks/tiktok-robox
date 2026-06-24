@@ -22,6 +22,7 @@ Why it works (from the post analytics):
 from __future__ import annotations
 
 import io
+import re
 import textwrap
 from dataclasses import dataclass
 from pathlib import Path
@@ -29,7 +30,7 @@ from typing import Optional
 
 import requests
 import structlog
-from PIL import Image, ImageDraw, ImageFilter
+from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
 from src.config import get_settings
 from src.content.fonts import (
@@ -137,6 +138,83 @@ def _format_active(n: int) -> str:
     if n >= 1000:
         return f"{n / 1000:.0f}K"
     return str(n)
+
+
+def _active_label(n: int) -> str:
+    """Roblox-style active count, e.g. '82.3K active', '1.2M active', '947 active'."""
+    if n >= 1_000_000:
+        return f"{n / 1_000_000:.1f}M active"
+    if n >= 1000:
+        return f"{n / 1000:.1f}K active"
+    return f"{n} active"
+
+
+def _emoji_px(font: ImageFont.FreeTypeFont) -> int:
+    """The emoji_size draw_mixed uses for this font, so measuring stays in sync."""
+    ascent, descent = font.getmetrics()
+    return int((ascent + descent) * 0.92)
+
+
+def _mono_icon(char: str, size: int, color: tuple[int, int, int]) -> Optional[Image.Image]:
+    """
+    A single flat monochrome icon: the Noto emoji silhouette recolored to one
+    grey. Roblox's stat row uses flat grey glyphs (not the playful color emoji),
+    so flattening 👍/👥/🔔/⭐ to grey makes the row read as native Roblox UI.
+    """
+    em = emoji_image(char, size)
+    if em is None:
+        return None
+    alpha = em.split()[3]
+    solid = Image.new("RGBA", em.size, color + (255,))
+    return Image.composite(solid, Image.new("RGBA", em.size, (0, 0, 0, 0)), alpha)
+
+
+def _draw_stat_pills(
+    img: Image.Image,
+    x0: int,
+    y: int,
+    pills: list[list[tuple[str, str]]],
+    *,
+    pill_h: int = 74,
+    icon_size: int = 40,
+    gap: int = 12,
+    pad_x: int = 24,
+    pill_gap: int = 14,
+    fill: tuple[int, int, int] = (240, 241, 243),
+    ink: tuple[int, int, int] = (45, 47, 51),
+    icon_col: tuple[int, int, int] = (64, 66, 70),
+) -> Image.Image:
+    """
+    Draw a left-aligned row of Roblox-style grey pills. Each pill is a list of
+    ('icon', emoji_char) / ('text', str) tokens, rendered with flat grey icons.
+    Returns the (possibly new) image.
+    """
+    f = load_font("medium", 40)
+    draw = ImageDraw.Draw(img)
+    x = x0
+    for tokens in pills:
+        content_w = 0
+        for i, (kind, val) in enumerate(tokens):
+            content_w += icon_size if kind == "icon" else int(draw.textlength(val, font=f))
+            if i < len(tokens) - 1:
+                content_w += gap
+        pw = content_w + pad_x * 2
+        draw.rounded_rectangle([x, y, x + pw, y + pill_h], radius=pill_h // 2, fill=fill)
+        cx = x + pad_x
+        for kind, val in tokens:
+            if kind == "icon":
+                ic = _mono_icon(val, icon_size, icon_col)
+                if ic is not None:
+                    base = img.convert("RGBA")
+                    base.alpha_composite(ic, (int(cx), int(y + (pill_h - icon_size) // 2)))
+                    img = base.convert("RGB")
+                    draw = ImageDraw.Draw(img)
+                cx += icon_size + gap
+            else:
+                draw.text((cx, y + (pill_h - 40) // 2 - 4), val, font=f, fill=ink)
+                cx += int(draw.textlength(val, font=f)) + gap
+        x += pw + pill_gap
+    return img
 
 
 class CarouselGenerator:
@@ -296,24 +374,28 @@ class CarouselGenerator:
         name_x = 250
         f_name = load_font("bold", 62)
         f_name_sm = load_font("bold", 50)
-        f_creator = load_font("regular", 46)
-        f_badge = load_font("semibold", 40)
+        f_creator = load_font("regular", 44)
+        f_mat = load_font("regular", 40)
+        maxw = W - name_x - 40
 
-        # Fit name (strip emoji from the raw Roblox name so it never tofus)
-        name = strip_emoji(game.name) or game.name
-        f_use = f_name if _text_w(draw, name, f_name) <= W - name_x - 40 else f_name_sm
-        while _text_w(draw, name, f_use) > W - name_x - 40 and len(name) > 4:
+        # Keep the real Roblox name WITH its color emoji (e.g. "Sell Lemons 👍"),
+        # rendered via draw_mixed so the emoji shows in color instead of tofu.
+        name = (game.name or "").strip()
+        f_use = f_name if measure_mixed(draw, name, f_name, _emoji_px(f_name)) <= maxw else f_name_sm
+        truncated = False
+        while measure_mixed(draw, name, f_use, _emoji_px(f_use)) > maxw and len(name) > 4:
             name = name[:-1]
-        if name != game.name:
+            truncated = True
+        if truncated:
             name = name.rstrip() + "…"
-        draw.text((name_x, 86), name, font=f_use, fill=(15, 15, 17))
-        draw.text((name_x, 162), strip_emoji(game.creator or "") or "Roblox", font=f_creator, fill=(120, 122, 130))
-
-        mat_label, mat_color = _maturity(game.genre)
-        mtxt = f"Maturity: {mat_label}"
-        mw = _text_w(draw, mtxt, f_badge)
-        draw.rounded_rectangle([name_x, 224, name_x + mw + 28, 224 + 52], radius=10, fill=(243, 244, 246))
-        draw.text((name_x + 14, 232), mtxt, font=f_badge, fill=mat_color)
+        img = draw_mixed(img, (name_x, 86), name, f_use, (15, 15, 17),
+                         emoji_size=_emoji_px(f_use), anchor="la")
+        # Creator + (Roblox-style) plain grey maturity line
+        img = draw_mixed(img, (name_x, 166), (game.creator or "Roblox"), f_creator,
+                         (120, 122, 130), emoji_size=_emoji_px(f_creator), anchor="la")
+        draw = ImageDraw.Draw(img)
+        mat_label, _ = _maturity(game.genre)
+        draw.text((name_x, 236), f"Maturity: {mat_label}", font=f_mat, fill=(150, 152, 160))
 
         # ── Thumbnail — THE HERO ──────────────────────────────────────
         thumb_top = 330
@@ -353,35 +435,20 @@ class CarouselGenerator:
             draw.text((48, y + 98 + li * 74), line, font=f_cap, fill=(255, 255, 255),
                       stroke_width=3, stroke_fill=(0, 0, 0))
 
-        # ── Roblox stats row ──────────────────────────────────────────
+        # ── Roblox stat pills (the "like / active / notify / favorite" row) ──
+        # Matches the real Roblox game-page control bar: left-aligned light-grey
+        # pills with flat monochrome glyphs. Like pill shows 👍 % 👎 together.
         sy = thumb_top + thumb_h
         row_h = 110
-        draw.rectangle([0, sy, W, sy + row_h], fill=(255, 255, 255))
-        draw.line([(0, sy), (W, sy)], fill=(232, 233, 236), width=2)
-        draw.line([(0, sy + row_h), (W, sy + row_h)], fill=(232, 233, 236), width=2)
-
-        f_stat = load_font("medium", 48)
         like_pct = f"{game.like_ratio * 100:.0f}%"
-        items = [
-            ("👍", like_pct, (40, 40, 44)),
-            ("👥", f"{_format_active(game.active_players)}", (40, 40, 44)),
-            ("🔔", "Notify", (90, 92, 100)),
-            ("⭐", "Fav", (90, 92, 100)),
+        pills: list[list[tuple[str, str]]] = [
+            [("icon", "👍"), ("text", like_pct), ("icon", "👎")],
+            [("icon", "👥"), ("text", _active_label(game.active_players))],
+            [("icon", "🔔"), ("text", "Notify")],
+            [("icon", "⭐")],
         ]
-        col_w = W // 4
-        for ci, (emoji_ch, txt, col) in enumerate(items):
-            cx = ci * col_w + col_w // 2
-            tw = _text_w(draw, txt, f_stat)
-            em_sz = 52
-            total_w = em_sz + 12 + tw
-            start_x = cx - total_w // 2
-            em = emoji_image(emoji_ch, em_sz)
-            if em:
-                base = img.convert("RGBA")
-                base.alpha_composite(em, (start_x, sy + (row_h - em_sz) // 2))
-                img = base.convert("RGB")
-                draw = ImageDraw.Draw(img)
-            draw.text((start_x + em_sz + 12, sy + (row_h - 48) // 2 - 4), txt, font=f_stat, fill=col)
+        img = _draw_stat_pills(img, 40, sy + 18, pills)
+        draw = ImageDraw.Draw(img)
 
         # ── "Why it slaps" highlight callout (AI verdict) ─────────────
         # A punchy creator pull-quote in an accent card. Sits above the real
@@ -412,12 +479,17 @@ class CarouselGenerator:
         f_desc_h = load_font("bold", 48)
         draw.text((48, desc_y), "Description", font=f_desc_h, fill=(20, 20, 22))
 
-        desc = strip_emoji((game.description or "").strip().replace("\n", " "))
+        # Keep the real description's color emoji (🍋 💵 🤑 …) like the live
+        # Roblox page — render each wrapped line through draw_mixed.
+        desc = re.sub(r"\s{2,}", " ", (game.description or "").strip().replace("\n", " "))
         if desc:
             f_desc = load_font("regular", 44)
-            wrapped = textwrap.wrap(desc, width=42)[:desc_lines_max]
+            es = _emoji_px(f_desc)
+            wrapped = textwrap.wrap(desc, width=38)[:desc_lines_max]
             for li, line in enumerate(wrapped):
-                draw.text((48, desc_y + 78 + li * 60), line, font=f_desc, fill=(95, 97, 105))
+                img = draw_mixed(img, (48, desc_y + 78 + li * 60), line, f_desc,
+                                 (95, 97, 105), emoji_size=es, anchor="la")
+            draw = ImageDraw.Draw(img)
 
         # bottom hairline + active player chip vibe (authentic Roblox footer)
         foot_y = H - 130
