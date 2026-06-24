@@ -55,11 +55,20 @@
       height: 56px;
     }
     .navbar-brand {
-      color: var(--accent) !important;
+      color: var(--text) !important;
       font-weight: 700;
-      font-size: 1.15rem;
-      letter-spacing: -0.01em;
+      font-size: 1.1rem;
+      letter-spacing: -0.02em;
       padding: 0;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    .navbar-brand .brand-mark {
+      width: 8px; height: 8px; border-radius: 2px;
+      background: var(--brand);
+      box-shadow: 0 0 0 3px var(--brand-glow);
+      flex-shrink: 0;
     }
     .navbar-brand .brand-sub { color: var(--text-muted); font-weight: 400; }
     .nav-item { display: flex; align-items: center; }
@@ -110,23 +119,31 @@
       padding: 0.875rem 1.25rem;
     }
 
-    /* ── Stat cards ── */
-    .stat-card { border-left: 3px solid var(--brand) !important; }
+    /* ── Stat / metric cards ──
+       Premium restraint: numbers are high-contrast text (not a coloured
+       accent), labels are quiet. Hierarchy comes from weight + size, not
+       from a rainbow of borders. */
+    .stat-card { }
     .stat-number {
-      font-size: 2rem;
+      font-size: 1.875rem;
       font-weight: 700;
-      color: var(--accent);
-      line-height: 1.15;
+      color: var(--text);
+      line-height: 1.1;
       letter-spacing: -0.03em;
+      font-variant-numeric: tabular-nums;
     }
     .stat-label {
       font-size: 0.7rem;
       font-weight: 600;
       text-transform: uppercase;
-      letter-spacing: 0.08em;
+      letter-spacing: 0.07em;
       color: var(--text-muted);
-      margin-top: 0.2rem;
+      margin-top: 0.35rem;
     }
+    /* A metric block aligned left (the premium pattern) rather than centred. */
+    .metric { padding: 1rem 1.15rem; }
+    .metric .stat-number { font-size: 1.625rem; }
+    .metric .stat-label { margin-top: 0.25rem; }
 
     /* ── Tables ── */
     .table {
@@ -368,6 +385,56 @@
       margin: 0.1rem 0 0;
     }
 
+    /* ── Workflow steps (numbered inline guidance, replaces noisy alert) ── */
+    .workflow-steps {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem 1.5rem;
+      padding: 0.85rem 1.15rem;
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      font-size: 0.82rem;
+      color: var(--text-muted);
+    }
+    .workflow-steps span { display: inline-flex; align-items: center; gap: 0.45rem; white-space: nowrap; }
+    .workflow-steps b {
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 18px; height: 18px; border-radius: 50%;
+      background: var(--surface-4); color: var(--text);
+      font-size: 0.68rem; font-weight: 700;
+    }
+
+    /* ── Action hint (small line under a button) ── */
+    .action-hint {
+      color: var(--text-muted);
+      font-size: 0.775rem;
+      margin-top: 0.5rem;
+      line-height: 1.4;
+    }
+
+    /* ── Count pill (e.g. pending count on a button) ── */
+    .count-pill {
+      position: absolute;
+      top: -6px; right: -6px;
+      min-width: 20px; height: 20px;
+      padding: 0 6px;
+      border-radius: 10px;
+      background: var(--brand);
+      color: #fff;
+      font-size: 0.7rem;
+      font-weight: 700;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 0 0 2px var(--surface-2);
+    }
+
+    /* ── Key/value table (clean two-column readout) ── */
+    .table.kv > tbody > tr > td { padding: 0.6rem 1.25rem; font-size: 0.875rem; }
+    .table.kv > tbody > tr > td:first-child { color: var(--text-muted); }
+    .table.kv > tbody > tr > td:last-child { color: var(--text); font-variant-numeric: tabular-nums; }
+
     /* ── Inline text utilities ── */
     .text-brand { color: var(--brand) !important; }
     .text-accent { color: var(--accent) !important; }
@@ -393,7 +460,7 @@
 <body>
   <nav class="navbar navbar-expand-lg navbar-dark">
     <div class="container-fluid" style="max-width:1440px;padding:0">
-      <a class="navbar-brand me-4" href="/">the gem<span class="brand-sub">vault</span></a>
+      <a class="navbar-brand me-4" href="/"><span class="brand-mark"></span>the gem<span class="brand-sub">vault</span></a>
       <div class="navbar-nav ms-auto d-flex flex-row gap-1">
         <div class="nav-item">
           <a class="nav-link {% if request.url.path == '/' %}active{% endif %}" href="/">
@@ -466,9 +533,9 @@
     }
     async function triggerContent() {
       const btn = document.getElementById('contentBtn');
-      btn.disabled = true; btn.innerHTML = '<i class="bi bi-hourglass-split me-1"></i>Running...';
+      btn.disabled = true; btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Running…';
       await post('/pipeline/run-content');
-      btn.innerHTML = '<i class="bi bi-check-circle me-1"></i>Started!';
+      btn.innerHTML = 'Started';
     }
   </script>
   {% block scripts %}{% endblock %}

@@ -4,30 +4,28 @@
 
 <div class="page-header">
   <div>
-    <h1 class="page-title"><i class="bi bi-images me-2" style="color:var(--brand)"></i>Photo Carousels</h1>
-    <p class="page-subtitle">Viral format — 6 slides · 5 hidden-gem games per post</p>
+    <h1 class="page-title">Carousels</h1>
+    <p class="page-subtitle">6 slides · 5 games per drop</p>
   </div>
-  <button class="btn btn-primary" onclick="triggerCarousel()" id="carouselBtn">
-    <i class="bi bi-lightning-charge me-1"></i>Generate Now
-  </button>
+  <button class="btn btn-primary" onclick="triggerCarousel()" id="carouselBtn">Generate now</button>
 </div>
 
-<div class="alert alert-info d-flex align-items-start gap-2 mb-4 py-3">
-  <i class="bi bi-phone mt-1" style="flex-shrink:0"></i>
-  <div style="font-size:0.875rem">
-    Approve a carousel, then <strong>save all 6 slides</strong> and copy the caption below.
-    Upload them to TikTok as a <strong>photo post</strong>, then hit <strong>Mark as Posted</strong>.
-  </div>
+<div class="workflow-steps mb-4">
+  <span><b>1</b> Approve</span>
+  <span><b>2</b> Save all 6 slides</span>
+  <span><b>3</b> Copy caption</span>
+  <span><b>4</b> Post to TikTok as a photo</span>
+  <span><b>5</b> Mark as posted</span>
 </div>
 
 {% if not carousels %}
 <div class="card">
   <div class="card-body text-center py-5">
     <i class="bi bi-images" style="font-size:2.5rem;color:var(--text-dim);display:block;margin-bottom:1rem"></i>
-    <div class="fw-semibold mb-1">nothing built yet</div>
+    <div class="fw-semibold mb-1">Nothing built yet</div>
     <p class="text-muted mb-0" style="font-size:0.875rem">
-      i need at least 5 rated games sitting in the queue first.<br>
-      run discovery, generate the content, then hit Generate Now.
+      You need at least 5 rated games in the queue first —
+      run discovery, generate content, then hit Generate now.
     </p>
   </div>
 </div>
@@ -115,8 +113,8 @@
     {# Caption #}
     {% if post.caption %}
     <div>
-      <div class="text-muted mb-2" style="font-size:0.75rem;font-weight:600;text-transform:uppercase;letter-spacing:0.06em">
-        <i class="bi bi-chat-text me-1"></i>TikTok Caption
+      <div class="text-muted mb-2" style="font-size:0.7rem;font-weight:600;text-transform:uppercase;letter-spacing:0.07em">
+        TikTok caption
       </div>
       <div style="position:relative">
         <pre class="caption-box" id="caption-{{ post.id }}">{{ post.caption }}
@@ -189,14 +187,14 @@ async function saveCarouselToPhotos(btn) {
 async function triggerCarousel() {
   const btn = document.getElementById('carouselBtn');
   btn.disabled = true;
-  btn.innerHTML = '<i class="bi bi-hourglass-split me-1"></i>Generating...';
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Generating…';
   const r = await post('/pipeline/run-carousel');
   if (r.carousels) {
-    btn.innerHTML = `<i class="bi bi-check-circle me-1"></i>Done! Part ${r.part}`;
+    btn.innerHTML = `Done — part ${r.part}`;
     btn.classList.remove('btn-primary');
     btn.classList.add('btn-success');
   } else {
-    btn.innerHTML = '<i class="bi bi-exclamation-triangle me-1"></i>Not enough games yet';
+    btn.innerHTML = 'Not enough games yet';
     btn.classList.add('btn-warning');
     btn.style.color = '#000';
     btn.disabled = false;

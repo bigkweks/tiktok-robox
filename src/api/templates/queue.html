@@ -4,8 +4,8 @@
 
 <div class="page-header">
   <div>
-    <h1 class="page-title"><i class="bi bi-list-check me-2" style="color:var(--brand)"></i>Content Queue</h1>
-    <p class="page-subtitle">{{ items | length }} {{ status }} items</p>
+    <h1 class="page-title">Content queue</h1>
+    <p class="page-subtitle">{{ items | length }} {{ status }} {{ 'item' if items | length == 1 else 'items' }}</p>
   </div>
   <div class="btn-group">
     {% for s in statuses %}

@@ -4,8 +4,8 @@
 
 <div class="page-header mb-4">
   <div>
-    <h1 class="page-title"><i class="bi bi-graph-up me-2" style="color:var(--brand)"></i>Analytics & Feedback Loop</h1>
-    <p class="page-subtitle">Log TikTok performance data to improve the AI scoring model</p>
+    <h1 class="page-title">Analytics</h1>
+    <p class="page-subtitle">Log each post's TikTok metrics — the scoring model learns from what actually lands.</p>
   </div>
 </div>
 
@@ -49,7 +49,7 @@
 <div class="row g-3 mb-4">
   <div class="col-lg-7">
     <div class="card h-100">
-      <div class="card-header"><i class="bi bi-cloud-upload me-2"></i>Log Analytics for a Video</div>
+      <div class="card-header">Log a video's metrics</div>
       <div class="card-body">
         <div class="row g-3">
           <div class="col-12">
@@ -113,9 +113,7 @@
             </select>
           </div>
         </div>
-        <button type="button" class="btn btn-primary mt-3 w-100" onclick="submitAnalytics()">
-          <i class="bi bi-cloud-upload me-1"></i>Submit Analytics
-        </button>
+        <button type="button" class="btn btn-primary mt-3 w-100" onclick="submitAnalytics()">Submit metrics</button>
         <div id="submitResult" class="mt-2" style="font-size:0.85rem"></div>
       </div>
     </div>
@@ -123,7 +121,7 @@
 
   <div class="col-lg-5">
     <div class="card mb-3">
-      <div class="card-header"><i class="bi bi-trophy me-2" style="color:var(--accent)"></i>A/B Thumbnail Results</div>
+      <div class="card-header">A/B thumbnail results</div>
       <div class="card-body">
         <div class="text-center mb-3 py-2" style="background:rgba(226,35,26,0.10);border-radius:8px;border:1px solid rgba(226,35,26,0.16)">
           <div class="text-muted" style="font-size:0.75rem;letter-spacing:0.06em;text-transform:uppercase;margin-bottom:0.25rem">Best Performing</div>
@@ -160,7 +158,7 @@
 
 {# ── Recent post performance ── #}
 <div class="card">
-  <div class="card-header"><i class="bi bi-clock-history me-2"></i>Recent Post Performance</div>
+  <div class="card-header">Recent posts</div>
   <div class="card-body p-0">
     {% if not recent %}
     <div class="text-center text-muted py-5" style="font-size:0.875rem">

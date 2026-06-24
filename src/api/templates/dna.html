@@ -6,9 +6,8 @@
   <div>
     <h1 class="page-title">Content DNA</h1>
     <p class="page-subtitle">
-      not "what does a good carousel look like" — "why did the winners work".
-      upload screenshots of a carousel that actually performed; i extract the
-      underlying patterns and drive every future drop from them.
+      Upload screenshots of a carousel that performed. The system extracts why it
+      worked and drives every future drop from those patterns.
     </p>
   </div>
 </div>
@@ -18,24 +17,22 @@
   <!-- Upload -->
   <div class="col-lg-4">
     <div class="card">
-      <div class="card-header"><i class="bi bi-upload"></i> extract DNA from a winner</div>
+      <div class="card-header">Extract DNA from a winner</div>
       <div class="card-body">
         <form id="dnaForm" onsubmit="return submitDna(event)">
-          <label class="form-label">label (optional)</label>
+          <label class="form-label">Label (optional)</label>
           <input class="form-control mb-3" name="label" id="dnaLabel"
-                 placeholder="e.g. horror pt 4 — 90k saves">
-          <label class="form-label">carousel slide screenshots</label>
+                 placeholder="e.g. Horror pt 4 — 90k saves">
+          <label class="form-label">Carousel slide screenshots</label>
           <input class="form-control mb-3" type="file" id="dnaFiles" name="files"
                  accept="image/*" multiple required>
-          <button class="btn btn-primary w-100" type="submit" id="dnaBtn">
-            <i class="bi bi-fingerprint me-1"></i> extract DNA
-          </button>
+          <button class="btn btn-primary w-100" type="submit" id="dnaBtn">Extract DNA</button>
         </form>
         <div id="dnaResult" class="mt-3" style="display:none"></div>
-        <p class="text-muted mt-3 mb-0" style="font-size:0.75rem">
-          one carousel = a guess (confidence is capped). the more proven winners
-          you feed it, the more the recurring patterns harden into high-confidence
-          laws the generator follows.
+        <p class="text-muted mt-3 mb-0" style="font-size:0.78rem;line-height:1.5">
+          One carousel is a guess, so its confidence is capped. The more proven
+          winners you add, the more recurring patterns harden into high-confidence
+          rules the generator follows.
         </p>
       </div>
     </div>
@@ -45,7 +42,7 @@
   <div class="col-lg-8">
     <div class="card">
       <div class="card-header">
-        <i class="bi bi-diagram-3"></i> active blueprint
+        Active blueprint
         <span class="id-chip ms-2">{{ consolidated.label }}</span>
         {% if consolidated.is_prior %}
           <span class="badge bg-secondary ms-2">prior — no uploads yet</span>
@@ -121,7 +118,7 @@
 
     {% if profiles %}
     <div class="card mt-4">
-      <div class="card-header"><i class="bi bi-collection"></i> extracted profiles ({{ profiles|length }})</div>
+      <div class="card-header">Extracted profiles ({{ profiles|length }})</div>
       <div class="card-body">
         <table class="table table-hover">
           <thead><tr><th>label</th><th>slides</th><th>overall</th><th>when</th></tr></thead>
@@ -153,7 +150,7 @@ async function submitDna(e) {
   for (const f of files) fd.append('files', f);
   fd.append('label', document.getElementById('dnaLabel').value || '');
   btn.disabled = true;
-  btn.innerHTML = '<i class="bi bi-hourglass-split me-1"></i> extracting…';
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Extracting…';
   try {
     const r = await fetch('/dna/extract', { method:'POST', body: fd });
     const data = await r.json();
@@ -173,7 +170,7 @@ async function submitDna(e) {
       '<div class="alert alert-warning py-2 mb-0">' + err + '</div>';
   }
   btn.disabled = false;
-  btn.innerHTML = '<i class="bi bi-fingerprint me-1"></i> extract DNA';
+  btn.innerHTML = 'Extract DNA';
   return false;
 }
 </script>

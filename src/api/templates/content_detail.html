@@ -35,7 +35,7 @@
   {# ── Col 1: Thumbnails + Video ── #}
   <div class="col-lg-4">
     <div class="card mb-3">
-      <div class="card-header"><i class="bi bi-image me-2"></i>Thumbnails</div>
+      <div class="card-header">Thumbnails</div>
       <div class="card-body">
         <div class="mb-3">
           <div class="d-flex justify-content-between align-items-center mb-2">
@@ -62,7 +62,7 @@
 
     {% if content.video_path %}
     <div class="card">
-      <div class="card-header"><i class="bi bi-camera-video me-2"></i>Video</div>
+      <div class="card-header">Video</div>
       <div class="card-body">
         <video controls class="w-100 rounded mb-2" style="max-height:360px">
           <source src="/output/videos/{{ game.universe_id }}.mp4" type="video/mp4">
@@ -79,9 +79,7 @@
   {# ── Col 2: Captions ── #}
   <div class="col-lg-4">
     <div class="card mb-3">
-      <div class="card-header">
-        <i class="bi bi-chat-quote me-2"></i>Caption A — Rating Angle
-      </div>
+      <div class="card-header">Caption A — rating angle</div>
       <div class="card-body">
         <pre class="caption-box mb-3" id="captionA">{{ caption_a }}</pre>
         <button class="btn btn-outline-secondary btn-sm w-100" onclick="copyText('captionA', this, 'Caption A')">
@@ -90,9 +88,7 @@
       </div>
     </div>
     <div class="card">
-      <div class="card-header">
-        <i class="bi bi-chat-quote me-2"></i>Caption B — Hook Angle
-      </div>
+      <div class="card-header">Caption B — hook angle</div>
       <div class="card-body">
         <pre class="caption-box mb-3" id="captionB">{{ caption_b }}</pre>
         <button class="btn btn-outline-secondary btn-sm w-100" onclick="copyText('captionB', this, 'Caption B')">
@@ -105,7 +101,7 @@
   {# ── Col 3: AI breakdown + actions ── #}
   <div class="col-lg-4">
     <div class="card mb-3">
-      <div class="card-header"><i class="bi bi-robot me-2"></i>AI Rating Breakdown</div>
+      <div class="card-header">Rating breakdown</div>
       <div class="card-body">
         {% if content.rating_label %}
           <div class="mb-2">
@@ -128,7 +124,7 @@
     </div>
 
     <div class="card mb-3">
-      <div class="card-header"><i class="bi bi-graph-up-arrow me-2"></i>TikTok Predictions</div>
+      <div class="card-header">TikTok predictions</div>
       <div class="card-body p-0">
         <table class="table mb-0">
           <tbody>
@@ -159,7 +155,7 @@
 
     {% if content.tts_script %}
     <div class="card mb-3">
-      <div class="card-header"><i class="bi bi-mic me-2"></i>TTS Script</div>
+      <div class="card-header">TTS script</div>
       <div class="card-body">
         <pre class="caption-box" style="max-height:180px">{{ content.tts_script }}</pre>
       </div>
