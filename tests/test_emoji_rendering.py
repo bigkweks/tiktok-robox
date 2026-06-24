@@ -132,3 +132,39 @@ def test_carousel_title_slide_renders_emoji():
     gen._settings = get_settings()
     slide = gen._make_title_slide(EDITIONS[1], 3)  # Hidden Gems: 💎 + 😳 🤩
     assert _emoji_band_is_colorful(slide)
+
+
+def test_game_slide_blurb_callout_renders_color_emoji():
+    """The 'why it slaps' callout draws the 🔥 as a real color glyph and fits."""
+    from src.content.carousel_generator import CarouselGenerator, CarouselGame
+    from src.config import get_settings
+    gen = CarouselGenerator.__new__(CarouselGenerator)
+    gen._settings = get_settings()
+    game = CarouselGame(
+        name="Test Horror", creator="Dev", score=9.3,
+        carousel_caption="horror that actually scared me", like_ratio=0.92,
+        active_players=900, thumbnail_url=None, icon_url=None, genre="horror",
+        visits=750_000, description="Find the exit before it finds you.",
+        blurb="This is the scariest co-op horror hiding on Roblox right now.",
+    )
+    slide = gen._make_game_slide(game)
+    assert slide.size == (1080, 1920)
+    # Callout band (just below the stats row) must carry saturated emoji pixels.
+    band = slide.crop((0, 1150, 1080, 1420))
+    assert _emoji_band_is_colorful(band)
+
+
+def test_game_slide_without_blurb_still_renders():
+    """No verdict → no callout, description falls back to the full block."""
+    from src.content.carousel_generator import CarouselGenerator, CarouselGame
+    from src.config import get_settings
+    gen = CarouselGenerator.__new__(CarouselGenerator)
+    gen._settings = get_settings()
+    game = CarouselGame(
+        name="No Blurb", creator="Dev", score=7.5,
+        carousel_caption="worth a real shot", like_ratio=0.8,
+        active_players=120, thumbnail_url=None, icon_url=None, genre="obby",
+        visits=300_000, description="A tricky obby with 50 stages.", blurb="",
+    )
+    slide = gen._make_game_slide(game)
+    assert slide.size == (1080, 1920)

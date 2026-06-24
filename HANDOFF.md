@@ -152,7 +152,7 @@ src/api/templates/   base.html (dark theme + .id-chip + imgFallback helper),
   follows-per-post.
 - Pipeline batches carousels every 8h; manual "⚡ Generate Now" button.
 - Video + thumbnail pipeline intact (badge-overlap bug fixed).
-- **Test suite: 51 passing**. See "Testing" below.
+- **Test suite: 53 passing**. See "Testing" below.
 
 ## Session changelog — engagement blitz (latest session)
 Focused on watch-time / follow-rate maximisation + a real duplicate bug.
@@ -188,8 +188,17 @@ All on `claude/handoff-file-continue-nmksfs`.
 4. **Dashboard homepage made eye-catching.** New gradient **hero banner**
    ("💎 Roblox Hidden-Gem Factory 🚀" + Review Carousels CTA) and emoji on every
    stat label (🎮 ✅ ⏳ 🚀 💜 👀).
-5. **Tests +2**: fallback-caption variety across games, and new-genre captions
-   resolve to specific (non-generic) lines.
+5. **Game slides now hyped AND authentic.** Each game slide renders a punchy
+   **"🔥 why it slaps" accent callout** (an AI pull-quote) above the real Roblox
+   description. Reuses the already-generated `Content.rating_verdict` (no new DB
+   column / migration); `CarouselGame.blurb` carries it, threaded in
+   `run_carousel_factory`. The real description stays beneath (trimmed to 3 lines
+   when a callout is present) so the slide keeps its authentic game-page look.
+   Renderer wraps the blurb to ≤3 lines, grows the card to fit, and clears the
+   visits footer. No blurb → no callout, full description block as before.
+6. **Tests +4**: fallback-caption variety across games, new-genre captions
+   resolve to specific (non-generic) lines, blurb callout draws a real color 🔥
+   and fits, and the no-blurb path still renders.
 
 ## Session changelog — stabilization & polish (prior session)
 Five reported problems + a bug sweep + follow-up polish + the iPad save feature.

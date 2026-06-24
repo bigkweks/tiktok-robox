@@ -83,6 +83,7 @@ class CarouselGame:
     genre: Optional[str]
     visits: int
     description: str = ""       # real Roblox description (fills the lower card)
+    blurb: str = ""            # punchy AI "why it slaps" one-liner (highlighted callout)
 
 
 def _fetch_image(url: str, retries: int = 2) -> Optional[Image.Image]:
@@ -382,15 +383,39 @@ class CarouselGenerator:
                 draw = ImageDraw.Draw(img)
             draw.text((start_x + em_sz + 12, sy + (row_h - 48) // 2 - 4), txt, font=f_stat, fill=col)
 
-        # ── Description block (fills lower card like the viral post) ───
-        desc_y = sy + row_h + 36
+        # ── "Why it slaps" highlight callout (AI verdict) ─────────────
+        # A punchy creator pull-quote in an accent card. Sits above the real
+        # Roblox description so the slide reads hyped AND authentic.
+        blurb = strip_emoji((game.blurb or "").strip())
+        desc_lines_max = 5
+        cy = sy + row_h + 32
+        if blurb:
+            f_blurb = load_font("bold", 50)
+            blurb_lines = textwrap.wrap(blurb, width=30)[:3]
+            pad = 30
+            line_h = 62
+            box_h = pad + len(blurb_lines) * line_h + pad - 12
+            draw.rounded_rectangle([40, cy, W - 40, cy + box_h], radius=24, fill=(244, 242, 255))
+            draw.rounded_rectangle([40, cy, 54, cy + box_h], radius=6, fill=(124, 111, 255))
+            ty = cy + pad - 6
+            for li, line in enumerate(blurb_lines):
+                text = ("🔥 " + line) if li == 0 else line
+                img = draw_mixed(img, (76, ty + li * line_h), text, f_blurb,
+                                 (30, 26, 52), emoji_size=46, anchor="la")
+            draw = ImageDraw.Draw(img)
+            desc_y = cy + box_h + 34
+            desc_lines_max = 3   # leave room for the callout
+        else:
+            desc_y = cy
+
+        # ── Description block (real Roblox copy → authentic game-page feel) ──
         f_desc_h = load_font("bold", 48)
         draw.text((48, desc_y), "Description", font=f_desc_h, fill=(20, 20, 22))
 
         desc = strip_emoji((game.description or "").strip().replace("\n", " "))
         if desc:
             f_desc = load_font("regular", 44)
-            wrapped = textwrap.wrap(desc, width=42)[:6]
+            wrapped = textwrap.wrap(desc, width=42)[:desc_lines_max]
             for li, line in enumerate(wrapped):
                 draw.text((48, desc_y + 78 + li * 60), line, font=f_desc, fill=(95, 97, 105))
 

@@ -245,6 +245,7 @@ class Pipeline:
                 genre=g.genre,
                 visits=g.visits,
                 description=g.description or "",
+                blurb=c.rating_verdict or "",
             )
             for idx, (c, g) in enumerate(batch)
         ]
