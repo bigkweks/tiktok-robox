@@ -12,11 +12,17 @@ This is deterministic and heuristic (no extra API calls): fast, testable, and
 it never blocks generation. It is the "would a real creator post this?" gate.
 
 Scored dimensions (0..1): hook, curiosity, authenticity, specificity,
-shareability, follow. Plus a checklist of the explicit review questions.
+shareability, follow, readability, saveability, novelty.
+Plus a checklist of explicit review questions.
+
+`finalize_carousel` runs up to max_attempts=3 passes, escalating the caption-
+replacement threshold and rotating the hook on each retry, driving toward the
+top-1% quality bar (`top1pct_passed`).
 """
 from __future__ import annotations
 
 import re
+from collections import Counter
 from dataclasses import dataclass, field
 from typing import Optional, Sequence
 
@@ -215,6 +221,78 @@ def score_cta(text: Optional[str]) -> float:
     return _clamp(score)
 
 
+def score_readability(captions: Sequence[str]) -> float:
+    """Slide-by-slide readability: each caption scannable in under 2 seconds.
+
+    Rewards short word-counts (3–8 words) and varied openers so the batch
+    doesn't feel copy-pasted. Punishes walls of text (>10 words).
+    """
+    caps = [c for c in captions if c]
+    if not caps:
+        return 0.0
+    sigs = [signals(c) for c in caps]
+    in_range = sum(1 for s in sigs if 3 <= s.words <= 8) / len(sigs)
+    overlong = sum(1 for s in sigs if s.words > 10) / len(sigs)
+    first_words = []
+    for c in caps:
+        stripped = c.strip()
+        first_words.append(stripped.split()[0].lower() if stripped else "")
+    variety = len(set(w for w in first_words if w)) / max(len(first_words), 1)
+    return _clamp(0.40 * in_range + 0.30 * (1.0 - overlong) + 0.30 * variety)
+
+
+def score_saveability(captions: Sequence[str]) -> float:
+    """List-reference value: specific enough that a viewer saves it to return.
+
+    A carousel gets saved when it functions as a curated, referenceable list —
+    concrete game details (specificity) and varied caption angles (one isn't
+    just a rewording of another) are the two strongest signals.
+    """
+    caps = [c for c in captions if c]
+    if not caps:
+        return 0.0
+    sigs = [signals(c) for c in caps]
+    avg_spec = sum(s.specificity for s in sigs) / len(sigs)
+    # Varied angles: proxy by distinct 4-char prefixes (different sentence shapes)
+    prefixes = {c.strip().lower()[:4] for c in caps if c.strip()}
+    angle_variety = len(prefixes) / max(len(caps), 1)
+    length_bonus = 0.08 if len(caps) >= 5 else 0.0
+    return _clamp(0.50 * min(avg_spec / 2.0, 1.0) + 0.42 * angle_variety + length_bonus)
+
+
+_STOPWORDS: frozenset[str] = frozenset({
+    "the", "a", "an", "and", "or", "in", "on", "of",
+    "to", "is", "it", "i", "this", "that", "its", "you",
+})
+
+
+def score_novelty(captions: Sequence[str], cover_hook: str = "") -> float:
+    """Cross-slide freshness: no crutch words overused, no structural monotony.
+
+    Penalises any meaningful word that appears 3+ times across the batch (a
+    sign the copy is leaning on a crutch) and structural monotony where more
+    than one slide uses the exact same "X in/but roblox" pattern.
+    """
+    all_text = [c for c in captions if c]
+    if cover_hook:
+        all_text = [cover_hook] + all_text
+    if not all_text:
+        return 0.0
+    word_counts: Counter = Counter()
+    for text in all_text:
+        word_counts.update(
+            w for w in _WORDS.findall(text.lower())
+            if w not in _STOPWORDS and len(w) > 2
+        )
+    crutch_count = sum(1 for c in word_counts.values() if c >= 3)
+    caps_only = [c for c in captions if c]
+    roblox_comp = sum(
+        1 for c in caps_only if re.search(r"\b(in|but)\s+roblox\b", c.lower())
+    )
+    mono_penalty = max(0.0, (roblox_comp - 1) / max(len(caps_only), 1))
+    return _clamp(1.0 - 0.15 * crutch_count - 0.30 * mono_penalty)
+
+
 # ── Carousel-level report ─────────────────────────────────────────────────
 
 @dataclass
@@ -225,6 +303,9 @@ class QualityReport:
     specificity: float
     shareability: float
     follow: float
+    readability: float = 0.0
+    saveability: float = 0.0
+    novelty: float = 0.0
     checklist: dict[str, bool] = field(default_factory=dict)
     issues: list[str] = field(default_factory=list)
 
@@ -232,18 +313,37 @@ class QualityReport:
     def overall(self) -> float:
         # Weighted toward the levers that move carousel performance most.
         return round(
-            0.26 * self.hook
-            + 0.20 * self.curiosity
-            + 0.20 * self.authenticity
-            + 0.14 * self.specificity
-            + 0.10 * self.shareability
-            + 0.10 * self.follow,
+            0.22 * self.hook
+            + 0.18 * self.curiosity
+            + 0.18 * self.authenticity
+            + 0.12 * self.specificity
+            + 0.08 * self.shareability
+            + 0.08 * self.follow
+            + 0.06 * self.readability
+            + 0.05 * self.saveability
+            + 0.03 * self.novelty,
             3,
         )
 
     @property
     def passed(self) -> bool:
         return self.overall >= 0.70 and all(self.checklist.values())
+
+    @property
+    def top1pct_passed(self) -> bool:
+        """Top-1% Roblox TikTok standard — stricter than the minimum pass bar.
+
+        Requires: overall ≥ 0.80, every checklist item True, hook strong
+        enough to stop a scroll (≥ 0.65), and zero AI fingerprints (≥ 0.75
+        authenticity). A carousel that clears this would rank alongside the
+        best-performing accounts in the niche.
+        """
+        return (
+            self.overall >= 0.80
+            and all(self.checklist.values())
+            and self.hook >= 0.65
+            and self.authenticity >= 0.75
+        )
 
     def as_dict(self) -> dict:
         return {
@@ -254,7 +354,11 @@ class QualityReport:
             "specificity": round(self.specificity, 2),
             "shareability": round(self.shareability, 2),
             "follow": round(self.follow, 2),
+            "readability": round(self.readability, 2),
+            "saveability": round(self.saveability, 2),
+            "novelty": round(self.novelty, 2),
             "passed": self.passed,
+            "top1pct_passed": self.top1pct_passed,
             "issues": self.issues,
         }
 
@@ -288,6 +392,9 @@ def review_carousel(
     unique_ratio = len(set(norms)) / max(len(norms), 1)
     shareability = _clamp(0.5 * unique_ratio + 0.5 * (sum(cap_scores) / len(cap_scores)))
     follow = cta_s
+    readability = score_readability(caps)
+    saveability = score_saveability(caps)
+    novelty = score_novelty(caps, cover_hook)
 
     checklist = {
         "creator_would_post": authenticity >= 0.6 and hook >= 0.55,
@@ -298,6 +405,9 @@ def review_carousel(
         "no_ai_sentences": ai_hits == 0,
         "no_repeated_wording": unique_ratio == 1.0,
         "specific_enough": specificity >= 0.6,
+        "readable_slides": readability >= 0.55,
+        "saveworthy": saveability >= 0.50,
+        "novel_language": novelty >= 0.60,
     }
 
     issues: list[str] = []
@@ -312,10 +422,17 @@ def review_carousel(
         issues.append("duplicate caption wording across slides")
     if not checklist["cta_natural"]:
         issues.append(f"CTA feels off: {cta!r}")
+    if not checklist["readable_slides"]:
+        issues.append(f"readability low ({readability:.2f}): captions may be too long or repetitive")
+    if not checklist["saveworthy"]:
+        issues.append(f"saveability low ({saveability:.2f}): captions lack concrete specificity")
+    if not checklist["novel_language"]:
+        issues.append(f"novelty low ({novelty:.2f}): crutch words or structural monotony detected")
 
     return QualityReport(
         hook=hook, curiosity=curiosity, authenticity=authenticity,
         specificity=specificity, shareability=shareability, follow=follow,
+        readability=readability, saveability=saveability, novelty=novelty,
         checklist=checklist, issues=issues,
     )
 
@@ -484,60 +601,89 @@ def finalize_carousel(
     scores: Optional[Sequence[Optional[float]]] = None,
     game_names: Optional[Sequence[str]] = None,
     used_hooks: Optional[set[str]] = None,
+    max_attempts: int = 3,
 ) -> dict:
     """
     The single 'review before presenting' entry point. Returns a vetted cover
     hook, revised per-slide captions, a natural CTA, a de-templated post caption,
-    and the QualityReport. Everything emitted here has already been auto-revised:
-    AI tells / generic / duplicate captions are rewritten, and the hook + CTA are
-    only ever chosen from bank lines that clear the quality bar.
+    the QualityReport, and the number of attempts taken.
+
+    Runs up to `max_attempts` passes, escalating the caption-replacement
+    threshold (0.55 → 0.60 → 0.65) and rotating to a stronger hook on each
+    retry. Targets `top1pct_passed` (overall ≥ 0.80, strong hook, zero AI
+    fingerprints). If that bar can't be cleared it accepts anything that passes
+    the minimum quality gate — and always returns the best version it built,
+    never an un-revised draft.
     """
     from src.content.caption_utils import _candidates, dedupe_carousel_captions
 
     n = len(captions)
-    genres = list(genres) if genres is not None else [None] * n
-    scores = list(scores) if scores is not None else [None] * n
-    game_names = list(game_names) if game_names is not None else []
+    genres_list = list(genres) if genres is not None else [None] * n
+    scores_list = list(scores) if scores is not None else [None] * n
+    game_names_list = list(game_names) if game_names is not None else []
 
     cover_hook = pick_cover_hook(part, used_hooks, edition=edition)
-
-    # Pass 1: dedupe + strip AI tells / crutches / generics.
-    caps = dedupe_carousel_captions(captions, genres=genres, scores=scores)
-
-    # Pass 2: strengthen any caption that still scores soft, pulling a more
-    # specific, unused, AI-free line from the same genre/score bank.
-    used = {normalize_caption(c) for c in caps}
-    for i, c in enumerate(caps):
-        if score_caption(c) >= 0.55:
-            continue
-        gi = genres[i] if i < len(genres) else None
-        si = scores[i] if i < len(scores) else None
-        for cand in _candidates(gi, si):
-            nc = normalize_caption(cand)
-            if nc in used or has_ai_tell(cand):
-                continue
-            if score_caption(cand) >= score_caption(c) + 0.05:
-                used.discard(normalize_caption(c))
-                used.add(nc)
-                caps[i] = cand
-                break
-
     cta = pick_cta(part)
-    post_caption = build_post_caption(edition, part, game_names)
-    report = review_carousel(cover_hook, caps, list(blurbs), cta)
+    # Working copy; improvements carry forward across attempts.
+    current_caps: list[str] = [c or "" for c in captions]
+    report: Optional[QualityReport] = None
+    attempts_taken = 0
+
+    for attempt in range(max(1, max_attempts)):
+        attempts_taken = attempt + 1
+
+        # Pass 1: dedupe + strip AI tells / crutches / generics.
+        caps = dedupe_carousel_captions(current_caps, genres=genres_list, scores=scores_list)
+
+        # Pass 2: strengthen captions below the escalating threshold.
+        # Each attempt raises the bar so near-miss captions get replaced too.
+        replace_threshold = 0.55 + attempt * 0.05   # 0.55 → 0.60 → 0.65
+        used = {normalize_caption(c) for c in caps}
+        for i, c in enumerate(caps):
+            if score_caption(c) >= replace_threshold:
+                continue
+            gi = genres_list[i] if i < len(genres_list) else None
+            si = scores_list[i] if i < len(scores_list) else None
+            for cand in _candidates(gi, si):
+                nc = normalize_caption(cand)
+                if nc in used or has_ai_tell(cand):
+                    continue
+                if score_caption(cand) > score_caption(c):
+                    used.discard(normalize_caption(c))
+                    used.add(nc)
+                    caps[i] = cand
+                    break
+
+        # On retry attempts, swap to a stronger hook when the current one is soft.
+        if attempt > 0 and score_hook(cover_hook) < 0.65:
+            alt = pick_cover_hook(part + attempt, used_hooks, edition=edition)
+            if score_hook(alt) > score_hook(cover_hook):
+                cover_hook = alt
+
+        report = review_carousel(cover_hook, caps, list(blurbs), cta)
+        current_caps = caps   # carry improvements to the next attempt
+
+        # Stop early once we've hit the top-1% bar; always stop on the last attempt.
+        if report.top1pct_passed or attempt == max_attempts - 1:
+            break
+
+    post_caption = build_post_caption(edition, part, game_names_list)
 
     return {
         "cover_hook": cover_hook,
-        "captions": caps,
+        "captions": current_caps,
         "cta": cta,
         "post_caption": post_caption,
         "report": report,
+        "attempts": attempts_taken,
     }
 
 
 __all__ = [
-    "QualityReport", "review_carousel", "finalize_carousel", "score_hook",
-    "score_caption", "score_cta", "pick_cover_hook", "pick_cta",
-    "pick_footer_cta", "build_post_caption", "build_carousel_hashtags",
+    "QualityReport", "review_carousel", "finalize_carousel",
+    "score_hook", "score_caption", "score_cta",
+    "score_readability", "score_saveability", "score_novelty",
+    "pick_cover_hook", "pick_cta", "pick_footer_cta",
+    "build_post_caption", "build_carousel_hashtags",
     "COVER_HOOKS", "CTA_LINES", "EDITION_HOOKS",
 ]

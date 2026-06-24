@@ -242,8 +242,12 @@ class Pipeline:
             game_names=[g.name for c, g in batch],
         )
         report = final["report"]
-        log.info("pipeline.carousel_factory.quality", part=part, **report.as_dict())
-        if not report.passed:
+        log.info("pipeline.carousel_factory.quality", part=part,
+                 attempts=final.get("attempts", 1), **report.as_dict())
+        if report.top1pct_passed:
+            log.info("pipeline.carousel_factory.elite_quality",
+                     part=part, overall=report.overall)
+        elif not report.passed:
             log.warning("pipeline.carousel_factory.quality_soft",
                         part=part, overall=report.overall, issues=report.issues)
 
