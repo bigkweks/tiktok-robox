@@ -152,9 +152,46 @@ src/api/templates/   base.html (dark theme + .id-chip + imgFallback helper),
   follows-per-post.
 - Pipeline batches carousels every 8h; manual "⚡ Generate Now" button.
 - Video + thumbnail pipeline intact (badge-overlap bug fixed).
-- **Test suite: 49 passing** (was 21). See "Testing" below.
+- **Test suite: 51 passing**. See "Testing" below.
 
-## Session changelog — stabilization & polish (this session)
+## Session changelog — engagement blitz (latest session)
+Focused on watch-time / follow-rate maximisation + a real duplicate bug.
+All on `claude/handoff-file-continue-nmksfs`.
+
+1. **Duplicate game in carousel — FIXED.** `run_carousel_factory` joined
+   Content×Game and took the top 5 rows, but a game can have >1 Content row
+   (concurrent "Generate Content" runs both pick it before `content_generated`
+   flips) and clones/re-uploads share a name under different universe IDs — so
+   the same game could appear twice in one carousel. The batch now dedupes by
+   **game id AND normalized name** (and still excludes games used in prior
+   carousels). `universe_id` is already `unique` so the DB itself can't hold
+   universe-level dupes.
+2. **Carousel title slide rebuilt as a scroll-stopper** (`_make_title_slide`).
+   Off-white pattern-interrupt kept, but now: a bold rotating **kicker pill**
+   ("you NEED to save these", "stop scrolling 🛑", "no one is talking about
+   these"…), a **brand-purple highlight box behind "ROBLOX"** (the biggest pop
+   on a white feed), "part N · N games" subline, **4 scattered tilted emoji
+   stickers** (was 2) drawn from richer per-edition sticker sets, and a bottom
+   **"swipe ➡️ save the list 👇" CTA** (real Noto color glyphs, never tofu).
+   `EDITIONS` now carries 4 stickers each; new `TITLE_KICKERS` list.
+3. **Captions/descriptions diversified + energised.**
+   - `caption_utils`: genre bank expanded (+tower defense, racing, survival,
+     story, anime, clicker; 5 lines each) and score/neutral banks grown, so a
+     5-slide carousel never reads samey.
+   - `rating_engine._fallback_carousel_caption` now pulls from the shared banks
+     and picks by a **hash of the game name** (was one fixed phrase per score
+     tier → identical across a batch). Verdict prompt demands high energy +
+     varied sentence shape.
+   - `description_engine`: prompt rewritten for high-energy teenage-creator
+     voice, reply-bait CTAs, varied openings; fallbacks A/B are now multi-option
+     hash-picked and emoji-punchy (were one static line each).
+4. **Dashboard homepage made eye-catching.** New gradient **hero banner**
+   ("💎 Roblox Hidden-Gem Factory 🚀" + Review Carousels CTA) and emoji on every
+   stat label (🎮 ✅ ⏳ 🚀 💜 👀).
+5. **Tests +2**: fallback-caption variety across games, and new-genre captions
+   resolve to specific (non-generic) lines.
+
+## Session changelog — stabilization & polish (prior session)
 Five reported problems + a bug sweep + follow-up polish + the iPad save feature.
 All committed to `claude/handoff-file-continue-nmksfs`.
 

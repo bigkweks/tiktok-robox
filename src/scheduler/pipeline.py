@@ -192,9 +192,26 @@ class Pipeline:
                 .where(Content.rating_score.isnot(None))
                 .where(Content.carousel_caption.isnot(None))
                 .order_by(Content.queue_priority.desc())
-                .limit(50)
+                .limit(80)
             )
-            candidates = [(c, g) for c, g in result if g.id not in used_ids]
+            # Dedupe so the same game can never appear twice in one carousel.
+            # Two ways a duplicate slips in: (a) a game has >1 Content row, so the
+            # join yields it more than once; (b) clones/re-uploads share an
+            # identical name under different universe IDs and read as the "same
+            # game" to a viewer. Guard against both — by game id and by name.
+            candidates = []
+            seen_game_ids: set[int] = set()
+            seen_names: set[str] = set()
+            for c, g in result:
+                if g.id in used_ids or g.id in seen_game_ids:
+                    continue
+                name_key = (g.name or "").strip().lower()
+                if name_key and name_key in seen_names:
+                    continue
+                seen_game_ids.add(g.id)
+                if name_key:
+                    seen_names.add(name_key)
+                candidates.append((c, g))
 
         if len(candidates) < 5:
             log.info("pipeline.carousel_factory.not_enough_games", count=len(candidates))

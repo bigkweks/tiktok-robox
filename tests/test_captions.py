@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from src.content.caption_utils import (
     crutch_tag,
+    is_generic,
     dedupe_carousel_captions,
     has_internal_repetition,
     normalize_caption,
@@ -81,3 +82,26 @@ def test_genre_aware_replacement_is_specific():
     out = dedupe_carousel_captions(captions, genres=["horror", "puzzle"], scores=[9.0, 9.0])
     # The horror slide should get a horror-flavored line, not a generic one.
     assert "horror" in out[0].lower() or "solo" in out[0].lower() or "unsettling" in out[0].lower()
+
+
+def test_fallback_carousel_captions_vary_by_game():
+    """Same score, different games must not produce identical fallback lines."""
+    from src.content.rating_engine import RatingEngine
+    fc = RatingEngine._fallback_carousel_caption
+    names = ["Backrooms Escape", "Drift Kings", "Tower Titans", "Ghost Story", "Click Empire"]
+    genres = ["horror", "racing", "tower defense", "story", "clicker"]
+    out = [fc(n, 9.2, 800_000, g) for n, g in zip(names, genres)]
+    # No empties, no generic filler, and meaningful variety across the batch.
+    assert all(c and c.strip() for c in out)
+    assert len(set(out)) >= 4
+
+
+def test_new_genres_have_specific_lines():
+    """Genres added for diversity resolve to genre-flavored captions."""
+    out = dedupe_carousel_captions(
+        ["fun game", "fun game", "fun game", "fun game"],
+        genres=["racing", "survival", "anime", "tower defense"],
+        scores=[8.5, 8.5, 8.5, 8.5],
+    )
+    assert len(set(normalize_caption(c) for c in out)) == 4
+    assert not any(is_generic(c) for c in out)

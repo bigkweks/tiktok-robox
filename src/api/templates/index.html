@@ -2,13 +2,30 @@
 {% block title %}Dashboard{% endblock %}
 {% block content %}
 
+{# ── Hero banner ── #}
+<div class="card mb-4" style="border:none;background:linear-gradient(110deg,#1b1540 0%,#2a1d5e 45%,#3b2a7a 100%);overflow:hidden;position:relative">
+  <div class="card-body py-4 px-4 d-flex align-items-center justify-content-between flex-wrap gap-3">
+    <div>
+      <div style="font-size:1.5rem;font-weight:800;letter-spacing:-0.02em;color:#fff">
+        💎 Roblox Hidden-Gem Factory 🚀
+      </div>
+      <div style="font-size:0.9rem;color:#c9c2f5;margin-top:0.25rem">
+        Find underrated games → AI-rate them → drop scroll-stopping TikTok carousels. 🎯 Goal: 10K followers in 30 days.
+      </div>
+    </div>
+    <a href="/carousels" class="btn btn-lg px-4" style="background:var(--accent);color:#1a1340;font-weight:800;white-space:nowrap">
+      🎬 Review Carousels
+    </a>
+  </div>
+</div>
+
 {# ── Stat strip ── #}
 <div class="row g-3 mb-4">
   <div class="col-6 col-md-2">
     <div class="card stat-card h-100">
       <div class="card-body text-center py-3">
         <div class="stat-number">{{ stats.total_games }}</div>
-        <div class="stat-label">Games Found</div>
+        <div class="stat-label">🎮 Games Found</div>
       </div>
     </div>
   </div>
@@ -16,7 +33,7 @@
     <div class="card h-100" style="border-left:3px solid var(--success)">
       <div class="card-body text-center py-3">
         <div class="stat-number" style="color:var(--success)">{{ stats.queue_size }}</div>
-        <div class="stat-label">Approved Queue</div>
+        <div class="stat-label">✅ Approved Queue</div>
       </div>
     </div>
   </div>
@@ -24,7 +41,7 @@
     <div class="card h-100" style="border-left:3px solid var(--warning)">
       <div class="card-body text-center py-3">
         <div class="stat-number" style="color:var(--warning)">{{ stats.pending }}</div>
-        <div class="stat-label">Awaiting Review</div>
+        <div class="stat-label">⏳ Awaiting Review</div>
       </div>
     </div>
   </div>
@@ -32,7 +49,7 @@
     <div class="card h-100" style="border-left:3px solid #a78bfa">
       <div class="card-body text-center py-3">
         <div class="stat-number" style="color:#a78bfa">{{ stats.posted }}</div>
-        <div class="stat-label">Posted</div>
+        <div class="stat-label">🚀 Posted</div>
       </div>
     </div>
   </div>
@@ -40,7 +57,7 @@
     <div class="card h-100" style="border-left:3px solid var(--cyan)">
       <div class="card-body text-center py-3">
         <div class="stat-number" style="color:var(--cyan);font-size:1.5rem">{{ (perf.avg_follow_conv_rate * 100) | round(2) }}%</div>
-        <div class="stat-label">Avg Follow Rate</div>
+        <div class="stat-label">💜 Avg Follow Rate</div>
       </div>
     </div>
   </div>
@@ -48,7 +65,7 @@
     <div class="card h-100" style="border-left:3px solid var(--accent)">
       <div class="card-body text-center py-3">
         <div class="stat-number" style="font-size:1.5rem">{{ stats.total_views | default(perf.total_views, true) | int }}</div>
-        <div class="stat-label">Total Views</div>
+        <div class="stat-label">👀 Total Views</div>
       </div>
     </div>
   </div>

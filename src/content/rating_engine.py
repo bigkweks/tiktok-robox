@@ -103,7 +103,7 @@ Generate a JSON rating with this exact structure:
     "visual_quality": <float 0-10>,
     "community": <float 0-10>
   }},
-  "verdict": "<one punchy sentence, max 12 words, no emojis>",
+  "verdict": "<one punchy, HIGH-ENERGY sentence, max 12 words, no emojis. Sound genuinely hyped (for gems) or genuinely fired-up (for overhyped ones) — never flat or corporate. Vary the sentence shape every time; do not start with the game name every time.>",
   "controversy_angle": "<the mildly controversial opinion that will spark comment debate, 1 sentence>",
   "tts_script": "<15-20 second narration script for the video, natural spoken English, include the score reveal at the end, no special chars>",
   "hook_text": "<the first 2 seconds of text shown on screen — max 9 words>",
@@ -221,12 +221,12 @@ class RatingEngine:
             controversy = data.get("controversy_angle", "")
             tts_script = data.get("tts_script", self._fallback_tts(name, score, visits))
             hook_text = data.get("hook_text", self._fallback_hook(name, visits))
-            carousel_caption = data.get("carousel_caption", self._fallback_carousel_caption(name, score, visits))
+            carousel_caption = data.get("carousel_caption", self._fallback_carousel_caption(name, score, visits, genre))
 
             # Reject stuttering / empty captions ("... if ukuk ukuk") at the source.
             from src.content.caption_utils import has_internal_repetition  # noqa: PLC0415
             if not (carousel_caption or "").strip() or has_internal_repetition(carousel_caption):
-                carousel_caption = self._fallback_carousel_caption(name, score, visits)
+                carousel_caption = self._fallback_carousel_caption(name, score, visits, genre)
 
             # Override label with hook if hook_text is empty
             if not hook_text:
@@ -253,7 +253,7 @@ class RatingEngine:
             log.error("rating.failed", game=name, error=str(exc))
             fb = self._fallback_rating(name, visits, viral_score)
             fb.hook_text = self._fallback_hook(name, visits)
-            fb.carousel_caption = self._fallback_carousel_caption(name, fb.score, visits)
+            fb.carousel_caption = self._fallback_carousel_caption(name, fb.score, visits, genre)
             return fb
 
     def _fallback_rating(self, name: str, visits: int, viral_score: float) -> RatingResult:
@@ -279,20 +279,17 @@ class RatingEngine:
         )
 
     @staticmethod
-    def _fallback_carousel_caption(name: str, score: float, visits: int) -> str:
+    def _fallback_carousel_caption(name: str, score: float, visits: int, genre: str = "") -> str:
         # Same casual player voice as the AI prompt, used only if the API fails.
-        if score >= 9.5:
-            return "MUST check out fr"
-        elif score >= 9.0:
-            return "no one talks about this"
-        elif score >= 8.0:
-            return "well made game ngl"
-        elif score >= 7.0:
-            return "lowkey pretty good"
-        elif score >= 5.5:
-            return "decent if ur into this"
-        else:
-            return "overhyped tbh"
+        # Pull from the shared caption banks and pick deterministically by a hash
+        # of the game name so two games with the same score don't get the same
+        # fallback line (the old version always returned one fixed phrase per
+        # tier, which made fallbacks read identically across a batch).
+        from src.content.caption_utils import _candidates  # noqa: PLC0415
+        pool = _candidates(genre, score)
+        if not pool:
+            return "underrated and i mean it"
+        return pool[sum(ord(c) for c in (name or "x")) % len(pool)]
 
     @staticmethod
     def _fallback_hook(name: str, visits: int) -> str:

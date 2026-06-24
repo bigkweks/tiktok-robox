@@ -71,9 +71,13 @@ Requirements for BOTH captions:
 - First line is the hook (shows in feed before "see more")
 - 2-4 sentences max
 - Curiosity-driven or social proof
-- End with a call to action
-- Natural language, NOT clickbait
-- No more than 3 emojis total
+- End with a call to action that demands a reply ("which one are you playing first?",
+  "rate it 1-10 in the comments", "tag who you'd play this with")
+- Natural, HIGH-ENERGY teenage-creator voice — genuinely excited, never flat,
+  never corporate, never clickbait
+- Use 2-3 emojis, placed where they punch (not all clumped at the end)
+- Every caption must feel different from the last — vary the opening words,
+  sentence rhythm, and the call to action. Do NOT start both variants the same way.
 - Must make viewers want to comment their opinion
 
 Variant A: curiosity/mystery angle (builds tension around the rating)
@@ -176,28 +180,47 @@ class DescriptionEngine:
         return str(visits)
 
     @staticmethod
-    def _fallback_a(name: str, score: float, label: str, visits_str: str) -> str:
-        if score >= 9.0:
-            return (
-                f"This Roblox game has {visits_str} visits and most people have never heard of it. "
-                f"We played it and gave it a {score}/10 — and we don't hand those out easily. "
-                f"Drop a comment with your rating after you try it."
-            )
-        elif score >= 7.0:
-            return (
-                f"Gave {name} a {score}/10 and I know people are going to disagree. "
-                f"What would YOU rate it? Comment below."
-            )
-        else:
-            return (
-                f"{name} has {visits_str} visits but our honest verdict is {score}/10. "
-                f"Agree or disagree — let us know."
-            )
+    def _pick(name: str, options: list[str]) -> str:
+        """Deterministic but game-varied choice so fallbacks don't repeat."""
+        return options[sum(ord(c) for c in (name or "x")) % len(options)]
 
-    @staticmethod
-    def _fallback_b(name: str, score: float, visits_str: str) -> str:
-        return (
-            f"{visits_str} people can't be wrong about {name}... or can they? "
-            f"We put it through our rating system and here's what we found. "
-            f"Follow for a new Roblox review every day."
-        )
+    @classmethod
+    def _fallback_a(cls, name: str, score: float, label: str, visits_str: str) -> str:
+        if score >= 9.0:
+            return cls._pick(name, [
+                f"okay this {visits_str}-visit game is a straight up HIDDEN GEM 💎 "
+                f"we gave it a {score}/10 and we do not hand those out. "
+                f"go play it then tell me i was wrong 👇",
+                f"why is NOBODY talking about this Roblox game?? 😭 {score}/10, no notes. "
+                f"save this so you actually remember to play it. which one first?",
+                f"found your next obsession and it only has {visits_str} visits 👀 "
+                f"hard {score}/10 from us. rate it yourself in the comments 🔥",
+            ])
+        elif score >= 7.0:
+            return cls._pick(name, [
+                f"gave {name} a {score}/10 and i KNOW some of you are gonna fight me on it 😅 "
+                f"what would you rate it? comment below ⬇️",
+                f"is {name} actually worth it? we said {score}/10 👀 "
+                f"agree? disagree? settle it in the comments.",
+                f"{name} surprised me ngl — solid {score}/10. "
+                f"tag who you'd drag into this one 🎮",
+            ])
+        else:
+            return cls._pick(name, [
+                f"hot take: {name} is overhyped 🫣 we gave it an honest {score}/10. "
+                f"come argue with me in the comments ⬇️",
+                f"{visits_str} visits but is it actually good? our verdict: {score}/10. "
+                f"am i tripping? let me know 👇",
+            ])
+
+    @classmethod
+    def _fallback_b(cls, name: str, score: float, visits_str: str) -> str:
+        return cls._pick(name, [
+            f"{visits_str} people can't be wrong about {name}... or can they? 🤔 "
+            f"we ran it through our rating system and the result shocked us. "
+            f"follow for a new Roblox gem every single day 🔥",
+            f"everyone sleeps on {name} and i don't get it 😤 {visits_str} visits and climbing. "
+            f"save it, play it, then thank me later. follow for daily Roblox picks 💎",
+            f"POV: you just found the Roblox game your whole friend group needed 🫶 "
+            f"{name} — {visits_str} visits. tag the squad and follow for more 🎮",
+        ])

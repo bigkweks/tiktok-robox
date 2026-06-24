@@ -32,22 +32,41 @@ import structlog
 from PIL import Image, ImageDraw, ImageFilter
 
 from src.config import get_settings
-from src.content.fonts import draw_mixed, emoji_image, load_font, paste_emoji, strip_emoji
+from src.content.fonts import (
+    draw_mixed,
+    emoji_image,
+    load_font,
+    measure_mixed,
+    paste_emoji,
+    strip_emoji,
+)
 
 log = structlog.get_logger(__name__)
 
 W, H = 1080, 1920  # TikTok portrait
 
-# (edition label, snorkel/theme emoji, [sticker emoji top, sticker emoji bottom])
+# (edition label, theme emoji, [sticker emoji — used as scattered face stickers])
+# More stickers per edition = a denser, more expressive title slide. The title
+# renderer scatters up to 4 of these around the type to stop the scroll.
 EDITIONS: list[tuple[str, str, list[str]]] = [
-    ("Friends edition", "🤿", ["🥹", "😭"]),
-    ("Hidden Gems", "💎", ["😳", "🤩"]),
-    ("Horror edition", "😱", ["😨", "💀"]),
-    ("Solo edition", "🎮", ["🥹", "🔥"]),
-    ("Anime edition", "⚔️", ["😮", "🔥"]),
-    ("PvP edition", "🔪", ["😈", "😤"]),
-    ("Underrated edition", "🤫", ["🤨", "🤩"]),
-    ("Brainrot edition", "🤡", ["😭", "💀"]),
+    ("Friends edition", "🤿", ["🥹", "😭", "🫶", "😂"]),
+    ("Hidden Gems", "💎", ["😳", "🤩", "👀", "🤯"]),
+    ("Horror edition", "😱", ["😨", "💀", "🫣", "😰"]),
+    ("Solo edition", "🎮", ["🥹", "🔥", "😮‍💨", "🫡"]),
+    ("Anime edition", "⚔️", ["😮", "🔥", "🥶", "⚡"]),
+    ("PvP edition", "🔪", ["😈", "😤", "💢", "🥵"]),
+    ("Underrated edition", "🤫", ["🤨", "🤩", "👀", "🧐"]),
+    ("Brainrot edition", "🤡", ["😭", "💀", "💀", "😵‍💫"]),
+]
+
+# Rotating scroll-stopper kickers shown above the title — these read like a real
+# creator hyping the drop and create curiosity/FOMO before the type even lands.
+TITLE_KICKERS: list[str] = [
+    "you NEED to save these",
+    "stop scrolling 🛑",
+    "before they blow up",
+    "no one is talking about these",
+    "save before its gone",
 ]
 
 
@@ -141,7 +160,7 @@ class CarouselGenerator:
         slides: list[Path] = []
 
         title_path = output_dir / "slide_00_title.png"
-        self._make_title_slide(ed_meta, part_number).save(str(title_path))
+        self._make_title_slide(ed_meta, part_number, count=len(games[:5])).save(str(title_path))
         slides.append(title_path)
 
         for i, game in enumerate(games[:5]):
@@ -156,54 +175,105 @@ class CarouselGenerator:
 
     # ── Title slide ───────────────────────────────────────────────────
 
-    def _make_title_slide(self, ed_meta: tuple[str, str, list[str]], part_number: int) -> Image.Image:
+    def _make_title_slide(
+        self,
+        ed_meta: tuple[str, str, list[str]],
+        part_number: int,
+        count: int = 5,
+    ) -> Image.Image:
         edition, theme_emoji, stickers = ed_meta
-        img = Image.new("RGB", (W, H), (248, 249, 251))
-        draw = ImageDraw.Draw(img)
+        # Off-white background — pattern-interrupts the dark TikTok feed and
+        # stops the thumb. A faint top-corner brand wash adds depth without
+        # killing the bright "screenshot of a real list" feel.
+        img = Image.new("RGB", (W, H), (250, 250, 252))
 
-        ink = (17, 17, 19)
+        ink = (15, 15, 18)
         grey = (150, 152, 160)
+        BRAND = (124, 111, 255)   # the pipeline purple — pops on white
+
+        # ── Scroll-stopper kicker pill (top) ──────────────────────────────
+        # A bold colored chip that reads like a creator caption; rotates per
+        # part so the series never looks copy-pasted.
+        kicker = TITLE_KICKERS[part_number % len(TITLE_KICKERS)]
+        f_kick = load_font("extrabold", 52)
+        kdraw = ImageDraw.Draw(img)
+        kw = measure_mixed(kdraw, kicker, f_kick, 52)
+        kpad = 46
+        kpill_w = kw + kpad * 2
+        kpill_h = 104
+        kx = (W - kpill_w) // 2
+        ky = 250
+        draw = ImageDraw.Draw(img)
+        draw.rounded_rectangle([kx, ky, kx + kpill_w, ky + kpill_h], radius=52, fill=(18, 18, 22))
+        img = draw_mixed(img, (W // 2, ky + kpill_h // 2), kicker, f_kick,
+                         (255, 255, 255), emoji_size=52, anchor="mm")
+        draw = ImageDraw.Draw(img)
 
         # Type stack — Poppins, tight leading like the viral post
         f_pre = load_font("extrabold", 92)
-        f_hero = load_font("black", 230)
+        f_hero = load_font("black", 236)
         f_mid = load_font("extrabold", 98)
-        f_part = load_font("semibold", 60)
+        f_part = load_font("semibold", 56)
 
-        block_top = 540
+        block_top = 600
         _centered(draw, "actually good", W // 2, block_top, f_pre, ink)
-        _centered(draw, "ROBLOX", W // 2, block_top + 120, f_hero, ink)
-        _centered(draw, "games to play", W // 2, block_top + 378, f_mid, ink)
 
-        # "part N" small grey, centered on its own line
-        _centered(draw, f"part {part_number}", W // 2, block_top + 508, f_part, grey)
+        # "ROBLOX" gets a punchy rounded highlight box behind it (white text on
+        # brand fill) — the single biggest pop on the slide, like a marker
+        # highlight over the key search phrase.
+        hero_txt = "ROBLOX"
+        hw = _text_w(draw, hero_txt, f_hero)
+        hy = block_top + 116
+        box_pad_x, box_pad_top, box_pad_bot = 40, 18, 60
+        bx0 = (W - hw) // 2 - box_pad_x
+        bx1 = (W + hw) // 2 + box_pad_x
+        draw.rounded_rectangle(
+            [bx0, hy + box_pad_top, bx1, hy + 236 + box_pad_bot - 60],
+            radius=40, fill=BRAND,
+        )
+        _centered(draw, hero_txt, W // 2, hy, f_hero, (255, 255, 255))
+
+        _centered(draw, "games to play", W // 2, block_top + 400, f_mid, ink)
+
+        # "part N · N games" small grey, centered on its own line
+        sub = f"part {part_number}  ·  {count} games"
+        _centered(draw, sub, W // 2, block_top + 530, f_part, grey)
 
         # Edition pill with theme emoji
-        f_ed = load_font("bold", 68)
+        f_ed = load_font("bold", 64)
         ed_text = edition
         ew = _text_w(draw, ed_text, f_ed)
-        em_size = 74
-        pad = 38
+        em_size = 70
+        pad = 36
         pill_w = ew + em_size + pad * 2 + 22
-        pill_h = 116
+        pill_h = 110
         px = (W - pill_w) // 2
-        py = block_top + 600
+        py = block_top + 620
         draw.rounded_rectangle([px, py, px + pill_w, py + pill_h], radius=28, fill=(24, 24, 28))
-        draw.text((px + pad, py + (pill_h - 70) // 2 - 6), ed_text, font=f_ed, fill=(255, 255, 255))
+        draw.text((px + pad, py + (pill_h - 66) // 2 - 6), ed_text, font=f_ed, fill=(255, 255, 255))
         em = emoji_image(theme_emoji, em_size)
         if em:
             base = img.convert("RGBA")
             base.alpha_composite(em, (px + pad + ew + 16, py + (pill_h - em_size) // 2))
             img = base.convert("RGB")
 
-        # Big sticker emoji — top-right and bottom-left, slight tilt for life
-        img = paste_emoji(img, stickers[0], W - 230, 250, 360, anchor="center", rotate=-12)
-        img = paste_emoji(img, stickers[1], 230, H - 320, 360, anchor="center", rotate=10)
+        # Big sticker emoji scattered around the type — denser + more expressive
+        # than the old two-sticker layout, slight tilts for that hand-placed feel.
+        placements = [
+            (965, 120, 220, -12),       # top-right corner, above the kicker pill
+            (150, 505, 235, 12),        # mid-left, beside the ROBLOX box
+            (930, 1180, 245, -10),      # right flank, by the edition pill
+            (165, 1455, 235, 9),        # lower-left, above the CTA
+        ]
+        for i, (sx, sy, ssz, rot) in enumerate(placements):
+            if i < len(stickers):
+                img = paste_emoji(img, stickers[i], sx, sy, ssz, anchor="center", rotate=rot)
 
-        # subtle swipe hint — use the Noto color arrow (➡️); the plain "→" has
-        # no glyph in the Poppins text font and would render as a tofu box.
-        f_hint = load_font("medium", 50)
-        img = draw_mixed(img, (W // 2, H - 150), "swipe ➡️", f_hint, (190, 192, 200), anchor="mm")
+        # Bottom CTA — swipe + save, the two actions that drive the algorithm.
+        # Real Noto color arrow (➡️) + hand (👇); the plain "→" would tofu.
+        f_cta = load_font("extrabold", 58)
+        img = draw_mixed(img, (W // 2, H - 175), "swipe ➡️ save the list 👇", f_cta,
+                         (28, 28, 32), emoji_size=58, anchor="mm")
 
         return img
 
