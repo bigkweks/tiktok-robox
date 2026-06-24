@@ -569,6 +569,33 @@
       await post('/pipeline/run-content');
       btn.innerHTML = 'Started';
     }
+    // The single primary action: one tap → a reviewed carousel. Builds now if
+    // games are ready; otherwise warms up the discover→rate→build chain.
+    async function createCarousel(btn) {
+      const original = btn.innerHTML;
+      const note = document.getElementById('createNote');
+      btn.disabled = true;
+      btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Working…';
+      try {
+        const r = await post('/pipeline/create-carousel');
+        if (r.status === 'created') {
+          btn.classList.remove('btn-primary'); btn.classList.add('btn-success');
+          btn.innerHTML = 'Ready — opening…';
+          location.href = '/carousels';
+        } else if (r.status === 'warming_up') {
+          btn.innerHTML = 'Finding games…';
+          if (note) note.textContent = r.message + ' This page refreshes automatically.';
+          setTimeout(() => location.reload(), 30000);
+        } else if (r.status === 'retry') {
+          btn.innerHTML = 'Try again'; btn.disabled = false;
+          if (note) note.textContent = r.message;
+        } else {
+          btn.innerHTML = original; btn.disabled = false;
+        }
+      } catch (e) {
+        btn.innerHTML = original; btn.disabled = false;
+      }
+    }
   </script>
   {% block scripts %}{% endblock %}
 </body>

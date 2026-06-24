@@ -60,7 +60,8 @@ def test_carousels_page_renders_share_button():
         settings=type("S", (), {"OUTPUT_DIR": "output"})(),
     )
     assert "saveCarouselToPhotos(this)" in html
-    assert "Save all 2 slides to Photos" in html
+    # Export is now one tap: slides + caption together.
+    assert "Save 2 slides + caption" in html
     # slide URLs embedded for the share call
     assert "/output/carousels/part003/slide_01.png" in html
     # zip fallback link present

@@ -172,10 +172,7 @@
 
 <script>
 async function markPosted(id) {
-  const v = prompt('TikTok Video ID (optional):') || '';
-  const fd = new FormData();
-  fd.append('tiktok_id', v);
-  await fetch(`/content/${id}/mark-posted`, {method: 'POST', body: fd});
+  await fetch(`/content/${id}/mark-posted`, {method: 'POST', body: new FormData()});
   location.reload();
 }
 function copyId(id, el) {

@@ -206,10 +206,7 @@ function copyText(id, btn, label) {
   });
 }
 async function markPosted() {
-  const v = prompt('TikTok Video ID (optional):') || '';
-  const fd = new FormData();
-  fd.append('tiktok_id', v);
-  await fetch(`/content/{{ content.id }}/mark-posted`, {method: 'POST', body: fd});
+  await fetch(`/content/{{ content.id }}/mark-posted`, {method: 'POST', body: new FormData()});
   location.href = '/queue?status=posted';
 }
 </script>

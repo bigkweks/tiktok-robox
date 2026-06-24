@@ -52,6 +52,7 @@ class Pipeline:
         self._carousel = CarouselGenerator()
         self._running = False
         self._carousel_part_counter = 1
+        self._warming = False   # a background warm-up (discover→rate→build) is in flight
 
     async def start(self) -> None:
         await init_db()
@@ -336,7 +337,9 @@ class Pipeline:
                 slide_paths=_json.dumps([str(p) for p in slide_paths]),
                 caption=caption,
                 hashtags=_json.dumps(hashtags),
-                status="pending",
+                # It already survived the mandatory three-reviewer panel, so it
+                # ships ready-to-post — no redundant human approval click.
+                status="approved",
                 review_score=approval.final_score,
                 review_summary=_json.dumps(approval.panel.as_dict()),
             )
@@ -348,6 +351,52 @@ class Pipeline:
         return {"carousels": 1, "part": part, "edition": edition,
                 "final_score": approval.final_score, "approved": True,
                 "cycles": approval.cycles}
+
+    async def run_create_carousel(self) -> dict:
+        """
+        ONE action → a carousel. Does whatever prerequisite work is needed so the
+        user never has to orchestrate discovery → rating → generation by hand.
+
+        Fast path: if enough rated games already exist, build (and review) a
+        carousel right now. Otherwise kick the whole chain (discover if the
+        library is thin, then rate, then build) in the background and tell the
+        user it's warming up — a carousel will be ready shortly.
+        """
+        result = await self.run_carousel_factory()
+        if result.get("carousels"):
+            return {"status": "created", **result}
+
+        # It tried but the panel rejected the draft — one quick retry (different
+        # ordering / cover hooks often clears the bar).
+        if result.get("rejected"):
+            retry = await self.run_carousel_factory()
+            if retry.get("carousels"):
+                return {"status": "created", **retry}
+            return {"status": "retry",
+                    "message": "A draft didn't pass review — tap again in a moment."}
+
+        # Not enough rated games. Start the prerequisite chain in the background
+        # (it's minutes of crawling + AI rating) and report that it's warming up.
+        if not self._warming:
+            self._warming = True
+            asyncio.create_task(self._warmup_for_carousel())
+        return {"status": "warming_up",
+                "message": "Finding and rating games — a carousel will be ready in a few minutes."}
+
+    async def _warmup_for_carousel(self) -> None:
+        """Background: ensure there are rated games, then build a carousel."""
+        try:
+            from sqlalchemy import func, select as sa_select  # noqa: PLC0415
+            async with get_session() as session:
+                total_games = await session.scalar(sa_select(func.count(Game.id))) or 0
+            if total_games < 50:
+                await self.run_discovery()
+            await self.run_content_factory()
+            await self.run_carousel_factory()
+        except Exception as exc:
+            log.error("pipeline.warmup_failed", error=str(exc))
+        finally:
+            self._warming = False
 
     @staticmethod
     def _retention_order(items: list, key) -> list:

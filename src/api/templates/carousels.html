@@ -5,9 +5,10 @@
 <div class="page-header">
   <div>
     <h1 class="page-title">Carousels</h1>
-    <p class="page-subtitle">6 slides · 5 games per drop</p>
+    <p class="page-subtitle">6 slides · 5 games per drop · every one passes a 3-reviewer panel before it appears.</p>
+    <p class="page-subtitle text-accent" id="createNote" style="min-height:1px"></p>
   </div>
-  <button class="btn btn-primary" onclick="triggerCarousel()" id="carouselBtn">Generate now</button>
+  <button class="btn btn-primary btn-lg px-4" onclick="createCarousel(this)" id="carouselBtn">Create a carousel</button>
 </div>
 
 <div class="workflow-steps mb-4">
@@ -23,10 +24,10 @@
   <div class="card-body text-center py-5">
     <i class="bi bi-images" style="font-size:2.5rem;color:var(--text-dim);display:block;margin-bottom:1rem"></i>
     <div class="fw-semibold mb-1">Nothing built yet</div>
-    <p class="text-muted mb-0" style="font-size:0.875rem">
-      You need at least 5 rated games in the queue first —
-      run discovery, generate content, then hit Generate now.
+    <p class="text-muted mb-3" style="font-size:0.875rem">
+      One tap does everything — find games, rate them, build and review a carousel.
     </p>
+    <button class="btn btn-primary btn-lg px-4" onclick="createCarousel(this)">Create a carousel</button>
   </div>
 </div>
 {% endif %}
@@ -47,19 +48,11 @@
       <small class="text-muted">{{ post.created_at.strftime('%b %d · %H:%M') }}</small>
     </div>
     <div class="d-flex gap-2">
-      {% if post.status == 'pending' %}
-        <button class="btn btn-sm btn-approve" onclick="approveCarousel({{ post.id }})">
-          <i class="bi bi-check-lg me-1"></i>Approve
-        </button>
-        <button class="btn btn-sm btn-reject" onclick="rejectCarousel({{ post.id }})">
+      {# The primary publish actions live in the body, next to the export step.
+         Up here we keep only a quiet discard for a carousel you don't want. #}
+      {% if post.status != 'posted' %}
+        <button class="btn btn-sm btn-reject" onclick="rejectCarousel({{ post.id }})" title="Discard">
           <i class="bi bi-x-lg"></i>
-        </button>
-      {% elif post.status == 'approved' %}
-        <button class="btn btn-sm btn-reject" onclick="rejectCarousel({{ post.id }})">
-          <i class="bi bi-x-lg"></i>
-        </button>
-        <button class="btn btn-sm btn-primary" onclick="markPosted({{ post.id }}, this)">
-          <i class="bi bi-check2-all me-1"></i>Mark as Posted
         </button>
       {% endif %}
     </div>
@@ -108,41 +101,38 @@
       {% endfor %}
     </div>
 
-    {# One-step save: Web Share (→ iPad Photos) with zip fallback #}
+    {# Export in ONE tap: copy the caption to the clipboard AND open the iPad
+       share sheet to save every slide. Zip is the desktop fallback. #}
     {% if post.slide_urls %}
     <div class="d-flex align-items-center gap-2 flex-wrap mb-3">
-      <button class="btn btn-primary btn-sm"
+      <button class="btn btn-primary"
               data-slides='{{ post.slide_urls | tojson }}'
               data-part="{{ post.part_number }}"
               data-cid="{{ post.id }}"
+              data-caption-el="caption-{{ post.id }}"
               onclick="saveCarouselToPhotos(this)">
-        <i class="bi bi-phone me-1"></i>Save all {{ post.slide_urls | length }} slides to Photos
+        <i class="bi bi-phone me-1"></i>Save {{ post.slide_urls | length }} slides + caption
       </button>
+      {% if post.status != 'posted' %}
+      <button class="btn btn-success" onclick="markPosted({{ post.id }}, this)">Mark as posted</button>
+      {% endif %}
       <a class="btn btn-outline-secondary btn-sm" href="/carousel/{{ post.id }}/download"
-         title="Download all slides as a .zip">
-        <i class="bi bi-file-zip me-1"></i>.zip
-      </a>
+         title="Download all slides as a .zip">.zip</a>
       <small class="text-muted" style="font-size:0.72rem">
-        On iPad, tap <strong>Save {{ post.slide_urls | length }} Images</strong> in the share sheet.
+        On iPad: tap <strong>Save {{ post.slide_urls | length }} Images</strong>, then paste the caption into TikTok.
       </small>
     </div>
     {% endif %}
 
-    {# Caption #}
+    {# Caption (kept visible so it can be verified / re-copied) #}
     {% if post.caption %}
-    <div>
-      <div class="text-muted mb-2" style="font-size:0.7rem;font-weight:600;text-transform:uppercase;letter-spacing:0.07em">
-        TikTok caption
-      </div>
-      <div style="position:relative">
-        <pre class="caption-box" id="caption-{{ post.id }}">{{ post.caption }}
+    <details>
+      <summary class="mb-2">Caption (already copied with the slides)</summary>
+      <pre class="caption-box" id="caption-{{ post.id }}">{{ post.caption }}
 
 {{ post.hashtags_str }}</pre>
-        <button class="btn btn-sm btn-outline-secondary mt-2" onclick="copyCaption('caption-{{ post.id }}', this)">
-          <i class="bi bi-clipboard me-1"></i>Copy Caption
-        </button>
-      </div>
-    </div>
+      <button class="btn btn-sm btn-outline-secondary mt-2" onclick="copyCaption('caption-{{ post.id }}', this)">Copy again</button>
+    </details>
     {% endif %}
   </div>
 </div>
@@ -162,9 +152,9 @@
 
 {% block scripts %}
 <script>
-// One-step save of every slide. On iPad/iPhone this opens the share sheet
-// where "Save N Images" drops them all into Photos at once; elsewhere it
-// falls back to a .zip download so no slide has to be saved by hand.
+// Export in ONE tap: copy the caption to the clipboard, then open the share
+// sheet so every slide saves to Photos at once. The caption is on the clipboard
+// ready to paste into TikTok; .zip is the desktop fallback.
 async function saveCarouselToPhotos(btn) {
   let urls = [];
   try { urls = JSON.parse(btn.dataset.slides || '[]'); } catch (e) {}
@@ -172,10 +162,14 @@ async function saveCarouselToPhotos(btn) {
   const cid = btn.dataset.cid;
   if (!urls.length) { alert('No slides to save yet.'); return; }
 
+  // Copy the caption first so it's ready to paste after the slides are saved.
+  const capEl = document.getElementById(btn.dataset.captionEl || '');
+  if (capEl) { try { await navigator.clipboard.writeText(capEl.textContent.trim()); } catch (e) {} }
+
   const original = btn.innerHTML;
   const zipFallback = () => { window.location.href = `/carousel/${cid}/download`; };
   btn.disabled = true;
-  btn.innerHTML = '<i class="bi bi-hourglass-split me-1"></i>Preparing…';
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Preparing…';
 
   try {
     const files = [];
@@ -188,7 +182,7 @@ async function saveCarouselToPhotos(btn) {
 
     if (navigator.canShare && navigator.canShare({files})) {
       await navigator.share({files, title: `Roblox Carousel Part ${part}`});
-      btn.innerHTML = '<i class="bi bi-check-circle me-1"></i>Saved to Photos';
+      btn.innerHTML = '<i class="bi bi-check-circle me-1"></i>Saved · caption copied';
     } else {
       zipFallback();
       btn.innerHTML = '<i class="bi bi-download me-1"></i>Downloaded .zip';
@@ -201,27 +195,6 @@ async function saveCarouselToPhotos(btn) {
     btn.innerHTML = '<i class="bi bi-download me-1"></i>Downloaded .zip';
   }
   setTimeout(() => { btn.innerHTML = original; btn.disabled = false; }, 2500);
-}
-async function triggerCarousel() {
-  const btn = document.getElementById('carouselBtn');
-  btn.disabled = true;
-  btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Generating…';
-  const r = await post('/pipeline/run-carousel');
-  if (r.carousels) {
-    btn.innerHTML = `Done — part ${r.part}`;
-    btn.classList.remove('btn-primary');
-    btn.classList.add('btn-success');
-  } else {
-    btn.innerHTML = 'Not enough games yet';
-    btn.classList.add('btn-warning');
-    btn.style.color = '#000';
-    btn.disabled = false;
-  }
-  setTimeout(() => location.reload(), 1500);
-}
-async function approveCarousel(id) {
-  await post(`/carousel/${id}/approve`);
-  location.reload();
 }
 async function rejectCarousel(id) {
   await post(`/carousel/${id}/reject`);

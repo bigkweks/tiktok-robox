@@ -241,6 +241,15 @@ async def trigger_carousel(background_tasks: BackgroundTasks):
     return {"status": "error", "message": "Pipeline not initialized"}
 
 
+@app.post("/pipeline/create-carousel")
+async def create_carousel():
+    """One action → a carousel. Builds now if possible, otherwise warms up the
+    discover→rate→build chain in the background. The single primary CTA."""
+    if _pipeline:
+        return await _pipeline.run_create_carousel()
+    return {"status": "error", "message": "Pipeline not initialized"}
+
+
 # ── Carousel pages ────────────────────────────────────────────────────
 
 @app.get("/carousels", response_class=HTMLResponse)

@@ -7,14 +7,9 @@
   <div>
     <h1 class="page-title">Today's pipeline</h1>
     <p class="page-subtitle">Find underrated Roblox games, rate them, ship the best five as a carousel.</p>
+    <p class="page-subtitle text-accent" id="createNote" style="min-height:1px"></p>
   </div>
-  {% if stats.pending > 0 %}
-    <a href="/queue?status=pending" class="btn btn-primary">Review {{ stats.pending }} pending</a>
-  {% elif stats.queue_size > 0 %}
-    <a href="/carousels" class="btn btn-primary">Build today's drop</a>
-  {% else %}
-    <button class="btn btn-primary" onclick="triggerDiscovery(this)">Run discovery</button>
-  {% endif %}
+  <button class="btn btn-primary btn-lg px-4" id="createBtn" onclick="createCarousel(this)">Create a carousel</button>
 </div>
 
 {# ── Metric strip: uniform, left-aligned, no decoration. The one metric that
