@@ -158,6 +158,20 @@ src/content/
                       the color check ✔️ (U+2714); free-text fields are emoji-stripped.
   thumbnail_generator.py  Video cover variants A/B. Emoji stripped from labels,
                       game name, and hook so they never tofu.
+src/learning/        ★ NEW. Performance Learning System (JSON corpus under
+                      output/performance/). components.py (classify_hook/cta,
+                      structure_signature, detect_ai_signals → strategy families).
+                      genome.py (CarouselGenome — the feedback-architecture record:
+                      topic/hook/cover/slides/cta/DNA/settings/quality+authenticity
+                      scores/outcome; edit_resilience_from_cycles). ranking.py
+                      (effectiveness, Wilson success_confidence, diversity, novelty,
+                      component_stats, capped anti-convergence component_bias;
+                      BIAS_CAP, DOMINANCE_SHARE). evaluation.py (strong/weak/
+                      overused/emerging, selection_frequency, survival_rate).
+                      insights.py (build_insights + improvement_trend).
+                      performance_store.py (PerformanceStore: record/list/count/
+                      update_outcome/component_bias/insights). recorder.py
+                      (build_genome bridges an ApprovalResult → a classified genome).
 src/scheduler/pipeline.py  Orchestrator (APScheduler). Jobs: discovery (4h),
                       content_factory (4h), carousel_factory (8h),
                       queue_maintenance (12h), analytics_update (24h).
@@ -231,12 +245,91 @@ src/api/templates/   Premium dark theme (no template tells). base.html holds the
   Final Quality Score + the three reviewer scores).
 - **Dashboard is a premium, restrained creator tool** (no template tells — no
   gradient hero, no emoji labels, no rainbow borders, one accent, clean hierarchy).
-- **Test suite: 150 passing**. See "Testing" below.
+- **Test suite: 178 passing**. See "Testing" below.
+- **Performance Learning System**: every generated carousel (approved or
+  rejected) is recorded as a genome; components are ranked (success confidence /
+  effectiveness / diversity / novelty), classified (strong/weak/overused/
+  emerging), and a capped anti-convergence bias steers cover selection toward
+  proven archetypes without letting one template dominate. Dashboard `/insights`.
 - **Content DNA system**: upload screenshots of a proven carousel → Claude vision
   extracts WHY it worked across 14 dimensions into 5 reusable formulas with
   confidence scores; consolidated DNA drives cover generation. Dashboard `/dna`.
 
-## Session changelog — approval gate + premium UI + one-tap workflow (latest)
+## Session changelog — Performance Learning System (latest)
+Brief: build a feedback architecture so the platform continuously improves
+generation quality from outcomes — learn which generated outputs consistently
+produce the highest-quality content, rank every generation component, and feed
+that back into generation while preventing convergence on one template.
+
+- **New `src/learning/` package — the closed learning loop.** For *every*
+  generated carousel (approved OR rejected) a `CarouselGenome`
+  (`genome.py`) is recorded with the full feedback architecture the brief
+  specified: Topic, Hook (+ classified family), Cover structure (the archetype),
+  Slide count (+ structure signature), CTA style (+ family), Content DNA profile
+  fingerprint that steered it, Generation settings (cycles / dna-driven /
+  perf-biased), Quality scores (the 7 weighted dims + final score) and
+  Authenticity scores (authenticity / ai_ratio / culture / novelty), plus the
+  review outcome (approved, hard failures, quality-review fail reasons, reviewer
+  scores, AI signals detected) and a slot for *realised* saves/follows the
+  analytics loop can patch in later.
+- **Component taxonomy (`components.py`).** The system learns at the level of
+  reusable building blocks. `classify_hook` / `classify_cta` bucket the literal
+  text into strategy *families* (qualifier / stat / confession / accusation /
+  paradox / insider / curiosity; save / question / follow / engage) so the
+  learner recognises the *pattern*, not the phrase — and so it generalises to
+  AI-generated wording the banks never contained. `structure_signature` keys on
+  slide-count + edition; `detect_ai_signals` reuses the gate's `_AI_TELLS` vocab.
+- **Ranking system (`ranking.py`).** Per component: `success_confidence` (a
+  Wilson lower bound on its win-rate — grows with evidence, so one good drop is a
+  guess and twenty is a law), `historical_effectiveness` (final score + edit-
+  resilience, with realised outcomes dominating once known), `diversity_score`
+  (1 − recent share) and `novelty_score`. These combine into a deliberately
+  *small*, capped (`±BIAS_CAP=0.06`) additive `component_bias` the generator
+  consults. **Anti-convergence is structural, not hoped-for:** the bias is
+  centred on the category mean (so better-than-average → positive, worse →
+  negative — it actually *prefers* winners, doesn't just discourage), and any
+  component whose recent selection share exceeds `DOMINANCE_SHARE=0.40` is forced
+  to a negative bias regardless of how well it performs. Verified: the single
+  strongest cover archetype, once overused, is throttled below a fresh emerging
+  alternative.
+- **Evaluation framework (`evaluation.py`).** Classifies every component as
+  **strong / weak / overused / emerging** (a component can be both strong *and*
+  overused — a winner starting to take over), tallies selection frequency
+  (which hooks/covers/structures/CTAs are picked most), and computes the corpus
+  `survival_rate` (share that survived review/editing with minimal changes —
+  proxied by edit-resilience: approved on cycle 1 = survived intact).
+- **Insights (`insights.py`) + `PerformanceStore` (`performance_store.py`).**
+  JSON-backed corpus under `output/performance/` (same rationale as the DNA
+  corpus: append-mostly, human-inspectable, no migration; `update_outcome`
+  patches realised performance in place). `build_insights` produces the dashboard
+  payload incl. an `improvement_trend` (older-half vs recent-half mean
+  effectiveness) — the literal success-criterion metric that a creator generating
+  carousels later gets better output than one generating earlier.
+- **Wired into generation + pipeline.** `cover_generator.select_cover_concept`,
+  `carousel_quality.finalize_carousel` and `content_approval.approve` take an
+  optional `performance` map (clamped to `PERF_BIAS_CAP` in the selector,
+  defence-in-depth). `pipeline.run_carousel_factory` loads the cover bias from
+  the store, passes it to the approval system, and records the genome (both
+  outcomes) — all in `try/except` so learning can never break generation. Cold
+  start = empty bias = unchanged behaviour.
+- **Performance Insights dashboard (`/insights` + `insights.html` + nav link).**
+  Shows summary metrics, the getting-smarter trend, top hook/cover/CTA patterns
+  (effectiveness bars + confidence + share + overused flag), most common failure
+  patterns, most common AI signals detected, why outputs fail quality review, and
+  the strong/weak/overused/emerging classification per category. `/api/insights`
+  exposes the raw payload.
+- **Tests +28** (`test_learning.py` 21, `test_learning_integration.py` 7):
+  hook/CTA/structure classification + AI-signal detection, genome round-trip +
+  edit-resilience decay, effectiveness (proxy + realised-dominates), Wilson
+  confidence growing with evidence, is-success gate, component stats, capped/
+  cold-start bias, **anti-convergence throttles the dominant pattern even when
+  it's best**, strong/weak/overused/emerging buckets, selection frequency +
+  survival rate, insights payload shape, improvement-trend detection, store
+  record/list/update-outcome/corrupt-tolerance, the recorder bridge from a real
+  approval run, generator bias changes the winner (and is bounded / no-op when
+  empty), and the insights page renders empty + populated. **Full suite: 178 passing.**
+
+## Session changelog — approval gate + premium UI + one-tap workflow (prior)
 Brief: three goals in one session — (1) transform the dashboard to feel trusted,
 professional, premium (not a template); (2) make content approval MANDATORY via
 three independent reviewer personas with a revision cycle, so only the strongest
@@ -798,9 +891,14 @@ Netlify/Cloudflare/`docs/` static site + TikTok domain-verification files (these
 existed only to get the posting app audited).
 
 ## Likely next steps (not yet done — pick up here)
-1. **Feedback loop on carousels**: PostAnalytics is wired for videos; extend
-   to carousels so the scorer learns which editions/games/captions land.
-   Add `/analytics/ingest-carousel` and extend CarouselPost with view/like fields.
+1. **Feedback loop on carousels — PARTIALLY DONE.** The Performance Learning
+   System now records a genome per carousel and learns from review-stage signals
+   (quality scores, edit-resilience, approval). What's still missing is *realised*
+   TikTok analytics for carousels: add `/analytics/ingest-carousel`, extend
+   `CarouselPost` with view/like/save/follow fields, and call
+   `PerformanceStore.update_outcome(genome_id, {performance_index, samples})` so
+   `ranking.effectiveness` lets measured performance dominate the proxy. (Store
+   the genome_id on the CarouselPost to link them.)
 2. **Caption A/B**: generate 2 caption variants per carousel and track which
    caption voice (genre-specific vs. score-tier vs. neutral) drives more saves.
 3. ~~Expose quality/plan in dashboard~~ — **DONE** (the /carousels review panel
@@ -826,10 +924,20 @@ existed only to get the posting app audited).
 10. **DNA-weighted analytics loop**: once carousel analytics exist (item 1), feed
     realised saves/follows back to re-weight which extracted patterns matter most
     (raise/lower per-dimension confidence by measured performance, not just
-    corroboration count).
+    corroboration count). The Performance Learning System's `update_outcome` hook
+    is the natural place to wire this — realised performance already dominates the
+    effectiveness proxy once `outcomes.performance_index` is set.
+11. **Extend the performance bias beyond the cover.** The learned bias currently
+    steers cover-archetype selection. Extend it to hook family, CTA family and
+    structure (the genome already records and ranks all of them) by threading the
+    relevant `component_bias(category)` into caption/CTA selection — same capped,
+    anti-convergence mechanism.
+12. **Add the inferred audience + per-slide purpose to the /carousels panel** (the
+    one leftover from next-step 3) and surface a per-carousel genome link on
+    `/insights` for drill-down.
 
 ## Testing
-Run `python -m pytest -q` (**150 passing**). Test files:
+Run `python -m pytest -q` (**178 passing**). Test files:
 - `tests/test_scoring.py`, `tests/test_discovery.py`, `tests/test_content.py`
   — original suites (scoring, Roblox client/trend detector, rating/captions).
   `test_content.py` extended: fallback verdict no AI tell, score-tiered variety.
@@ -877,6 +985,18 @@ Run `python -m pytest -q` (**150 passing**). Test files:
   condition trips, strong carousel has none, weak carousel rejected, panel as_dict
   shape, and the approval cycle runs / terminates ≤3 / keeps the best / records the
   per-cycle trail.
+- `tests/test_learning.py` (**new**) — hook/CTA/structure classification + AI-
+  signal detection, genome round-trip + edit-resilience decay, effectiveness
+  (proxy + realised-dominates), Wilson confidence growing with evidence, is-success
+  gate, component stats, capped/cold-start bias, anti-convergence throttles the
+  dominant pattern even when best, strong/weak/overused/emerging buckets, selection
+  frequency + survival rate, insights payload shape, improvement-trend detection +
+  min-sample, store record/list/update-outcome/corrupt-tolerance, and the recorder
+  bridge from a real approval run.
+- `tests/test_learning_integration.py` (**new**) — the performance bias is a no-op
+  when empty (matches unbiased selection), can change the winning cover archetype,
+  and is bounded (an absurd bias can't override the scored competition); the
+  `/insights` page renders both the empty and populated states.
 - `tests/test_workflow.py` (**new**) — the one-action orchestrator builds
   immediately when ready, retries once on panel rejection, reports retry when both
   drafts fail, warms up when games are scarce, and never double-warms.
