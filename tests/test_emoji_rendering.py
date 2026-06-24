@@ -135,9 +135,33 @@ def test_carousel_title_slide_renders_red_wordmark():
     slide = gen._make_title_slide(EDITIONS[1], 3, cover_hook="ranking roblox games no one plays")
     arr = np.asarray(slide.convert("RGB")).astype(int)
     r, g, b = arr[..., 0], arr[..., 1], arr[..., 2]
-    # Pixels close to Roblox red (the wordmark) must be present and substantial.
+    # Pixels close to Roblox red (the wordmark + rail) must be present & substantial.
     red_mask = (abs(r - ROBLOX_RED[0]) < 40) & (g < 90) & (b < 90)
     assert int(red_mask.sum()) > 2000
+
+
+def test_cover_value_phrase_folds_niche_into_search_anchor():
+    """Each edition's value line keeps the proven 'games to play' search anchor
+    while reading niche-specific (not a generic template)."""
+    from src.content.carousel_generator import _value_phrase, EDITIONS
+    for label, *_ in EDITIONS:
+        phrase = _value_phrase(label)
+        assert "games to play" in phrase           # SEO anchor preserved everywhere
+    assert _value_phrase("Horror edition") == "horror games to play"
+    assert _value_phrase("Friends edition") == "games to play with friends"
+    assert _value_phrase("Unknown") == "games to play"   # safe default
+
+
+def test_cover_credibility_and_cta_rotate_and_carry_part():
+    """The credibility line is the new trust signal (carries 'part N'); the CTA
+    is a natural save line, never the old generic 'swipe to save'. Both rotate."""
+    from src.content.carousel_generator import _credibility_line, _cover_cta
+    creds = [_credibility_line(p) for p in range(5)]
+    assert all(f"part {p}" in creds[p] for p in range(5))   # series marker present
+    assert len(set(creds)) >= 4                              # rotates, not one template
+    ctas = [_cover_cta(p) for p in range(5)]
+    assert all("swipe to save" not in c for c in ctas)
+    assert len(set(ctas)) >= 3
 
 
 def test_game_slide_blurb_callout_renders_color_emoji():

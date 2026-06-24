@@ -110,6 +110,22 @@ def test_cover_hooks_vary_and_are_clean():
     assert all(not has_ai_tell(h) for h in picks)
 
 
+def test_cover_hooks_are_niche_specific_per_edition():
+    """An edition gets niche-specific hooks (the key authenticity signal), and
+    a generic call still works (back-compat for the bank)."""
+    from src.content.carousel_quality import EDITION_HOOKS
+
+    horror = {pick_cover_hook(p, edition="Horror edition") for p in range(4)}
+    # Every horror pick comes from the horror niche bank — not the generic one.
+    assert horror and horror <= set(EDITION_HOOKS["Horror edition"])
+    # A different niche yields different language.
+    pvp = pick_cover_hook(0, edition="PvP edition")
+    assert pvp in EDITION_HOOKS["PvP edition"]
+    # No edition / unknown edition falls back to the generic bank cleanly.
+    assert isinstance(pick_cover_hook(0), str)
+    assert isinstance(pick_cover_hook(0, edition="Nonexistent"), str)
+
+
 def test_ctas_vary_across_parts():
     picks = [pick_cta(p) for p in range(5)]
     assert len(set(picks)) >= 3

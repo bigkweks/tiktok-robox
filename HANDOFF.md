@@ -163,7 +163,54 @@ src/api/templates/   base.html (dark theme + .id-chip + imgFallback helper),
 - Video + thumbnail pipeline intact (badge-overlap bug fixed).
 - **Test suite: 67 passing**. See "Testing" below.
 
-## Session changelog — cover spacing finalization (latest)
+## Session changelog — performance-first cover redesign (latest)
+Brief: stop making the cover *prettier* — optimise it for stop-scroll, swipe-
+through, saves and follows while staying minimal/premium and creator-made. The
+old cover was a dead-centred, perfectly symmetrical "actually good ROBLOX games
+to play" block floating in whitespace with a generic "swipe to save" CTA and
+zero credibility signal — it read like a Canva/AI template. Rebuilt
+`_make_title_slide` end to end.
+
+- **Composition is now LEFT-ALIGNED + asymmetric off a Roblox-red rail.** A thick
+  red vertical rail (`rail_x=100`, `rail_w=16`) brackets the keyword block. The
+  structural (not decorative) use of brand red is what kills the symmetry, adds
+  energy, and makes it read creator-made. Everything keys off `text_x` to the
+  right of the rail. White canvas, black text, red as the only accent (unchanged
+  palette + the no-purple QC test still holds).
+- **4-tier hierarchy, eye travels top→down** (matches the brief's spec):
+  1. small **niche curiosity hook** (strong dark type, not faint grey),
+  2. **dominant ROBLOX** (auto-fit to width, the one red accent, ~250px),
+  3. **edition-aware value/search line** (`_value_phrase`) that folds the niche
+     INTO the proven search anchor — "horror games to play", "games to play with
+     friends", etc. (every edition still contains "games to play" for SEO),
+  4. small **credibility line** (`_credibility_line`) — the trust signal the old
+     cover lacked: "part N · ranked, not random / i actually play these / vetted,
+     not just viral …" (pairs the proven part-marker with a curation proof).
+  Then a natural **CTA** ("save these for later" / "you'll want this list later"
+  + red arrow) replacing the generic "swipe to save".
+- **Niche-specific hooks** (`carousel_quality.EDITION_HOOKS`, keyed by edition):
+  horror gets "hidden horror gems", "if you've already played doors", "too scary
+  to go viral"…; every edition has its own niche bank. `pick_cover_hook(part,
+  used, edition=)` now prefers the niche bank (the single biggest "does this feel
+  AI?" lever) and falls back to the generic `COVER_HOOKS` — back-compatible: the
+  no-edition call still works. `finalize_carousel` passes the edition through.
+- **CTA pulled out of the occluded zone.** In-feed, TikTok overlays the caption/
+  username/action rail across the lower ~25% of the image, so the old bottom CTA
+  would be hidden. The whole hook→CTA unit is now seated at ~46% height (upper-
+  middle clear zone), which also removes the dead lower gap — higher info density
+  without clutter, exactly what the brief asked.
+- **Decision: no raster visual on the cover.** The brief invited testing a small
+  screenshot/blurred frame; rejected because (a) the cover has no single game to
+  show, (b) the sandbox can't fetch art and a stock image would read templated/
+  AI. The typographic asymmetry + red rail is the stronger, more authentic
+  scroll-stopper. Documented so it isn't re-litigated.
+- Verified by rendering covers across editions (horror/friends/anime/hidden
+  gems) at full + feed-thumbnail scale, plus a full 6-slide `generate()` smoke.
+- Tests +3 (now **70 passing**): niche hooks are edition-specific (and generic
+  fallback still works); value phrase folds niche into the search anchor for
+  every edition; credibility + CTA rotate and never reuse "swipe to save".
+
+## Session changelog — cover spacing finalization (prior)
 Incremental user-approved spacing tweaks to the cover slide after the minimal
 redesign landed.
 

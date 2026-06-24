@@ -68,13 +68,60 @@ EDITIONS: list[tuple[str, str, list[str]]] = [
 
 # Rotating scroll-stopper kickers shown above the title — these read like a real
 # creator hyping the drop and create curiosity/FOMO before the type even lands.
+# (Fallback only; the cover prefers a vetted niche hook from the quality engine.)
 TITLE_KICKERS: list[str] = [
     "you NEED to save these",
-    "stop scrolling 🛑",
     "before they blow up",
     "no one is talking about these",
     "save before its gone",
 ]
+
+# Edition → the value/search line under the ROBLOX wordmark. Every phrase folds
+# the niche INTO the proven search anchor "games to play" (23.9% of the original
+# post's traffic came from that search), so the cover stays SEO-strong while
+# reading niche-specific instead of templated. Default keeps the bare anchor.
+EDITION_VALUE: dict[str, str] = {
+    "Friends edition": "games to play with friends",
+    "Hidden Gems": "games to play",
+    "Horror edition": "horror games to play",
+    "Solo edition": "games to play solo",
+    "Anime edition": "anime games to play",
+    "PvP edition": "pvp games to play",
+    "Underrated edition": "games to play",
+    "Brainrot edition": "brainrot games to play",
+}
+
+# Small credibility line under the value phrase — the trust signal the old cover
+# lacked. It pairs the proven "part N" series marker (forces follows, signals a
+# consistent creator) with a curation proof so the picks read vetted, not random.
+# Rotated by part so the series never repeats the same line.
+CREDIBILITY_LINES: list[str] = [
+    "part {n}  ·  ranked, not random",
+    "part {n}  ·  i actually play these",
+    "part {n}  ·  vetted, not just viral",
+    "part {n}  ·  tested so you don't have to",
+    "part {n}  ·  hand-picked every drop",
+]
+
+# Cover CTAs — natural saves, never the generic "swipe to save". Rotated by part.
+COVER_CTAS: list[str] = [
+    "save these for later",
+    "you'll want this list later",
+    "keep this somewhere",
+    "save before you forget",
+]
+
+
+def _value_phrase(edition: str) -> str:
+    return EDITION_VALUE.get(edition, "games to play")
+
+
+def _credibility_line(part: int) -> str:
+    return CREDIBILITY_LINES[part % len(CREDIBILITY_LINES)].format(n=part)
+
+
+def _cover_cta(part: int) -> str:
+    return COVER_CTAS[part % len(COVER_CTAS)]
 
 
 @dataclass
@@ -293,75 +340,126 @@ class CarouselGenerator:
         count: int = 5,
         cover_hook: Optional[str] = None,
     ) -> Image.Image:
+        """
+        Performance-first cover. Designed against the brief's levers: a
+        niche-specific curiosity hook, a single dominant ROBLOX keyword, a value
+        line that doubles as the proven search phrase, and a credibility line —
+        all LEFT-ALIGNED off a Roblox-red rail so the composition is deliberately
+        asymmetric (kills the "AI-template" dead-centred symmetry, adds energy,
+        and the eye travels top→down through the hierarchy). White canvas, black
+        text, red as the only accent.
+        """
         edition, _theme_emoji, _stickers = ed_meta
         # Clean white canvas — premium, minimal, pattern-interrupts the dark feed.
         img = Image.new("RGB", (W, H), (252, 252, 253))
         draw = ImageDraw.Draw(img)
 
         ink = (17, 17, 20)
-        grey = (140, 142, 150)
-        maxw = W - SAFE * 2
+        grey = (132, 134, 142)
 
-        # ── 1. Curiosity kicker (plain centered text — no top bar) ─────────
-        # The quality layer supplies a vetted, curiosity-first hook. Rendered as
-        # quiet dark text above the hero, NOT in a heavy pill, so the slide reads
-        # as one clean composition.
-        kicker = (cover_hook or "").strip() or TITLE_KICKERS[part_number % len(TITLE_KICKERS)]
-        k_size = 54
-        f_kick = load_font("semibold", k_size)
-        lines = _wrap_to_width(draw, kicker, f_kick, maxw, max_lines=2)
-        while len(lines) > 2 and k_size > 38:   # shrink until it fits in 2 lines
-            k_size -= 4
-            f_kick = load_font("semibold", k_size)
-            lines = _wrap_to_width(draw, kicker, f_kick, maxw, max_lines=2)
-        ky = 330
-        for i, line in enumerate(lines):
-            _centered(draw, line, W // 2, ky + i * int(k_size * 1.3), f_kick, (90, 92, 100))
+        # Left-aligned, asymmetric composition anchored by a Roblox-red rail.
+        rail_x = 100
+        rail_w = 16
+        text_x = rail_x + rail_w + 38          # text starts just right of the rail
+        right = W - SAFE
+        avail = right - text_x                 # working width for every line
 
-        # ── 2. Hero search phrase (the core message) ───────────────────────
-        # "actually good ROBLOX games to play" — ROBLOX is the ONE red accent.
-        f_pre = load_font("extrabold", 88)
-        f_mid = load_font("extrabold", 96)
-        hero_size = 232
-        f_hero = load_font("black", hero_size)
-        while _text_w(draw, "ROBLOX", f_hero) > maxw and hero_size > 150:
-            hero_size -= 8
-            f_hero = load_font("black", hero_size)
+        # ── 1. Niche curiosity hook (small, bold, dark) ────────────────────
+        # The quality layer supplies a vetted, niche-specific hook; this is the
+        # curiosity driver, so it's strong dark type — not the faint grey the old
+        # cover used (faint = low energy + reads templated).
+        hook = (cover_hook or "").strip().lower() or TITLE_KICKERS[part_number % len(TITLE_KICKERS)]
+        h_size = 62
+        f_hook = load_font("semibold", h_size)
+        hook_lines = _wrap_to_width(draw, hook, f_hook, avail, max_lines=2)
+        while len(hook_lines) > 1 and h_size > 44:   # prefer one tight line
+            h_size -= 3
+            f_hook = load_font("semibold", h_size)
+            hook_lines = _wrap_to_width(draw, hook, f_hook, avail, max_lines=2)
 
-        # "actually good" sits a little lower; the ROBLOX wordmark + the lines
-        # under it tuck up just below it so the phrase reads as one tight unit.
-        # ROBLOX is the visual anchor. We measure real glyph boxes and place
-        # "actually good" so the whitespace ABOVE ROBLOX (its baseline → top of R)
-        # equals the whitespace BELOW ROBLOX (bottom of X → top of "games").
-        block_top = 625
-        rob_y = block_top + 104
-        games_y = rob_y + hero_size + 30
-        sub_y = rob_y + hero_size + 180
+        # ── 2. Dominant ROBLOX wordmark (the one red accent, auto-fit) ─────
+        rob_size = 250
+        f_rob = load_font("black", rob_size)
+        while _text_w(draw, "ROBLOX", f_rob) > avail and rob_size > 150:
+            rob_size -= 6
+            f_rob = load_font("black", rob_size)
 
-        _, rob_top_ink, _, rob_bot_ink = draw.textbbox((0, rob_y), "ROBLOX", font=f_hero)
-        _, games_top_ink, _, _ = draw.textbbox((0, games_y), "games to play", font=f_mid)
-        gap = games_top_ink - rob_bot_ink                 # whitespace below ROBLOX
-        ag_y = rob_top_ink - gap - f_pre.getmetrics()[0]  # baseline of "actually good" sits `gap` above ROBLOX
+        # ── 3. Value / search line (edition-aware, black, can wrap) ────────
+        value = _value_phrase(edition)
+        v_size = 96
+        f_val = load_font("extrabold", v_size)
+        val_lines = _wrap_to_width(draw, value, f_val, avail, max_lines=2)
+        while len(val_lines) > 2 and v_size > 70:
+            v_size -= 6
+            f_val = load_font("extrabold", v_size)
+            val_lines = _wrap_to_width(draw, value, f_val, avail, max_lines=2)
 
-        _centered(draw, "actually good", W // 2, ag_y, f_pre, ink)
-        _centered(draw, "ROBLOX", W // 2, rob_y, f_hero, ROBLOX_RED)
-        _centered(draw, "games to play", W // 2, games_y, f_mid, ink)
+        # ── 4. Credibility line (small grey — the trust signal) ────────────
+        cred = _credibility_line(part_number)
+        f_cred = load_font("semibold", 46)
 
-        # ── 3. Supporting line: part + edition (quiet grey, no pill) ────────
-        sub = f"part {part_number}  ·  {edition.lower()}"
-        _centered(draw, sub, W // 2, sub_y, load_font("semibold", 52), grey)
+        # ── 5. CTA (natural save line + red arrow) — folded INTO the block,
+        # not pinned to the canvas bottom. In-feed, TikTok overlays the caption/
+        # username/action rail across the lower ~25% of the image, so a bottom
+        # CTA would be occluded; keeping it in the upper-middle clear zone is the
+        # performance-correct placement (and removes the dead lower gap). ──────
+        cta_text = _cover_cta(part_number)
+        f_cta = load_font("bold", 52)
+        cta_h = 60
 
-        # ── 4. CTA — text + a crisp red arrow (on-brand, no tofu, no emoji) ──
-        cy = H - 200
-        f_cta = load_font("bold", 50)
-        cta_text = "swipe to save"
+        # ── Vertical layout: stack hook→CTA as ONE unit and seat it in the
+        # clear upper-middle zone. Real ink heights keep the gaps optical. ─────
+        hook_lh = int(h_size * 1.18)
+        val_lh = int(v_size * 1.04)
+        _, rt, _, rb = draw.textbbox((0, 0), "ROBLOX", font=f_rob)
+        rob_h = rb - rt
+
+        gap_hook_rob = 34
+        gap_rob_val = 26
+        gap_val_cred = 54
+        gap_cred_cta = 96
+        cred_h = 56
+
+        block_h = (
+            len(hook_lines) * hook_lh
+            + gap_hook_rob + rob_h
+            + gap_rob_val + len(val_lines) * val_lh
+            + gap_val_cred + cred_h
+            + gap_cred_cta + cta_h
+        )
+        # Centre the unit on ~46% of the height — dominant, upper-weighted, and
+        # entirely above TikTok's bottom UI overlay.
+        top = max(220, int(H * 0.46) - block_h // 2)
+
+        y = top
+        for line in hook_lines:
+            draw.text((text_x, y), line, font=f_hook, fill=(28, 28, 32))
+            y += hook_lh
+        y += gap_hook_rob
+        rob_top = y
+        draw.text((text_x, y - rt), "ROBLOX", font=f_rob, fill=ROBLOX_RED)
+        y += rob_h + gap_rob_val
+        for line in val_lines:
+            draw.text((text_x, y), line, font=f_val, fill=ink)
+            y += val_lh
+        y += gap_val_cred
+        draw.text((text_x, y), cred, font=f_cred, fill=grey)
+        cred_bottom = y + cred_h
+
+        # ── Red rail — spans the keyword block (ROBLOX → credibility), off-
+        # centre. The structural use of brand red (not decoration) is what gives
+        # the cover its energy and creator-made asymmetry. ─────────────────────
+        draw.rounded_rectangle(
+            [rail_x, rob_top - 6, rail_x + rail_w, cred_bottom],
+            radius=rail_w // 2, fill=ROBLOX_RED,
+        )
+
+        # CTA, just below the block.
+        cy = cred_bottom + gap_cred_cta - 10
+        draw.text((text_x, cy), cta_text, font=f_cta, fill=(108, 110, 118), anchor="lm")
         tw = _text_w(draw, cta_text, f_cta)
-        arrow_w, gap = 34, 22
-        total = tw + gap + arrow_w
-        x0 = (W - total) // 2
-        draw.text((x0, cy), cta_text, font=f_cta, fill=(110, 112, 120), anchor="lm")
-        ax = x0 + tw + gap
-        draw.polygon([(ax, cy - 18), (ax, cy + 18), (ax + arrow_w, cy)], fill=ROBLOX_RED)
+        ax = text_x + tw + 26
+        draw.polygon([(ax, cy - 18), (ax, cy + 18), (ax + 34, cy)], fill=ROBLOX_RED)
 
         return img
 

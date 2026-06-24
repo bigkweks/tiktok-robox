@@ -36,7 +36,9 @@ _WORDS = re.compile(r"[a-z0-9']+")
 # ── Creator-native banks (rotated, never a single template) ───────────────
 
 # Cover hooks: curiosity-first, no "stop scrolling" cliché spam, no over-promise.
-# Each reads like a real creator's first line, not a marketing headline.
+# Each reads like a real creator's first line, not a marketing headline. These are
+# the generic fallback bank; edition-specific niche hooks (below) are preferred
+# because niche-specific language is the single strongest authenticity signal.
 COVER_HOOKS: tuple[str, ...] = (
     "you've never heard of these",
     "save this list trust me",
@@ -51,6 +53,55 @@ COVER_HOOKS: tuple[str, ...] = (
     "before these blow up",
     "rating games you've been sleeping on",
 )
+
+# ── Niche-specific cover hooks (keyed by edition label) ────────────────────
+# Niche language is what makes a cover read creator-made instead of templated —
+# a real horror-niche creator opens with horror words, not a generic line. The
+# renderer puts this in the small top slot above the dominant ROBLOX wordmark.
+# Kept short (the cover slot is small) and curiosity-first, never clickbait.
+EDITION_HOOKS: dict[str, tuple[str, ...]] = {
+    "Horror edition": (
+        "hidden horror gems",
+        "if you've already played doors",
+        "horror nobody's found yet",
+        "too scary to go viral",
+    ),
+    "Friends edition": (
+        "the group-chat games",
+        "send this to your squad",
+        "no one's put you onto these",
+    ),
+    "Hidden Gems": (
+        "buried under the algorithm",
+        "the ones that should be famous",
+        "you've never heard of these",
+    ),
+    "Solo edition": (
+        "for when you're playing alone",
+        "no friends required",
+        "single-player roblox actually exists",
+    ),
+    "Anime edition": (
+        "anime games that aren't mid",
+        "before the algorithm finds them",
+        "worth the grind, i checked",
+    ),
+    "PvP edition": (
+        "where the sweats actually hide",
+        "pvp that takes real skill",
+        "ranked players only know these",
+    ),
+    "Underrated edition": (
+        "criminally underrated",
+        "i'm not gatekeeping these",
+        "skipped by literally everyone",
+    ),
+    "Brainrot edition": (
+        "peak brainrot, no notes",
+        "turn your brain off for these",
+        "unserious but undefeated",
+    ),
+}
 
 # Follow / continuation CTAs — natural, content-matched, never desperate.
 # `{next}` is the next part number.
@@ -277,9 +328,22 @@ def _rotate(bank: Sequence[str], seed: int) -> list[str]:
     return [bank[(seed + i) % n] for i in range(n)]
 
 
-def pick_cover_hook(part: int, used: Optional[set[str]] = None) -> str:
-    """A strong, non-recently-used cover hook — rotated so the series varies."""
+def pick_cover_hook(part: int, used: Optional[set[str]] = None,
+                    edition: Optional[str] = None) -> str:
+    """A strong, non-recently-used cover hook — rotated so the series varies.
+
+    When an `edition` is given we prefer its niche-specific bank: niche language
+    ("hidden horror gems") reads far more creator-made than a generic line and
+    is the biggest lever on the "does this feel AI?" check. Falls back to the
+    generic bank if the edition has no niche hooks or they're all used.
+    """
     used = used or set()
+    niche = list(EDITION_HOOKS.get(edition or "", ()))
+    # Niche hooks first (filtered for AI tells), then the vetted generic bank.
+    niche_ok = [h for h in niche
+                if not has_ai_tell(h) and normalize_caption(h) not in used]
+    if niche_ok:
+        return niche_ok[part % len(niche_ok)]
     qualified = [h for h in COVER_HOOKS
                  if score_hook(h) >= 0.6 and normalize_caption(h) not in used]
     if not qualified:
@@ -367,7 +431,7 @@ def finalize_carousel(
     scores = list(scores) if scores is not None else [None] * n
     game_names = list(game_names) if game_names is not None else []
 
-    cover_hook = pick_cover_hook(part, used_hooks)
+    cover_hook = pick_cover_hook(part, used_hooks, edition=edition)
 
     # Pass 1: dedupe + strip AI tells / crutches / generics.
     caps = dedupe_carousel_captions(captions, genres=genres, scores=scores)
@@ -407,4 +471,5 @@ __all__ = [
     "QualityReport", "review_carousel", "finalize_carousel", "score_hook",
     "score_caption", "score_cta", "pick_cover_hook", "pick_cta",
     "pick_footer_cta", "build_post_caption", "COVER_HOOKS", "CTA_LINES",
+    "EDITION_HOOKS",
 ]
