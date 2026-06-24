@@ -125,13 +125,19 @@ def test_plain_arrow_has_no_glyph_but_color_arrow_does():
     assert int((np.asarray(color_arrow)[..., 3] > 10).sum()) > 200
 
 
-def test_carousel_title_slide_renders_emoji():
-    from src.content.carousel_generator import CarouselGenerator, EDITIONS
-    gen = CarouselGenerator.__new__(CarouselGenerator)
+def test_carousel_title_slide_renders_red_wordmark():
+    """Minimal cover: clean white, the ROBLOX wordmark is the one red accent."""
+    import numpy as np
+    from src.content.carousel_generator import CarouselGenerator, EDITIONS, ROBLOX_RED
     from src.config import get_settings
+    gen = CarouselGenerator.__new__(CarouselGenerator)
     gen._settings = get_settings()
-    slide = gen._make_title_slide(EDITIONS[1], 3)  # Hidden Gems: 💎 + 😳 🤩
-    assert _emoji_band_is_colorful(slide)
+    slide = gen._make_title_slide(EDITIONS[1], 3, cover_hook="ranking roblox games no one plays")
+    arr = np.asarray(slide.convert("RGB")).astype(int)
+    r, g, b = arr[..., 0], arr[..., 1], arr[..., 2]
+    # Pixels close to Roblox red (the wordmark) must be present and substantial.
+    red_mask = (abs(r - ROBLOX_RED[0]) < 40) & (g < 90) & (b < 90)
+    assert int(red_mask.sum()) > 2000
 
 
 def test_game_slide_blurb_callout_renders_color_emoji():
@@ -170,8 +176,9 @@ def test_game_slide_without_blurb_still_renders():
     assert slide.size == (1080, 1920)
 
 
-def test_game_slide_keeps_color_emoji_in_name_and_description():
-    """Roblox-fidelity: the real name + description keep their color emoji."""
+def test_game_slide_keeps_name_emoji_but_cleans_description():
+    """Minimal redesign: the name keeps its color emoji (authentic), but the
+    description is stripped to clean text — no decorative emoji clutter."""
     from src.content.carousel_generator import CarouselGenerator, CarouselGame
     from src.config import get_settings
     gen = CarouselGenerator.__new__(CarouselGenerator)
@@ -185,7 +192,47 @@ def test_game_slide_keeps_color_emoji_in_name_and_description():
         blurb="",  # no callout → description starts right under the stat pills
     )
     slide = gen._make_game_slide(game)
-    # Header band carries the name's color emoji (👍).
+    # Header band still carries the name's color emoji (👍).
     assert _emoji_band_is_colorful(slide.crop((0, 70, 1080, 170)))
-    # Description band carries the real Roblox color emoji.
-    assert _emoji_band_is_colorful(slide.crop((0, 1230, 1080, 1560)))
+    # Description band is now clean text — the decorative emoji were stripped.
+    assert not _emoji_band_is_colorful(slide.crop((0, 1230, 1080, 1560)))
+
+
+def _has_purple(slide) -> bool:
+    """True if any strongly-purple pixel (the old brand accent) remains."""
+    import numpy as np
+    arr = np.asarray(slide.convert("RGB")).astype(int)
+    r, g, b = arr[..., 0], arr[..., 1], arr[..., 2]
+    # Old purple was ~ (124,111,255)/(90,78,200): high blue, blue clearly > red > green.
+    purple = (b > 170) & (r > 80) & (r < 170) & (g < r) & (b - r > 60)
+    return int(purple.sum()) > 200
+
+
+def _has_roblox_red(slide) -> bool:
+    import numpy as np
+    from src.content.carousel_generator import ROBLOX_RED
+    arr = np.asarray(slide.convert("RGB")).astype(int)
+    r, g, b = arr[..., 0], arr[..., 1], arr[..., 2]
+    red = (abs(r - ROBLOX_RED[0]) < 45) & (g < 95) & (b < 95)
+    return int(red.sum()) > 800
+
+
+def test_branding_is_roblox_red_not_purple():
+    """QC: every slide carries the Roblox-red accent and zero purple."""
+    from src.content.carousel_generator import CarouselGenerator, CarouselGame, EDITIONS
+    from src.config import get_settings
+    gen = CarouselGenerator.__new__(CarouselGenerator)
+    gen._settings = get_settings()
+
+    cover = gen._make_title_slide(EDITIONS[2], 5, cover_hook="ranking roblox games no one plays")
+    assert _has_roblox_red(cover) and not _has_purple(cover)
+
+    game = CarouselGame(
+        name="Backrooms Escape", creator="Liminal Co", score=9.4,
+        carousel_caption="horror that actually scared me", like_ratio=0.93,
+        active_players=1240, thumbnail_url=None, icon_url=None, genre="horror",
+        visits=820_000, description="Find the exit before the entity finds you.",
+        blurb="Scariest co-op horror hiding on Roblox right now.",
+    )
+    last = gen._make_game_slide(game, final_cta="part 6 soon — follow")
+    assert _has_roblox_red(last) and not _has_purple(last)

@@ -161,9 +161,35 @@ src/api/templates/   base.html (dark theme + .id-chip + imgFallback helper),
   follows-per-post.
 - Pipeline batches carousels every 8h; manual "⚡ Generate Now" button.
 - Video + thumbnail pipeline intact (badge-overlap bug fixed).
-- **Test suite: 66 passing**. See "Testing" below.
+- **Test suite: 67 passing**. See "Testing" below.
 
-## Session changelog — quality engine + authenticity (latest session)
+## Session changelog — minimal Roblox-red redesign (latest session)
+Brief: clean, premium, minimal carousel with Roblox red as the ONLY accent.
+
+- **Cover slide rebuilt as minimal/premium.** Removed the dark top "header bar"
+  pill, the big purple ROBLOX box, all 4 scattered emoji stickers, and the dark
+  edition pill. New clean hierarchy on white: curiosity hook (quiet grey) →
+  "actually good ROBLOX games to play" with **ROBLOX in Roblox red** (the one
+  accent) → "part N · edition" → a "swipe to save" CTA with a **drawn red
+  triangle** (no emoji, no tofu). Generous whitespace; zero clutter.
+- **Roblox red everywhere, used sparingly.** New `ROBLOX_RED = (226,35,26)`
+  constant. Verdict callout rail and the last-slide follow chip recolored
+  purple → red (thin rail / soft chip, not a fill). Fallback letter-icon palette
+  de-purpled. Dashboard brand recolored purple → red too (base.html `--brand`,
+  hero gradient, all `rgba(124,111,255,*)`, `#a78bfa`, 💜→❤️) — nav kept.
+- **Emoji discipline (≤2 per slide, never decorative).** Game-slide description
+  is now **clean text** (color emoji stripped — was a 🍋💵🤑 wall); name keeps its
+  one authentic emoji, callout keeps 🔥 → ≤2. Stat-row glyphs are flat grey UI,
+  not counted. Cover uses zero emoji.
+- **Text safety.** New `_wrap_to_width()` greedy pixel-width word-wrap (cover
+  hook + description + callout) so nothing clips or crosses the safe margin;
+  hero font auto-shrinks if "ROBLOX" would exceed the margins. `SAFE=90` cover
+  margin; game-slide content unified to one 48px left edge.
+- **QC test** (`test_branding_is_roblox_red_not_purple`) asserts every slide has
+  the red accent and **zero purple pixels**. Title-slide + description tests
+  updated for the new minimal design.
+
+## Session changelog — quality engine + authenticity (prior session)
 Goal: make carousels read like a top human creator, not an AI template.
 Added an internal quality gate that reviews + auto-revises every post first.
 

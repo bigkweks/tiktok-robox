@@ -46,6 +46,12 @@ log = structlog.get_logger(__name__)
 
 W, H = 1080, 1920  # TikTok portrait
 
+# Roblox's signature red — the single accent colour for the whole carousel.
+# Used sparingly (the ROBLOX wordmark, a thin rail, the follow chip), never as a
+# fill that overwhelms the clean white layout.
+ROBLOX_RED = (226, 35, 26)
+SAFE = 90  # safe margin from every edge (no text or accent crosses it)
+
 # (edition label, theme emoji, [sticker emoji — used as scattered face stickers])
 # More stickers per edition = a denser, more expressive title slide. The title
 # renderer scatters up to 4 of these around the type to stop the scroll.
@@ -123,6 +129,24 @@ def _centered(draw, text, cx, y, font, fill, stroke=0, stroke_fill=(0, 0, 0)):
     w = _text_w(draw, text, font)
     draw.text((cx - w // 2, y), text, font=font, fill=fill,
               stroke_width=stroke, stroke_fill=stroke_fill)
+
+
+def _wrap_to_width(draw, text, font, max_w, max_lines=2):
+    """Greedy word-wrap by measured pixel width (keeps text inside safe margins
+    instead of guessing a character count). Returns up to `max_lines` lines."""
+    words = (text or "").split()
+    lines: list[str] = []
+    cur = ""
+    for word in words:
+        trial = f"{cur} {word}".strip()
+        if cur and _text_w(draw, trial, font) > max_w:
+            lines.append(cur)
+            cur = word
+        else:
+            cur = trial
+    if cur:
+        lines.append(cur)
+    return lines[:max_lines] if lines else [""]
 
 
 def _maturity(genre: Optional[str]) -> tuple[str, tuple[int, int, int]]:
@@ -269,107 +293,61 @@ class CarouselGenerator:
         count: int = 5,
         cover_hook: Optional[str] = None,
     ) -> Image.Image:
-        edition, theme_emoji, stickers = ed_meta
-        # Off-white background — pattern-interrupts the dark TikTok feed and
-        # stops the thumb. A faint top-corner brand wash adds depth without
-        # killing the bright "screenshot of a real list" feel.
-        img = Image.new("RGB", (W, H), (250, 250, 252))
+        edition, _theme_emoji, _stickers = ed_meta
+        # Clean white canvas — premium, minimal, pattern-interrupts the dark feed.
+        img = Image.new("RGB", (W, H), (252, 252, 253))
+        draw = ImageDraw.Draw(img)
 
-        ink = (15, 15, 18)
-        grey = (150, 152, 160)
-        BRAND = (124, 111, 255)   # the pipeline purple — pops on white
+        ink = (17, 17, 20)
+        grey = (140, 142, 150)
+        maxw = W - SAFE * 2
 
-        # ── Scroll-stopper kicker pill (top) ──────────────────────────────
-        # The quality layer supplies a vetted, curiosity-first cover hook; we
-        # fall back to the local rotation only if none was passed.
+        # ── 1. Curiosity kicker (plain centered text — no top bar) ─────────
+        # The quality layer supplies a vetted, curiosity-first hook. Rendered as
+        # quiet dark text above the hero, NOT in a heavy pill, so the slide reads
+        # as one clean composition.
         kicker = (cover_hook or "").strip() or TITLE_KICKERS[part_number % len(TITLE_KICKERS)]
-        kdraw = ImageDraw.Draw(img)
-        kpad = 46
-        kmax = W - 80 - kpad * 2     # keep the pill clear of the edges
-        # Shrink the hook font until it fits on one line (cover hooks vary in
-        # length); never let it tofu off the slide.
-        k_size = 52
-        while k_size > 36:
-            f_kick = load_font("extrabold", k_size)
-            kw = measure_mixed(kdraw, kicker, f_kick, k_size)
-            if kw <= kmax:
-                break
-            k_size -= 3
-        kpill_w = kw + kpad * 2
-        kpill_h = int(k_size * 1.55) + 22
-        kx = (W - kpill_w) // 2
-        ky = 250
-        draw = ImageDraw.Draw(img)
-        draw.rounded_rectangle([kx, ky, kx + kpill_w, ky + kpill_h], radius=kpill_h // 2, fill=(18, 18, 22))
-        img = draw_mixed(img, (W // 2, ky + kpill_h // 2), kicker, f_kick,
-                         (255, 255, 255), emoji_size=k_size, anchor="mm")
-        draw = ImageDraw.Draw(img)
+        k_size = 54
+        f_kick = load_font("semibold", k_size)
+        lines = _wrap_to_width(draw, kicker, f_kick, maxw, max_lines=2)
+        while len(lines) > 2 and k_size > 38:   # shrink until it fits in 2 lines
+            k_size -= 4
+            f_kick = load_font("semibold", k_size)
+            lines = _wrap_to_width(draw, kicker, f_kick, maxw, max_lines=2)
+        ky = 330
+        for i, line in enumerate(lines):
+            _centered(draw, line, W // 2, ky + i * int(k_size * 1.3), f_kick, (90, 92, 100))
 
-        # Type stack — Poppins, tight leading like the viral post
-        f_pre = load_font("extrabold", 92)
-        f_hero = load_font("black", 236)
-        f_mid = load_font("extrabold", 98)
-        f_part = load_font("semibold", 56)
+        # ── 2. Hero search phrase (the core message) ───────────────────────
+        # "actually good ROBLOX games to play" — ROBLOX is the ONE red accent.
+        f_pre = load_font("extrabold", 88)
+        f_mid = load_font("extrabold", 96)
+        hero_size = 232
+        f_hero = load_font("black", hero_size)
+        while _text_w(draw, "ROBLOX", f_hero) > maxw and hero_size > 150:
+            hero_size -= 8
+            f_hero = load_font("black", hero_size)
 
-        block_top = 600
+        block_top = 720
         _centered(draw, "actually good", W // 2, block_top, f_pre, ink)
+        _centered(draw, "ROBLOX", W // 2, block_top + 118, f_hero, ROBLOX_RED)
+        _centered(draw, "games to play", W // 2, block_top + 118 + hero_size + 30, f_mid, ink)
 
-        # "ROBLOX" gets a punchy rounded highlight box behind it (white text on
-        # brand fill) — the single biggest pop on the slide, like a marker
-        # highlight over the key search phrase.
-        hero_txt = "ROBLOX"
-        hw = _text_w(draw, hero_txt, f_hero)
-        hy = block_top + 116
-        box_pad_x, box_pad_top, box_pad_bot = 40, 18, 60
-        bx0 = (W - hw) // 2 - box_pad_x
-        bx1 = (W + hw) // 2 + box_pad_x
-        draw.rounded_rectangle(
-            [bx0, hy + box_pad_top, bx1, hy + 236 + box_pad_bot - 60],
-            radius=40, fill=BRAND,
-        )
-        _centered(draw, hero_txt, W // 2, hy, f_hero, (255, 255, 255))
+        # ── 3. Supporting line: part + edition (quiet grey, no pill) ────────
+        sub = f"part {part_number}  ·  {edition.lower()}"
+        _centered(draw, sub, W // 2, block_top + 118 + hero_size + 180, load_font("semibold", 52), grey)
 
-        _centered(draw, "games to play", W // 2, block_top + 400, f_mid, ink)
-
-        # "part N · N games" small grey, centered on its own line
-        sub = f"part {part_number}  ·  {count} games"
-        _centered(draw, sub, W // 2, block_top + 530, f_part, grey)
-
-        # Edition pill with theme emoji
-        f_ed = load_font("bold", 64)
-        ed_text = edition
-        ew = _text_w(draw, ed_text, f_ed)
-        em_size = 70
-        pad = 36
-        pill_w = ew + em_size + pad * 2 + 22
-        pill_h = 110
-        px = (W - pill_w) // 2
-        py = block_top + 620
-        draw.rounded_rectangle([px, py, px + pill_w, py + pill_h], radius=28, fill=(24, 24, 28))
-        draw.text((px + pad, py + (pill_h - 66) // 2 - 6), ed_text, font=f_ed, fill=(255, 255, 255))
-        em = emoji_image(theme_emoji, em_size)
-        if em:
-            base = img.convert("RGBA")
-            base.alpha_composite(em, (px + pad + ew + 16, py + (pill_h - em_size) // 2))
-            img = base.convert("RGB")
-
-        # Big sticker emoji scattered around the type — denser + more expressive
-        # than the old two-sticker layout, slight tilts for that hand-placed feel.
-        placements = [
-            (965, 120, 220, -12),       # top-right corner, above the kicker pill
-            (150, 505, 235, 12),        # mid-left, beside the ROBLOX box
-            (930, 1180, 245, -10),      # right flank, by the edition pill
-            (165, 1455, 235, 9),        # lower-left, above the CTA
-        ]
-        for i, (sx, sy, ssz, rot) in enumerate(placements):
-            if i < len(stickers):
-                img = paste_emoji(img, stickers[i], sx, sy, ssz, anchor="center", rotate=rot)
-
-        # Bottom CTA — swipe + save, the two actions that drive the algorithm.
-        # Real Noto color arrow (➡️) + hand (👇); the plain "→" would tofu.
-        f_cta = load_font("extrabold", 58)
-        img = draw_mixed(img, (W // 2, H - 175), "swipe ➡️ save the list 👇", f_cta,
-                         (28, 28, 32), emoji_size=58, anchor="mm")
+        # ── 4. CTA — text + a crisp red arrow (on-brand, no tofu, no emoji) ──
+        cy = H - 200
+        f_cta = load_font("bold", 50)
+        cta_text = "swipe to save"
+        tw = _text_w(draw, cta_text, f_cta)
+        arrow_w, gap = 34, 22
+        total = tw + gap + arrow_w
+        x0 = (W - total) // 2
+        draw.text((x0, cy), cta_text, font=f_cta, fill=(110, 112, 120), anchor="lm")
+        ax = x0 + tw + gap
+        draw.polygon([(ax, cy - 18), (ax, cy + 18), (ax + arrow_w, cy)], fill=ROBLOX_RED)
 
         return img
 
@@ -464,7 +442,7 @@ class CarouselGenerator:
             [("icon", "🔔"), ("text", "Notify")],
             [("icon", "⭐")],
         ]
-        img = _draw_stat_pills(img, 40, sy + 18, pills)
+        img = _draw_stat_pills(img, 48, sy + 18, pills)
         draw = ImageDraw.Draw(img)
 
         # ── "Why it slaps" highlight callout (AI verdict) ─────────────
@@ -475,61 +453,59 @@ class CarouselGenerator:
         cy = sy + row_h + 32
         if blurb:
             f_blurb = load_font("bold", 50)
-            blurb_lines = textwrap.wrap(blurb, width=30)[:3]
+            text_x = 48 + 30
+            blurb_lines = _wrap_to_width(draw, blurb, f_blurb, W - text_x - SAFE, max_lines=3)
             pad = 30
             line_h = 62
             box_h = pad + len(blurb_lines) * line_h + pad - 12
-            draw.rounded_rectangle([40, cy, W - 40, cy + box_h], radius=24, fill=(244, 242, 255))
-            draw.rounded_rectangle([40, cy, 54, cy + box_h], radius=6, fill=(124, 111, 255))
+            # Near-white card with a thin Roblox-red rail — accent, not a fill.
+            draw.rounded_rectangle([48, cy, W - 48, cy + box_h], radius=20, fill=(250, 248, 248))
+            draw.rounded_rectangle([48, cy, 48 + 12, cy + box_h], radius=6, fill=ROBLOX_RED)
             ty = cy + pad - 6
             for li, line in enumerate(blurb_lines):
                 text = ("🔥 " + line) if li == 0 else line
-                img = draw_mixed(img, (76, ty + li * line_h), text, f_blurb,
-                                 (30, 26, 52), emoji_size=46, anchor="la")
+                img = draw_mixed(img, (text_x, ty + li * line_h), text, f_blurb,
+                                 (28, 28, 32), emoji_size=46, anchor="la")
             draw = ImageDraw.Draw(img)
             desc_y = cy + box_h + 34
             desc_lines_max = 3   # leave room for the callout
         else:
             desc_y = cy
 
-        # ── Description block (real Roblox copy → authentic game-page feel) ──
+        # ── Description block (clean text — minimal, generous line spacing) ──
+        # Emoji are stripped here: the description must stay calm and readable,
+        # not a cluttered wall of decorative glyphs.
         f_desc_h = load_font("bold", 48)
         draw.text((48, desc_y), "Description", font=f_desc_h, fill=(20, 20, 22))
 
-        # Keep the real description's color emoji (🍋 💵 🤑 …) like the live
-        # Roblox page — render each wrapped line through draw_mixed.
-        desc = re.sub(r"\s{2,}", " ", (game.description or "").strip().replace("\n", " "))
+        desc = strip_emoji(re.sub(r"\s{2,}", " ", (game.description or "").strip().replace("\n", " ")))
         if desc:
             f_desc = load_font("regular", 44)
-            es = _emoji_px(f_desc)
-            wrapped = textwrap.wrap(desc, width=38)[:desc_lines_max]
+            wrapped = _wrap_to_width(draw, desc, f_desc, W - 48 * 2, max_lines=desc_lines_max)
             for li, line in enumerate(wrapped):
-                img = draw_mixed(img, (48, desc_y + 78 + li * 60), line, f_desc,
-                                 (95, 97, 105), emoji_size=es, anchor="la")
-            draw = ImageDraw.Draw(img)
+                draw.text((48, desc_y + 80 + li * 64), line, font=f_desc, fill=(95, 97, 105))
 
-        # bottom hairline + active player chip vibe (authentic Roblox footer)
+        # Footer: authentic Roblox visit count + (last slide only) a follow chip.
         foot_y = H - 130
         draw.line([(0, foot_y), (W, foot_y)], fill=(238, 239, 242), width=2)
         f_foot = load_font("medium", 40)
         draw.text((48, foot_y + 40), f"{_format_active(game.visits)} visits", font=f_foot, fill=(150, 152, 160))
 
-        # On the final slide only: a tasteful, right-aligned follow nudge. This
-        # is the payoff slide, so it's where a natural CTA converts best —
-        # rendered as a soft brand chip, not a desperate "FOLLOW!!!" banner.
+        # On the final slide only: a tasteful follow nudge in a soft red chip
+        # (Roblox-red accent, text-only so the slide's emoji budget stays low).
         if final_cta:
+            cta_text = strip_emoji(final_cta).strip()
             f_cta = load_font("semibold", 38)
-            es = _emoji_px(f_cta)
-            cta_w = measure_mixed(draw, final_cta, f_cta, es)
-            chip_pad = 26
+            cta_w = _text_w(draw, cta_text, f_cta)
+            chip_pad = 28
             chip_w = cta_w + chip_pad * 2
             chip_h = 72
             chip_x = W - 48 - chip_w
             chip_y = foot_y + 28
             draw.rounded_rectangle([chip_x, chip_y, chip_x + chip_w, chip_y + chip_h],
-                                   radius=chip_h // 2, fill=(238, 235, 255))
-            img = draw_mixed(img, (chip_x + chip_pad, chip_y + (chip_h - es) // 2 - 2),
-                             final_cta, f_cta, (90, 78, 200), emoji_size=es, anchor="la")
+                                   radius=chip_h // 2, fill=(255, 238, 236))
+            draw.text((chip_x + chip_pad, chip_y + chip_h // 2), cta_text,
+                      font=f_cta, fill=ROBLOX_RED, anchor="lm")
 
         return img
 
@@ -569,7 +545,8 @@ class CarouselGenerator:
     @staticmethod
     def _initial_color(name: str) -> tuple[int, int, int, int]:
         colors = [
-            (108, 99, 255, 255), (255, 101, 132, 255), (0, 180, 130, 255),
-            (255, 160, 0, 255), (60, 140, 220, 255), (180, 60, 220, 255),
+            ROBLOX_RED, (255, 101, 132, 255), (0, 180, 130, 255),
+            (255, 160, 0, 255), (60, 140, 220, 255), (40, 44, 52, 255),
         ]
-        return colors[sum(ord(c) for c in name) % len(colors)]
+        c = colors[sum(ord(ch) for ch in name) % len(colors)]
+        return c if len(c) == 4 else (*c, 255)
