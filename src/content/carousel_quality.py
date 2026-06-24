@@ -603,6 +603,7 @@ def finalize_carousel(
     used_hooks: Optional[set[str]] = None,
     max_attempts: int = 3,
     dna=None,
+    performance: Optional[dict] = None,
 ) -> dict:
     """
     The single 'review before presenting' entry point. Returns a vetted cover
@@ -640,6 +641,7 @@ def finalize_carousel(
     from src.content.cover_generator import select_cover_concept
     _concept = select_cover_concept(
         edition=edition, part=part, used_hooks=used_hooks, dna=directives,
+        performance=performance,
     )
     cover_hook = _concept.hook
     cta = pick_cta(part)

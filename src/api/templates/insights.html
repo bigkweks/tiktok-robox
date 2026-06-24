@@ -1,0 +1,192 @@
+{% extends "base.html" %}
+{% block title %}Performance Insights · the gemvault{% endblock %}
+{% block content %}
+
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Performance Insights</h1>
+    <p class="page-subtitle">
+      What the system has learned about which generation choices produce the
+      highest-quality carousels. Every drop is recorded, ranked, and fed back so
+      generation gradually prefers what works — without letting one template take over.
+    </p>
+  </div>
+</div>
+
+{% set s = ins.summary %}
+{% if s.total_generated == 0 %}
+  <div class="card">
+    <div class="card-body text-center" style="padding:3rem 1.5rem">
+      <i class="bi bi-lightbulb" style="font-size:2rem;color:var(--text-muted)"></i>
+      <h2 style="font-size:1.15rem;margin-top:1rem">No drops recorded yet</h2>
+      <p class="text-muted mb-0" style="max-width:32rem;margin:0.5rem auto 0">
+        Each carousel the factory generates — approved or rejected — gets recorded
+        here with its hook, cover, CTA and quality scores. Once a few exist, this
+        page shows the top-performing patterns and steers the next generations
+        toward them. Create a carousel to start the learning loop.
+      </p>
+    </div>
+  </div>
+{% else %}
+
+<!-- ── Summary ─────────────────────────────────────────────────────── -->
+<div class="row g-3 mb-4">
+  <div class="col-6 col-lg-3">
+    <div class="card metric h-100">
+      <div class="stat-number">{{ s.total_generated }}</div>
+      <div class="stat-label">Drops recorded</div>
+    </div>
+  </div>
+  <div class="col-6 col-lg-3">
+    <div class="card metric h-100">
+      <div class="stat-number">{{ (s.approval_rate * 100) | round(0) | int }}%</div>
+      <div class="stat-label">Passed review ({{ s.approved }}/{{ s.total_generated }})</div>
+    </div>
+  </div>
+  <div class="col-6 col-lg-3">
+    <div class="card metric h-100">
+      <div class="stat-number">{{ s.avg_final_score }}</div>
+      <div class="stat-label">Avg quality score</div>
+    </div>
+  </div>
+  <div class="col-6 col-lg-3">
+    <div class="card metric h-100">
+      <div class="stat-number">{{ (s.survival_rate * 100) | round(0) | int }}%</div>
+      <div class="stat-label">Survive editing intact</div>
+    </div>
+  </div>
+</div>
+
+<!-- ── Getting smarter over time ──────────────────────────────────── -->
+{% set t = ins.trend %}
+<div class="card mb-4">
+  <div class="card-body d-flex align-items-center justify-content-between flex-wrap gap-3">
+    <div>
+      <div class="card-header" style="border:0;padding:0 0 0.35rem 0">Getting smarter over time</div>
+      {% if t.available %}
+        {% if t.improving %}
+          <p class="mb-0">Recent output is <strong>stronger</strong> than earlier output
+            — effectiveness rose from {{ t.older }} to <strong>{{ t.recent }}</strong>
+            (+{{ t.delta }}). The learning loop is working.</p>
+        {% elif t.delta < -0.005 %}
+          <p class="mb-0">Recent effectiveness ({{ t.recent }}) is below the earlier
+            baseline ({{ t.older }}). More signal is needed before the bias settles.</p>
+        {% else %}
+          <p class="mb-0">Output quality is holding steady ({{ t.older }} → {{ t.recent }}).
+            More drops will sharpen the preferred patterns.</p>
+        {% endif %}
+      {% else %}
+        <p class="mb-0 text-muted">Needs a few more drops ({{ t.n }} so far) before the
+          trend line is meaningful.</p>
+      {% endif %}
+    </div>
+    {% if t.available %}
+    <div class="count-pill" style="font-size:1.05rem">
+      {{ '↑' if t.improving else ('↓' if t.delta < -0.005 else '→') }}
+      {{ t.delta }}
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+<!-- ── Top-performing patterns ─────────────────────────────────────── -->
+<div class="row g-4 mb-4">
+  {% for title, rows in [('Top hook patterns', ins.top_hooks),
+                         ('Top cover patterns', ins.top_covers),
+                         ('Top CTA patterns', ins.top_ctas)] %}
+  <div class="col-lg-4">
+    <div class="card h-100">
+      <div class="card-header">{{ title }}</div>
+      <div class="card-body">
+        {% if rows %}
+          {% for r in rows %}
+          <div class="mb-3">
+            <div class="d-flex justify-content-between align-items-baseline">
+              <span style="font-weight:600">{{ r.name }}</span>
+              <span class="text-muted" style="font-size:0.8rem">
+                {{ (r.historical_effectiveness * 100) | round(0) | int }}
+                {% if r.overused %}· <span style="color:var(--brand)">overused</span>{% endif %}
+              </span>
+            </div>
+            <div style="height:6px;background:var(--surface-2,#222);border-radius:3px;margin-top:5px;overflow:hidden">
+              <div style="height:100%;width:{{ (r.historical_effectiveness * 100) | round(0) | int }}%;background:var(--brand)"></div>
+            </div>
+            <div class="text-muted" style="font-size:0.74rem;margin-top:4px">
+              used {{ r.n }}× · confidence {{ r.success_confidence }} · share {{ (r.selection_share * 100) | round(0) | int }}%
+            </div>
+          </div>
+          {% endfor %}
+        {% else %}
+          <p class="text-muted mb-0">Not enough data yet.</p>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+
+<!-- ── Failure / AI / quality-review panels ───────────────────────── -->
+<div class="row g-4 mb-4">
+  {% for title, rows, empty in [
+       ('Most common failure patterns', ins.failure_patterns, 'No hard failures recorded.'),
+       ('Most common AI signals detected', ins.ai_signals, 'No AI-tell phrases detected — clean.'),
+       ('Why outputs fail quality review', ins.quality_fail_reasons, 'No quality-review flags recorded.')] %}
+  <div class="col-lg-4">
+    <div class="card h-100">
+      <div class="card-header">{{ title }}</div>
+      <div class="card-body">
+        {% if rows %}
+        <table class="table kv mb-0" style="width:100%">
+          <tbody>
+            {% for r in rows %}
+            <tr>
+              <td>{{ r.name }}</td>
+              <td style="text-align:right">{{ r.count }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+        {% else %}
+          <p class="text-muted mb-0">{{ empty }}</p>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+
+<!-- ── Pattern classification ─────────────────────────────────────── -->
+<div class="card">
+  <div class="card-header">Pattern classification</div>
+  <div class="card-body">
+    <p class="text-muted" style="font-size:0.82rem">
+      Every component is graded from outcomes. <strong>Strong</strong> patterns get
+      leaned into; <strong>weak</strong> ones retired; <strong>overused</strong> ones
+      actively throttled to prevent convergence; <strong>emerging</strong> ones given
+      airtime before they're proven.
+    </p>
+    {% for cat in ['hook', 'cover', 'cta'] %}
+    {% set p = ins.patterns[cat] %}
+    <div class="mb-3">
+      <div style="font-weight:600;text-transform:capitalize;margin-bottom:0.4rem">{{ cat }}</div>
+      <div class="d-flex flex-wrap gap-2">
+        {% for label, color in [('strong','#3fb950'),('emerging','#58a6ff'),
+                                ('overused','#d29922'),('weak','#8b949e')] %}
+          {% for item in p[label] %}
+            <span class="count-pill" style="border-color:{{ color }}33;color:{{ color }}">
+              {{ item.name }} · {{ label }}
+            </span>
+          {% endfor %}
+        {% endfor %}
+        {% if not (p.strong or p.weak or p.overused or p.emerging) %}
+          <span class="text-muted" style="font-size:0.8rem">building evidence…</span>
+        {% endif %}
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+
+{% endif %}
+
+{% endblock %}

@@ -544,11 +544,36 @@ def _dna_bonus(concept: "CoverConcept", dna) -> float:
     return bonus * float(getattr(dna, "weight", 0.0) or 0.0)
 
 
+# A learned performance bias is a nudge, never an override — clamp it to the
+# same small magnitude the learning system caps it at, defensively, so even a
+# malformed map can't let one archetype dominate the scored competition.
+PERF_BIAS_CAP: float = 0.06
+
+
+def _perf_bonus(concept: "CoverConcept", performance: Optional[dict]) -> float:
+    """Additive bonus from the Performance Learning System, keyed by archetype.
+
+    `performance` maps cover-concept name → a small, already anti-convergence
+    bias (an overused archetype's value is negative). Lets the generator
+    gradually prefer the archetypes that have *historically performed* without
+    ever letting a single template take over.
+    """
+    if not performance:
+        return 0.0
+    raw = performance.get(concept.name, 0.0)
+    try:
+        raw = float(raw)
+    except (TypeError, ValueError):
+        return 0.0
+    return max(-PERF_BIAS_CAP, min(PERF_BIAS_CAP, raw))
+
+
 def select_cover_concept(
     edition: str = "",
     part: int = 1,
     used_hooks: Optional[set[str]] = None,
     dna=None,
+    performance: Optional[dict] = None,
 ) -> CoverConcept:
     """
     Generate 10 cover concepts, reject weak ones, and return the best.
@@ -558,10 +583,13 @@ def select_cover_concept(
     fatal weakness elsewhere.
 
     Selection: highest weighted composite score among passing candidates,
-    plus an optional DNA bonus. When `dna` (a GenerationDirectives derived from
-    the extracted Content DNA) is supplied and active, the winner is the concept
-    whose archetype best matches what the *proven* carousels actually did —
-    generation is driven by the extracted DNA, not a generic heuristic.
+    plus an optional DNA bonus and an optional learned performance bias. When
+    `dna` (a GenerationDirectives derived from the extracted Content DNA) is
+    supplied and active, the winner is steered toward what the *proven*
+    carousels actually did. When `performance` (a cover-concept → bias map from
+    the Performance Learning System) is supplied, the winner is also nudged
+    toward archetypes that have historically performed — while the map's built-in
+    anti-convergence guard keeps any one archetype from dominating.
 
     If used_hooks prevents all passing candidates, the constraint is dropped
     (never blocks generation). If no concept passes the REJECT_FLOOR across
@@ -584,13 +612,14 @@ def select_cover_concept(
 
     def rank(c: "CoverConcept") -> float:
         base = c.score.composite if c.score else 0.0
-        return base + _dna_bonus(c, dna)
+        return base + _dna_bonus(c, dna) + _perf_bonus(c, performance)
 
     return max(candidates, key=rank)
 
 
 __all__ = [
     "REJECT_FLOOR",
+    "PERF_BIAS_CAP",
     "CoverScore",
     "CoverConcept",
     "score_concept",

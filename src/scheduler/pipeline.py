@@ -243,6 +243,17 @@ class Pipeline:
         except Exception as exc:
             log.warning("pipeline.carousel_factory.dna_load_failed", error=str(exc))
 
+        # ── Performance Learning System: bias generation toward the cover
+        # archetypes that have historically performed (anti-convergence built in).
+        perf_store = None
+        cover_bias: dict = {}
+        try:
+            from src.learning import PerformanceStore  # noqa: PLC0415
+            perf_store = PerformanceStore()
+            cover_bias = perf_store.component_bias("cover")
+        except Exception as exc:
+            log.warning("pipeline.carousel_factory.perf_load_failed", error=str(exc))
+
         approval = ContentApprovalSystem().approve(
             part=part,
             edition=edition,
@@ -252,7 +263,30 @@ class Pipeline:
             scores=[c.rating_score for c, g in batch],
             game_names=[g.name for c, g in batch],
             dna=dna_profile,
+            performance=cover_bias or None,
         )
+
+        # ── Record this carousel's genome (approved OR rejected) into the
+        # learning corpus so the system keeps getting smarter over time.
+        if perf_store is not None:
+            try:
+                from src.learning import build_genome  # noqa: PLC0415
+                genome = build_genome(
+                    part=part,
+                    edition=edition,
+                    approval=approval,
+                    genres=[g.genre for c, g in batch],
+                    game_names=[g.name for c, g in batch],
+                    blurbs=[c.rating_verdict or "" for c, g in batch],
+                    dna=dna_profile,
+                    performance_biased=bool(cover_bias),
+                )
+                perf_store.record(genome)
+                log.info("pipeline.carousel_factory.genome_recorded",
+                         part=part, genome_id=genome.id, approved=approval.approved,
+                         hook_pattern=genome.hook_pattern, cover=genome.cover_concept)
+            except Exception as exc:
+                log.warning("pipeline.carousel_factory.genome_failed", error=str(exc))
         # Log every review cycle (the critique trail).
         for entry in approval.trail:
             log.info("pipeline.carousel_factory.review_cycle", part=part, **entry)

@@ -456,6 +456,27 @@ async def api_dna_consolidated():
     return DNAStore().get_consolidated().as_dict()
 
 
+# ── Performance Insights ───────────────────────────────────────────────
+
+@app.get("/insights", response_class=HTMLResponse)
+async def insights_page(request: Request):
+    """The Performance Insights dashboard — what the system has learned about
+    which generation choices produce the highest-quality content."""
+    from src.learning import PerformanceStore
+    data = PerformanceStore().insights()
+    return templates.TemplateResponse("insights.html", {
+        "request": request,
+        "ins": data,
+    })
+
+
+@app.get("/api/insights")
+async def api_insights():
+    """The raw Performance Insights payload (JSON)."""
+    from src.learning import PerformanceStore
+    return PerformanceStore().insights()
+
+
 # ── Analytics ingestion ───────────────────────────────────────────────
 
 class AnalyticsPayload(BaseModel):

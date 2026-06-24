@@ -121,6 +121,7 @@ class ContentApprovalSystem:
         dna=None,
         used_hooks: Optional[set[str]] = None,
         max_cycles: int = MAX_CYCLES,
+        performance: Optional[dict] = None,
     ) -> ApprovalResult:
         n = len(captions)
         genres_list = list(genres) if genres is not None else [None] * n
@@ -144,6 +145,7 @@ class ContentApprovalSystem:
                 game_names=game_names,
                 used_hooks=used_hooks,
                 dna=dna,
+                performance=performance,
             )
 
             # ── Critique ──
