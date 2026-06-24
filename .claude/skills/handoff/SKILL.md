@@ -1,6 +1,6 @@
 ---
 name: handoff
-description: Generate and merge a session handoff into HANDOFF.md, then commit and push. Use this at the end of any working session to document what changed, what works, and what's next. Invoke with /handoff.
+description: Generate and merge a session handoff into HANDOFF.md, then commit and push. Run ONCE when wrapping up a working session, batching everything since the last handoff — not after every change or every /goal. Invoke with /handoff.
 ---
 
 # Handoff Skill
@@ -9,19 +9,31 @@ Generate a complete session handoff, merge it into `HANDOFF.md`, commit, and pus
 
 ## When to use
 
-Run `/handoff` at the end of every working session. The goal is that any future Claude Code session can read `HANDOFF.md` and immediately continue — no re-reading history, no re-deriving context.
+`HANDOFF.md` exists because this environment is ephemeral — the container is wiped between sessions and the user is on an iPad that can't comfortably scroll chat history. The file is the only state that survives, so any future session can read it and continue cold. That makes it valuable — but only as a *curated, session-level* summary, not a per-change log.
+
+**Run `/handoff` ONCE, when you're wrapping up the session.** Batch every change since the last handoff into a single entry.
+
+- **Do run it** when: you're ending the session / the user is closing the iPad; or you've finished a coherent, pushed body of work and are pausing. If a session spanned multiple `/goal`s, cover them all in ONE handoff at the end.
+- **Don't run it** when: mid-task with tests not yet passing; after a small follow-up commit (the commit message is enough); or just because another `/goal` or feature finished — keep working and batch it.
+
+The git history is itself a lightweight handoff — detailed commit messages already recover most state. `HANDOFF.md` earns its keep by capturing the things commits *don't*: the strategy, the "why it worked", the constraints, and what's next.
+
+Do not auto-run this skill. Wait for the user to invoke `/handoff` (or to say they're wrapping up).
 
 ## Workflow
 
 ### 1. Gather session facts
 
-Run these in parallel:
+Run these in parallel. Scope to everything since the **last handoff commit**, not a fixed window — a batched session may span many commits:
 
 ```bash
-git log --oneline -20                         # what shipped this session
-git diff HEAD~5 HEAD --stat                   # which files changed
-python -m pytest --tb=no -q 2>&1 | tail -3   # current test count
+git log --oneline -30                          # what shipped; find the last "docs: update handoff" to bound the range
+git log --oneline "$(git log -1 --format=%H --grep='update handoff')"..HEAD  # commits since last handoff
+git diff "$(git log -1 --format=%H --grep='update handoff')"..HEAD --stat    # files changed since last handoff
+python -m pytest --tb=no -q 2>&1 | tail -3    # current test count
 ```
+
+If there are several `/goal`s' worth of work in that range, write ONE changelog entry that covers them all (a short combined title), rather than one entry per goal.
 
 Also read:
 - `HANDOFF.md` — to understand current structure and where to insert the new entry
