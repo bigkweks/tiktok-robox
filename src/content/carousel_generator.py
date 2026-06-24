@@ -328,10 +328,10 @@ class CarouselGenerator:
             hero_size -= 8
             f_hero = load_font("black", hero_size)
 
-        # "actually good" sits a little lower with more breathing room above
-        # ROBLOX, so the three lines read as a balanced unit instead of crowding.
+        # "actually good" sits a little lower; the ROBLOX wordmark + the lines
+        # under it tuck up just below it so the phrase reads as one tight unit.
         block_top = 760
-        ag_gap = 138  # space between "actually good" and the ROBLOX wordmark
+        ag_gap = 104  # space between "actually good" and the ROBLOX wordmark
         _centered(draw, "actually good", W // 2, block_top, f_pre, ink)
         _centered(draw, "ROBLOX", W // 2, block_top + ag_gap, f_hero, ROBLOX_RED)
         _centered(draw, "games to play", W // 2, block_top + ag_gap + hero_size + 30, f_mid, ink)
