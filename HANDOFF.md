@@ -83,15 +83,33 @@ src/content/
                       hook, curiosity, authenticity, specificity, shareability,
                       follow, readability, saveability, novelty. QualityReport
                       has passed (≥0.70) and top1pct_passed (≥0.80, hook≥0.65,
-                      authenticity≥0.75). finalize_carousel() runs up to 3 passes,
-                      escalating caption-replacement threshold and rotating hooks,
-                      targeting top1pct_passed + a fully purposeful plan.
+                      authenticity≥0.75). finalize_carousel(..., dna=) runs up to
+                      3 passes, escalating caption-replacement threshold; the cover
+                      hook comes from cover_generator.select_cover_concept (steered
+                      by the extracted DNA when supplied). Returns dna_directives +
+                      cover_concept. Targets top1pct_passed + a purposeful plan.
                       Also: review_carousel(), score_hook/caption/cta/readability/
                       saveability/novelty, pick_cover_hook() (edition-aware niche
                       hooks), pick_cta(), pick_footer_cta(), build_post_caption(),
                       build_carousel_hashtags(), banks COVER_HOOKS / CTA_LINES /
                       FOOTER_CTAS / ENGAGE_LINES / EDITION_HOOKS.
-  cover_generator.py ★ NEW. Dedicated cover-generation system. 10 archetype
+  content_dna.py    ★ NEW. Content DNA Extraction System. ContentDNAExtractor
+                      sends carousel screenshots to Claude vision (injectable
+                      vision_fn → testable offline) and extracts 14 DIMENSIONS as
+                      Pattern(observation/confidence/evidence). synthesize_profile
+                      builds the 5 Formulas (FORMULA_COMPOSITION). SINGLE_SOURCE_CAP
+                      =0.65. merge_profiles = the learning step (corroboration
+                      raises confidence). seed_prior_profile = offline baseline.
+                      ContentDNAProfile.as_dict/from_dict.
+  dna_store.py      ★ NEW. JSON corpus under output/content_dna/. DNAStore
+                      save_screenshots/save_profile/list_profiles/
+                      rebuild_consolidated/get_consolidated. Consolidated blueprint
+                      is what generation reads.
+  dna_directives.py ★ NEW. DNA → generation bridge. derive_directives(profile) →
+                      GenerationDirectives (prefer_curiosity_gap/specificity/
+                      first_person, max_hook_words, require_save/follow_trigger,
+                      hook_keywords, weight). Consumed by cover_generator.
+  cover_generator.py ★ Dedicated cover-generation system. 10 archetype
                       concepts (The Qualifier, The Pattern Break, The Niche Gate,
                       The Visit Count, The Insider, The Algorithm Accuser, The
                       Confession, The Anti-Viral, The Hidden Stat, The Scout
@@ -134,10 +152,15 @@ src/scheduler/pipeline.py  Orchestrator (APScheduler). Jobs: discovery (4h),
                       queue_maintenance (12h), analytics_update (24h).
                       run_carousel_factory() batches 5 rated games → CarouselPost,
                       running dedupe_carousel_captions across the 5 captions first.
+                      Loads the consolidated Content DNA (DNAStore) and passes it
+                      to finalize_carousel so the cover is DNA-driven.
 src/api/dashboard.py  FastAPI. Pages: / , /carousels (review+approve slides +
-                      one-step "Save all to Photos"), /queue, /games, /analytics.
-                      Endpoints: /pipeline/run-carousel, /analytics/ingest (now
-                      validates content_id), /analytics?content_id=N (prefill),
+                      one-step "Save all to Photos"), /queue, /games, /analytics,
+                      /dna (upload winners → view extracted DNA: 5 formulas + 14
+                      patterns + confidence). Endpoints: /pipeline/run-carousel,
+                      /dna/extract (POST screenshots → extract+persist DNA),
+                      /api/dna/consolidated, /analytics/ingest (validates
+                      content_id), /analytics?content_id=N (prefill),
                       /carousel/{id}/download (zip of all slides). build_slides_zip()
                       helper bundles slides.
 src/config.py         Settings. channel_name_display / channel_handle_display
@@ -150,9 +173,10 @@ src/database/models.py  Game, Content (+carousel_caption col), CarouselPost,
                       PostAnalytics, ModelWeights, CrawlLog.
 src/database/connection.py  init_db() creates tables + auto-migrates the
                       carousel_caption column for existing DBs (SQLite WAL).
-src/api/templates/   base.html (dark theme + .id-chip + imgFallback helper),
-                      index.html, carousels.html, queue.html, games.html,
-                      analytics.html, content_detail.html.
+src/api/templates/   base.html (dark theme + .id-chip + imgFallback helper + DNA
+                      nav), index.html, carousels.html, queue.html, games.html,
+                      analytics.html, content_detail.html, dna.html (DNA upload +
+                      5-formula/14-pattern blueprint view).
 ```
 
 ## Environment constraints (important)
@@ -185,9 +209,75 @@ src/api/templates/   base.html (dark theme + .id-chip + imgFallback helper),
   follows-per-post.
 - Pipeline batches carousels every 8h; manual "⚡ Generate Now" button.
 - Video + thumbnail pipeline intact (badge-overlap bug fixed).
-- **Test suite: 104 passing**. See "Testing" below.
+- **Test suite: 129 passing**. See "Testing" below.
+- **Content DNA system**: upload screenshots of a proven carousel → Claude vision
+  extracts WHY it worked across 14 dimensions into 5 reusable formulas with
+  confidence scores; consolidated DNA drives cover generation. Dashboard `/dna`.
 
-## Session changelog — dedicated cover-generation system (latest)
+## Session changelog — Content DNA Extraction System (latest)
+Brief: the platform's purpose is not to generate carousels but to identify *why*
+previously successful carousels performed well and replicate those underlying
+patterns — when screenshots are uploaded, extract the DNA (hook structure,
+curiosity mechanisms, information hierarchy, slide progression, emotional
+triggers, retention loops, swipe/save/follow triggers, CTA patterns, reading
+pace, typography, visual hierarchy, content density) into a structured blueprint
+of 5 formulas (Hook / Slide / Retention / CTA / Visual), with a confidence score
+on every pattern, and drive future generation from the extracted DNA instead of a
+generic prompt. Learn "why did this work?", not "what does this look like?".
+
+- **Core extractor (`src/content/content_dna.py`, new).** `ContentDNAExtractor`
+  sends uploaded carousel screenshots to Claude (vision) and parses a structured
+  per-dimension extraction: each of the 14 `DIMENSIONS` becomes a `Pattern`
+  (observation = the MECHANISM/why, never the literal copy; plus `confidence` and
+  `evidence`). `synthesize_profile` assembles the 14 patterns into the five
+  `Formula`s via `FORMULA_COMPOSITION` (a formula's confidence is the mean of its
+  driver confidences, softened when drivers are missing). A single carousel can
+  never make us certain — `SINGLE_SOURCE_CAP = 0.65` caps every single-source
+  pattern. The Claude call is injected (`vision_fn`) so the whole module is
+  testable offline; if no key / the call fails / no images, it returns a clearly
+  labelled low-confidence PRIOR profile (`seed_prior_profile`, seeded from the
+  reverse-engineered 118.5K-view reference post) so the system always works.
+- **Learning step (`merge_profiles`).** Consolidates many analysed carousels into
+  one blueprint: a dimension reported by more winners gets higher confidence via
+  `_corroborate` (merged = avg + (1-avg)·(k-1)/k, capped 0.98), so a pattern seen
+  once is a guess and a pattern seen across five winners becomes a reliable law.
+  The most-confident observation is kept as the canonical phrasing; `is_prior`
+  only stays true if every source was a prior.
+- **Persistence corpus (`src/content/dna_store.py`, new).** `DNAStore` saves each
+  extracted profile + its screenshots as JSON under `output/content_dna/` and
+  rebuilds a `_consolidated.json` blueprint on every save (the one generation
+  reads). JSON-file-backed (not a DB table) on purpose: small, append-only,
+  human-inspectable, and no SQLite migration. `get_consolidated()` falls back to
+  the seeded prior when nothing's been uploaded.
+- **DNA → generation bridge (`src/content/dna_directives.py`, new).**
+  `derive_directives(profile)` turns a DNA profile into concrete
+  `GenerationDirectives` (prefer_curiosity_gap / prefer_specificity /
+  prefer_first_person, max_hook_words read from the observed reading-pace number,
+  require_save/follow_trigger, hook signal keywords) — each gated by the DNA's
+  confidence, with a `weight` that scales how hard it steers.
+- **Wired into cover generation.** `cover_generator.select_cover_concept(...,
+  dna=)` adds a confidence-scaled `_dna_bonus` so the winning archetype is the one
+  the proven carousels actually used (verified: a high-specificity DNA makes "The
+  Visit Count" — "scarier than doors. 40k visits." — win for Horror).
+  `carousel_quality.finalize_carousel(..., dna=)` derives directives and threads
+  them in, returning `dna_directives` + `cover_concept` in its result.
+  `pipeline.run_carousel_factory` loads the consolidated DNA via `DNAStore` and
+  passes it to `finalize_carousel`, logging `carousel_factory.dna_driven`.
+- **Dashboard (`/dna`).** New page (`dna.html`) + DNA nav link: upload a winner's
+  screenshots, see the 5 formulas with confidence bars, the 14-pattern table, and
+  every extracted profile. Routes: `GET /dna`, `POST /dna/extract` (saves
+  screenshots, runs extraction off the event loop, persists + reconsolidates),
+  `GET /api/dna/consolidated`.
+- **Tests +25** (`test_content_dna.py` 15, `test_dna_store.py` 8 incl. the
+  directives→cover-selection bridge, `test_dna_dashboard.py` 2). Cover: all
+  dimensions extracted, single-source cap, five-formula synthesis, prior/
+  failed-vision/malformed-JSON/partial-pattern fallbacks, corroboration raises
+  confidence past the cap, most-confident observation kept, prior ignored when a
+  real profile exists, serialisation round-trip, store save/list/consolidate +
+  screenshot save, directive derivation + reading-pace word cap, DNA steers cover
+  selection, dna.html renders prior + extracted states. **Full suite: 129 passing.**
+
+## Session changelog — dedicated cover-generation system (prior)
 Brief: treat the cover (Slide 0) as its own scored competition rather than a
 random hook rotation — generate 10 distinct concept archetypes per drop, score
 each on six dimensions that drive stop-scroll performance, reject weak candidates,
@@ -645,9 +735,22 @@ existed only to get the posting app audited).
    (logic + zip fallback are tested; the share-sheet step is iOS-only and can't
    be exercised in the sandbox).
 7. ~~Per-slide download buttons~~ — **DONE** (replaced by one-step save).
+8. **DNA → caption/blurb generation**: the extracted DNA currently steers the
+   COVER (via `select_cover_concept`). Extend it to the per-slide captions and the
+   "why it slaps" blurb — feed `Hook/Slide/Retention/CTA` formula observations
+   into the `RATING_PROMPT` and `dedupe_carousel_captions` so the whole carousel,
+   not just the cover, is generated from the proven DNA.
+9. **Real-device DNA extraction**: the vision call is mocked in tests; run it
+   once in the Codespace with a real Anthropic key against actual winner
+   screenshots to confirm the prompt yields clean per-dimension JSON, then tune
+   `_EXTRACTION_PROMPT` if any dimension comes back weak.
+10. **DNA-weighted analytics loop**: once carousel analytics exist (item 1), feed
+    realised saves/follows back to re-weight which extracted patterns matter most
+    (raise/lower per-dimension confidence by measured performance, not just
+    corroboration count).
 
 ## Testing
-Run `python -m pytest -q` (**104 passing**). Test files:
+Run `python -m pytest -q` (**129 passing**). Test files:
 - `tests/test_scoring.py`, `tests/test_discovery.py`, `tests/test_content.py`
   — original suites (scoring, Roblox client/trend detector, rating/captions).
   `test_content.py` extended: fallback verdict no AI tell, score-tiered variety.
@@ -672,11 +775,24 @@ Run `python -m pytest -q` (**104 passing**). Test files:
   unknown/None falls back cleanly, briefs are niche-distinct, purpose assignment
   covers all slide roles, dead slides flagged with reasons, serialisation,
   finalize emits a purposeful plan.
-- `tests/test_cover_generator.py` (**new**) — 10 concepts generated, all
-  dimensions in [0,1], composite formula verified, edition-specific hooks score
-  higher on specificity, Horror Qualifier names "doors", no AI tells, REJECT_FLOOR
+- `tests/test_cover_generator.py` — 10 concepts generated, all dimensions in
+  [0,1], composite formula verified, edition-specific hooks score higher on
+  specificity, Horror Qualifier names "doors", no AI tells, REJECT_FLOOR
   mechanics, selection returns highest composite, used-hook skipping, all 8
   editions return valid concepts, as_dict shape.
+- `tests/test_content_dna.py` (**new**) — extract returns all 14 dimensions,
+  single-source confidence cap, 5-formula synthesis (drivers stay within their
+  composition), no-images/failed-vision/malformed-JSON → prior, partial patterns
+  keep only observed, formula confidence softened by missing drivers,
+  corroboration raises confidence past the cap, most-confident observation kept,
+  prior ignored when a real profile exists, profile round-trip, prior is labelled
+  + sub-cap.
+- `tests/test_dna_store.py` (**new**) — store save/list, consolidated starts as
+  prior then merges after saves, screenshot save, directive inactive-for-prior /
+  active-for-confident, reading-pace sets max words, DNA directives steer cover
+  selection (and dna=None matches the base call).
+- `tests/test_dna_dashboard.py` (**new**) — dna.html renders the 5 formulas + all
+  14 dimensions in the prior state and the extracted-profiles state.
 
 Sandbox verification pattern: render PNG slides and view them (no real network /
 moviepy needed). Templates are validated by parsing all of them and rendering
