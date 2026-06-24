@@ -127,7 +127,7 @@ async def games_page(request: Request, sort: str = "viral_score"):
 
 
 @app.get("/analytics", response_class=HTMLResponse)
-async def analytics_page(request: Request):
+async def analytics_page(request: Request, content_id: Optional[int] = None):
     perf = await _feedback.get_performance_summary()
     async with get_session() as session:
         result = await session.execute(
@@ -139,10 +139,22 @@ async def analytics_page(request: Request):
         )
         recent = [(a, c, g) for a, c, g in result]
 
+        # Optional deep-link target: prefill the form for a specific post and
+        # show which game it is, so the Content ID is never guessed.
+        prefill_game = None
+        if content_id is not None:
+            prefill_game = await session.scalar(
+                select(Game.name)
+                .join(Content, Content.game_id == Game.id)
+                .where(Content.id == content_id)
+            )
+
     return templates.TemplateResponse("analytics.html", {
         "request": request,
         "perf": perf,
         "recent": recent,
+        "prefill_content_id": content_id,
+        "prefill_game": prefill_game,
     })
 
 

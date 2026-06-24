@@ -185,7 +185,7 @@ class ThumbnailGenerator:
         brand_color = self._settings.brand_primary_rgb
         draw.rectangle([0, 0, THUMB_W, 110], fill=brand_color + (240,))
         channel_font = _load_font(52, bold=True)
-        _draw_centered_text(draw, self._settings.CHANNEL_NAME, THUMB_W // 2, 55, channel_font, (255, 255, 255, 255), shadow=False)
+        _draw_centered_text(draw, self._settings.channel_name_display, THUMB_W // 2, 55, channel_font, (255, 255, 255, 255), shadow=False)
 
         # ── Score: Giant number (anchor-positioned for predictable bounds) ─
         score_font = _load_font(250, bold=True)
@@ -233,7 +233,7 @@ class ThumbnailGenerator:
         cta_color = self._settings.brand_accent_rgb
         _draw_centered_text(
             draw,
-            f"Follow {self._settings.CHANNEL_HANDLE} for more",
+            f"Follow {self._settings.channel_handle_display} for more",
             THUMB_W // 2,
             cta_y + 60,
             cta_font,
@@ -300,7 +300,7 @@ class ThumbnailGenerator:
         # ── Top brand ─────────────────────────────────────────────────
         draw.rectangle([0, 0, THUMB_W, 100], fill=self._settings.brand_primary_rgb + (220,))
         brand_font = _load_font(48, bold=True)
-        _draw_centered_text(draw, self._settings.CHANNEL_NAME, THUMB_W // 2, 50, brand_font, (255, 255, 255, 255), shadow=False)
+        _draw_centered_text(draw, self._settings.channel_name_display, THUMB_W // 2, 50, brand_font, (255, 255, 255, 255), shadow=False)
 
         # ── Hook text (top half, lower portion) ───────────────────────
         hook_font = _load_font(88, bold=True)
@@ -348,7 +348,7 @@ class ThumbnailGenerator:
         draw.rectangle([0, cta_y, THUMB_W, THUMB_H], fill=(10, 10, 20, 230))
         cta_font = _load_font(40, bold=False)
         cta_color = self._settings.brand_accent_rgb
-        _draw_centered_text(draw, f"Follow {self._settings.CHANNEL_HANDLE} for more", THUMB_W // 2, cta_y + 55, cta_font, cta_color + (255,), shadow=False)
+        _draw_centered_text(draw, f"Follow {self._settings.channel_handle_display} for more", THUMB_W // 2, cta_y + 55, cta_font, cta_color + (255,), shadow=False)
 
         output_path.parent.mkdir(parents=True, exist_ok=True)
         canvas.convert("RGB").save(str(output_path), "PNG", quality=95, optimize=True)

@@ -659,5 +659,5 @@ class VideoAssembler:
         _draw_centered(draw, "daily Roblox", W // 2, H // 2 - 90, cta_font, (255, 255, 255))
         bg = _draw_centered_mixed(bg, "hidden gems 💎", W // 2, H // 2 + 60, cta_font, accent)
         draw = ImageDraw.Draw(bg)
-        _draw_centered(draw, settings.CHANNEL_HANDLE, W // 2, H // 2 + 220, handle_font, (255, 255, 255))
+        _draw_centered(draw, settings.channel_handle_display, W // 2, H // 2 + 220, handle_font, (255, 255, 255))
         return bg

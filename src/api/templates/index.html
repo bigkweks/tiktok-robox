@@ -163,8 +163,13 @@
             <i class="bi bi-people me-1"></i>{{ 10000 - follows }} to go
           </span>
           <span class="text-muted" style="font-size:0.8rem">
-            {% if perf.total_posts > 0 %}
-              ~{{ ((10000 - follows) / [perf.avg_follow_conv_rate * 1000, 1] | max) | round(0) | int }} more videos needed
+            {% if perf.total_posts > 0 and perf.avg_follows_per_post > 0 %}
+              ~{{ ((10000 - follows) / perf.avg_follows_per_post) | round(0) | int }} more videos
+              <span title="based on {{ (perf.avg_follows_per_post) | round(1) }} follows per posted video so far">
+                <i class="bi bi-info-circle"></i>
+              </span>
+            {% elif perf.total_posts > 0 %}
+              No follows logged yet — keep posting
             {% else %}
               Post first video to project timeline
             {% endif %}

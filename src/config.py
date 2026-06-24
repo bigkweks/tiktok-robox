@@ -88,6 +88,18 @@ class Settings(BaseSettings):
     def brand_accent_rgb(self) -> tuple[int, int, int]:
         return self.hex_to_rgb(self.BRAND_ACCENT_COLOR)
 
+    @property
+    def channel_name_display(self) -> str:
+        """CHANNEL_NAME with emoji removed — the text fonts can't draw emoji."""
+        from src.content.fonts import strip_emoji  # lazy: avoids config<->fonts cycle
+        return strip_emoji(self.CHANNEL_NAME) or self.CHANNEL_NAME
+
+    @property
+    def channel_handle_display(self) -> str:
+        """CHANNEL_HANDLE with emoji removed for burn-in rendering."""
+        from src.content.fonts import strip_emoji  # lazy: avoids config<->fonts cycle
+        return strip_emoji(self.CHANNEL_HANDLE) or self.CHANNEL_HANDLE
+
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:

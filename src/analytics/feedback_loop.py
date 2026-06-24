@@ -272,6 +272,7 @@ class FeedbackLoop:
                     "avg_completion_rate": 0.0,
                     "avg_follow_conv_rate": 0.0,
                     "avg_engagement_rate": 0.0,
+                    "avg_follows_per_post": 0.0,
                     "top_performing_variant": "N/A",
                 }
 
@@ -299,5 +300,7 @@ class FeedbackLoop:
             "avg_completion_rate": float(row.avg_completion or 0.0),
             "avg_follow_conv_rate": float(row.avg_follow_conv or 0.0),
             "avg_engagement_rate": float(row.avg_engagement or 0.0),
+            # Actual follows earned per posted video — drives the goal projection.
+            "avg_follows_per_post": int(row.total_follows) / row.total_posts,
             "top_performing_variant": top_variant,
         }
