@@ -625,7 +625,9 @@ def finalize_carousel(
     scores_list = list(scores) if scores is not None else [None] * n
     game_names_list = list(game_names) if game_names is not None else []
 
-    cover_hook = pick_cover_hook(part, used_hooks, edition=edition)
+    from src.content.cover_generator import select_cover_concept
+    _concept = select_cover_concept(edition=edition, part=part, used_hooks=used_hooks)
+    cover_hook = _concept.hook
     cta = pick_cta(part)
     # Working copy; improvements carry forward across attempts.
     current_caps: list[str] = [c or "" for c in captions]
