@@ -91,7 +91,17 @@ src/content/
                       hooks), pick_cta(), pick_footer_cta(), build_post_caption(),
                       build_carousel_hashtags(), banks COVER_HOOKS / CTA_LINES /
                       FOOTER_CTAS / ENGAGE_LINES / EDITION_HOOKS.
-  creator_brief.py  ★ NEW. Creator-decision layer. EDITION_BRIEFS answers the
+  cover_generator.py ★ NEW. Dedicated cover-generation system. 10 archetype
+                      concepts (The Qualifier, The Pattern Break, The Niche Gate,
+                      The Visit Count, The Insider, The Algorithm Accuser, The
+                      Confession, The Anti-Viral, The Hidden Stat, The Scout
+                      Report) scored on 6 dimensions (curiosity/clarity/
+                      specificity/authenticity/novelty/readability). REJECT_FLOOR
+                      = 0.40 eliminates any concept with a fatal weakness.
+                      select_cover_concept(edition, part, used_hooks) returns the
+                      scored winner. finalize_carousel() calls this instead of
+                      pick_cover_hook(). CoverConcept / CoverScore dataclasses.
+  creator_brief.py  ★ Creator-decision layer. EDITION_BRIEFS answers the
                       7 audience-inference questions per niche (who, why_care,
                       knows, believes, surprise, save_trigger, follow_trigger)
                       in niche-specific language. plan_carousel() assigns every
@@ -175,9 +185,45 @@ src/api/templates/   base.html (dark theme + .id-chip + imgFallback helper),
   follows-per-post.
 - Pipeline batches carousels every 8h; manual "⚡ Generate Now" button.
 - Video + thumbnail pipeline intact (badge-overlap bug fixed).
-- **Test suite: 86 passing**. See "Testing" below.
+- **Test suite: 104 passing**. See "Testing" below.
 
-## Session changelog — creator-decision model + top-1% quality gate (latest)
+## Session changelog — dedicated cover-generation system (latest)
+Brief: treat the cover (Slide 0) as its own scored competition rather than a
+random hook rotation — generate 10 distinct concept archetypes per drop, score
+each on six dimensions that drive stop-scroll performance, reject weak candidates,
+and return the highest-composite winner to the renderer. The cover controls
+stop-scroll rate, initial curiosity, and swipe initiation; a weak cover kills
+the carousel before a single game slide is seen.
+
+- **New `src/content/cover_generator.py` — dedicated cover-concept engine.**
+  Defines 10 named archetype concepts (`The Qualifier`, `The Pattern Break`,
+  `The Niche Gate`, `The Visit Count`, `The Insider`, `The Algorithm Accuser`,
+  `The Confession`, `The Anti-Viral`, `The Hidden Stat`, `The Scout Report`),
+  each with a base hook and edition-specific overrides (e.g. Horror edition
+  Qualifier = "if you've already beaten doors" — naming a real Roblox game is
+  the single strongest lever on specificity and authenticity).
+  Six scoring dimensions with explicit weights: `curiosity` (0.25), `clarity`
+  (0.20), `specificity` (0.20), `authenticity` (0.15), `novelty` (0.12),
+  `readability` (0.08). `REJECT_FLOOR = 0.40`: any dimension below this
+  eliminates the concept regardless of composite — prevents a one-dimension-
+  strong entry winning with a fatal weakness elsewhere. `select_cover_concept()`
+  returns the highest composite among passing candidates; falls back to
+  ignoring `used_hooks` or all concepts if needed (never blocks generation).
+  Scoring uses whole-word matching for short niche vocab (≤3 chars) to prevent
+  false substring matches (e.g. "op" inside "people").
+- **`carousel_quality.finalize_carousel` now calls `select_cover_concept()`.**
+  Replaces the old `pick_cover_hook()` call so every carousel drop gets the
+  scored winner for that edition, not a rotation-position from a flat list.
+- **Tests: 18 new cases in `tests/test_cover_generator.py`.** Covers: exactly
+  10 concepts generated, all dimensions in [0,1], composite matches weighted
+  sum, edition-specific hook scores higher on specificity, Visit Count has
+  specificity via Roblox metric "visits", Niche Gate names the community pain,
+  Horror Qualifier names "doors", no concept contains an AI tell, bad hooks
+  fail REJECT_FLOOR, good hook passes, selection returns highest composite,
+  used-hook skipping, all 8 editions return valid concepts, `as_dict` shape.
+  **Full suite: 104 passing.**
+
+## Session changelog — creator-decision model + top-1% quality gate (prior)
 Brief 1 (quality): treat every carousel as competing against the top 1% of
 Roblox TikTok accounts — score Hook, Curiosity, Readability, Saveability,
 Shareability, Follow conversion, Authenticity, Novelty; reject below threshold;
@@ -601,7 +647,7 @@ existed only to get the posting app audited).
 7. ~~Per-slide download buttons~~ — **DONE** (replaced by one-step save).
 
 ## Testing
-Run `python -m pytest -q` (**86 passing**). Test files:
+Run `python -m pytest -q` (**104 passing**). Test files:
 - `tests/test_scoring.py`, `tests/test_discovery.py`, `tests/test_content.py`
   — original suites (scoring, Roblox client/trend detector, rating/captions).
   `test_content.py` extended: fallback verdict no AI tell, score-tiered variety.
@@ -622,10 +668,15 @@ Run `python -m pytest -q` (**86 passing**). Test files:
   empty-caption recovery.
 - `tests/test_carousel_download.py` — zip bundling (ordering, skips missing) +
   the "Save all to Photos" button render + Web Share wiring.
-- `tests/test_creator_brief.py` (**new**) — every edition has a full 7-question
-  brief, unknown/None falls back cleanly, briefs are niche-distinct, purpose
-  assignment covers all slide roles, dead slides flagged with reasons,
-  serialisation, finalize emits a purposeful plan.
+- `tests/test_creator_brief.py` — every edition has a full 7-question brief,
+  unknown/None falls back cleanly, briefs are niche-distinct, purpose assignment
+  covers all slide roles, dead slides flagged with reasons, serialisation,
+  finalize emits a purposeful plan.
+- `tests/test_cover_generator.py` (**new**) — 10 concepts generated, all
+  dimensions in [0,1], composite formula verified, edition-specific hooks score
+  higher on specificity, Horror Qualifier names "doors", no AI tells, REJECT_FLOOR
+  mechanics, selection returns highest composite, used-hook skipping, all 8
+  editions return valid concepts, as_dict shape.
 
 Sandbox verification pattern: render PNG slides and view them (no real network /
 moviepy needed). Templates are validated by parsing all of them and rendering
