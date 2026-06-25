@@ -628,8 +628,12 @@ class CarouselGenerator:
             name = name.rstrip() + "…"
         img = draw_mixed(img, (name_x, 86), name, f_use, (15, 15, 17),
                          emoji_size=_emoji_px(f_use), anchor="la")
-        # Creator + (Roblox-style) plain grey maturity line
-        img = draw_mixed(img, (name_x, 166), (game.creator or "Roblox"), f_creator,
+        # Creator + (Roblox-style) plain grey maturity line. Never fabricate the
+        # creator: if it's unknown we say "By Roblox creator" rather than falsely
+        # crediting Roblox itself (audit M2) — a wrong on-image fact reads as bot
+        # content on a format whose whole value is authenticity.
+        creator_line = (game.creator or "").strip() or "Roblox creator"
+        img = draw_mixed(img, (name_x, 166), creator_line, f_creator,
                          (120, 122, 130), emoji_size=_emoji_px(f_creator), anchor="la")
         draw = ImageDraw.Draw(img)
         mat_label, _ = _maturity(game.genre)

@@ -729,6 +729,14 @@ class Pipeline:
         )
         desc, (thumb_a, thumb_b) = await asyncio.gather(desc_fut, thumb_fut)
 
+        # If the AI caption call failed on the video path, the captions are
+        # rule-based — surface it loudly so degraded video copy is never mistaken
+        # for AI output (audit M3). (generate_local on the carousel path is
+        # intentional rule-based copy, not a failure, and is not flagged.)
+        if self._settings.GENERATE_VIDEOS and getattr(desc, "used_fallback", False):
+            log.warning("pipeline.description_fallback_active", game=game.name,
+                        reason="anthropic_call_failed")
+
         # 5. TikTok performance predictions
         from src.discovery.viral_scorer import ViralScorer, ScoreBreakdown  # noqa: PLC0415
         async with get_session() as session:

@@ -29,6 +29,7 @@ class DescriptionResult:
     description_b: str      # Secondary caption (social proof angle)
     hashtags: list[str]     # Combined hashtag strategy
     hashtags_str: str       # Space-separated for display
+    used_fallback: bool = False  # True when AI failed and captions are rule-based
 
     def caption_a_with_tags(self) -> str:
         return f"{self.description_a}\n\n{self.hashtags_str}"
@@ -134,6 +135,9 @@ class DescriptionEngine:
             json_match = re.search(r"\{.*\}", raw, re.DOTALL)
             data = json.loads(json_match.group()) if json_match else {}
 
+            # If either caption is missing from the AI response we fall back for
+            # it — flag that so degraded copy is never mistaken for AI output (M3).
+            used_fallback = not (data.get("caption_a") and data.get("caption_b"))
             cap_a = data.get("caption_a") or self._fallback_a(name, score, label, visits_str)
             cap_b = data.get("caption_b") or self._fallback_b(name, score, visits_str)
 
@@ -141,6 +145,7 @@ class DescriptionEngine:
             log.warning("description.ai_failed", game=name, error=str(exc))
             cap_a = self._fallback_a(name, score, label, visits_str)
             cap_b = self._fallback_b(name, score, visits_str)
+            used_fallback = True
 
         hashtags = self._build_hashtags(genre, name)
 
@@ -149,6 +154,7 @@ class DescriptionEngine:
             description_b=cap_b,
             hashtags=hashtags,
             hashtags_str=" ".join(hashtags),
+            used_fallback=used_fallback,
         )
 
     def generate_local(
