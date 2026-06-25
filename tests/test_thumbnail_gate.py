@@ -81,6 +81,43 @@ def test_all_thumbnails_fail(tmp_path, monkeypatch):
     assert len(report.failed_games) == 5
 
 
+def test_icon_load_failure_blocks_when_url_existed(tmp_path, monkeypatch):
+    """Audit H1: a real icon URL that fails to load (transient) falls back to a
+    synthetic letter-tile — that breaks the 'genuine Roblox page' promise, so the
+    render must NOT be shippable even though every hero thumbnail loaded."""
+    monkeypatch.setattr(CarouselGenerator, "_fetch_thumbnail",
+                        lambda self, url: _real_thumb())
+    monkeypatch.setattr(CarouselGenerator, "_fetch_icon",
+                        lambda self, url, name: None)   # icon CDN fails
+    gen = CarouselGenerator()
+    games = [
+        CarouselGame(name=f"Game {i}", creator="Dev", score=8.2,
+                     carousel_caption="actually fun", like_ratio=0.9,
+                     active_players=500, thumbnail_url="http://x/t",
+                     icon_url="http://x/icon.png", genre="adventure",
+                     visits=900_000, description="A real game.", blurb="worth a look")
+        for i in range(5)
+    ]
+    report = gen.generate(games, output_dir=tmp_path, slug="ic1")
+    assert report.ok is False
+    assert len(report.failed_icon_games) == 5
+    assert report.placeholder_count == 0          # heroes were fine
+    assert "icon" in report.failure_reason.lower()
+
+
+def test_missing_icon_url_does_not_block(tmp_path, monkeypatch):
+    """A game that genuinely has no icon URL gets the letter-tile, but that must
+    NOT block shipping — a retry could never produce an icon that doesn't exist."""
+    monkeypatch.setattr(CarouselGenerator, "_fetch_thumbnail",
+                        lambda self, url: _real_thumb())
+    gen = CarouselGenerator()
+    games = [_game(f"Game {i}") for i in range(5)]   # icon_url=None
+    report = gen.generate(games, output_dir=tmp_path, slug="ic2")
+    assert report.ok is True
+    assert report.failed_icon_games == []
+    assert len(report.missing_icon_games) == 5
+
+
 def test_no_game_slides_is_not_ok():
     """A report with zero game slides must not read as ok (guards an empty batch)."""
     r = RenderReport()

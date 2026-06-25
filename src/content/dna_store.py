@@ -69,7 +69,16 @@ class DNAStore:
     # ── Profiles ─────────────────────────────────────────────────────────
 
     def save_profile(self, profile: ContentDNAProfile) -> str:
-        """Persist a single extracted profile. Returns its id (filename stem)."""
+        """Persist a single extracted profile. Returns its id (filename stem).
+
+        Refuses to persist a PRIOR profile: a prior is a generic baseline, not
+        extracted signal, so saving it would silently pollute the consolidated
+        blueprint and make a failed extraction look successful (audit H2).
+        Returns "" without saving in that case.
+        """
+        if getattr(profile, "is_prior", False):
+            log.warning("dna_store.refused_prior_profile", label=profile.label)
+            return ""
         self._ensure_dirs()
         pid = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S_") + uuid.uuid4().hex[:6]
         path = self.profiles_dir / f"{pid}.json"
@@ -97,7 +106,10 @@ class DNAStore:
     def rebuild_consolidated(self) -> ContentDNAProfile:
         """Merge every saved profile into one blueprint and persist it."""
         self._ensure_dirs()
-        profiles = self.list_profiles()
+        # Exclude any prior profiles defensively (e.g. saved by an older build
+        # before H2): a prior is a baseline, never real evidence, and must not
+        # contribute to the merged blueprint.
+        profiles = [p for p in self.list_profiles() if not getattr(p, "is_prior", False)]
         consolidated = merge_profiles(profiles) if profiles else seed_prior_profile()
         (self.root / _CONSOLIDATED_NAME).write_text(
             json.dumps(consolidated.as_dict(), indent=2)

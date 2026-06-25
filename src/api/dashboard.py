@@ -501,14 +501,34 @@ async def dna_extract(files: list[UploadFile] = File(...), label: str = Form(def
     profile = await asyncio.get_event_loop().run_in_executor(
         None, extractor.extract, saved_paths, label,
     )
-    pid = store.save_profile(profile)
 
+    # H2: the extractor returns a generic PRIOR when the vision call fails (no key,
+    # network error, or no usable patterns). That is NOT a successful extraction —
+    # nothing was learned from the upload. Do NOT persist it (it would pollute the
+    # consolidated blueprint and look like success) and tell the user plainly.
+    if profile.is_prior:
+        log.warning("dna.extract_no_signal", slides=len(saved_paths),
+                    notes=profile.notes)
+        return {
+            "status": "no_signal",
+            "is_prior": True,
+            "slides": len(saved_paths),
+            "overall_confidence": profile.overall_confidence,
+            "message": (
+                "Couldn't extract DNA from these screenshots — the AI vision step "
+                "returned no usable patterns (check the API-key banner up top). "
+                "Nothing was added to your blueprint. Fix the key and try again."
+            ),
+            "notes": profile.notes,
+        }
+
+    pid = store.save_profile(profile)
     return {
         "status": "extracted",
         "profile_id": pid,
         "slides": len(saved_paths),
         "overall_confidence": profile.overall_confidence,
-        "is_prior": profile.is_prior,
+        "is_prior": False,
         "profile": profile.as_dict(),
     }
 

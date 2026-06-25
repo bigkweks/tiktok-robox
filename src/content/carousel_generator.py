@@ -159,6 +159,17 @@ class RenderReport:
     placeholder_count: int = 0
     game_slide_count: int = 0
     failed_games: list[str] = field(default_factory=list)
+    # ── Icon provenance (audit H1) ────────────────────────────────────
+    # The header icon is part of the "genuine Roblox game page" promise. A
+    # synthetic letter-tile breaks that promise just like a placeholder hero, so
+    # an icon that had a real URL but FAILED to load (transient rate-limit / CDN)
+    # is a blocking failure too. A game that genuinely has no icon URL is recorded
+    # but does NOT block — a letter-tile is the only possible render and a retry
+    # would never fix it.
+    successful_icons: int = 0
+    placeholder_icons: int = 0
+    failed_icon_games: list[str] = field(default_factory=list)   # had URL, load failed → blocks
+    missing_icon_games: list[str] = field(default_factory=list)  # no URL → acceptable
 
     def record_hero(self, game_name: str, *, ok: bool) -> None:
         self.game_slide_count += 1
@@ -169,10 +180,27 @@ class RenderReport:
             self.placeholder_count += 1
             self.failed_games.append(game_name)
 
+    def record_icon(self, game_name: str, *, ok: bool, had_url: bool) -> None:
+        if ok:
+            self.successful_icons += 1
+            return
+        self.placeholder_icons += 1
+        if had_url:
+            # A real icon URL existed but didn't load — transient, retryable, and
+            # a quality break. Treat like a placeholder hero: do not ship.
+            self.failed_icon_games.append(game_name)
+        else:
+            self.missing_icon_games.append(game_name)
+
     @property
     def ok(self) -> bool:
-        """True only when every game slide rendered with a real thumbnail."""
-        return self.placeholder_count == 0 and self.game_slide_count > 0
+        """True only when every game slide rendered with a real thumbnail AND no
+        slide fell back to a placeholder icon where a real icon URL existed."""
+        return (
+            self.placeholder_count == 0
+            and not self.failed_icon_games
+            and self.game_slide_count > 0
+        )
 
     @property
     def failure_reason(self) -> str:
@@ -180,12 +208,22 @@ class RenderReport:
             return ""
         if self.game_slide_count == 0:
             return "No game slides were rendered."
-        names = ", ".join(self.failed_games[:5]) or "some games"
+        parts: list[str] = []
+        if self.placeholder_count:
+            names = ", ".join(self.failed_games[:5]) or "some games"
+            parts.append(
+                f"{self.placeholder_count} of {self.game_slide_count} game slides "
+                f"could not load the real Roblox thumbnail ({names})")
+        if self.failed_icon_games:
+            inames = ", ".join(self.failed_icon_games[:5])
+            parts.append(
+                f"{len(self.failed_icon_games)} game slide(s) could not load the "
+                f"real Roblox icon ({inames})")
+        joined = "; ".join(parts) or "some slides fell back to placeholder art"
         return (
-            f"{self.placeholder_count} of {self.game_slide_count} game slides "
-            f"could not load the real Roblox thumbnail ({names}) and fell back to "
-            f"a placeholder. Roblox may be rate-limiting or its image CDN may be "
-            f"unreachable. Not shipping a carousel with placeholder art."
+            f"{joined} and fell back to placeholder art. Roblox may be "
+            f"rate-limiting or its image CDN may be unreachable. Not shipping a "
+            f"carousel with placeholder art."
         )
 
     def as_dict(self) -> dict:
@@ -195,6 +233,10 @@ class RenderReport:
             "placeholder_count": self.placeholder_count,
             "game_slide_count": self.game_slide_count,
             "failed_games": list(self.failed_games),
+            "successful_icons": self.successful_icons,
+            "placeholder_icons": self.placeholder_icons,
+            "failed_icon_games": list(self.failed_icon_games),
+            "missing_icon_games": list(self.missing_icon_games),
             "ok": self.ok,
             "failure_reason": self.failure_reason,
         }
@@ -551,7 +593,15 @@ class CarouselGenerator:
         draw = ImageDraw.Draw(img)
 
         # ── Header ────────────────────────────────────────────────────
+        # Distinguish a REAL Roblox icon from the synthetic letter-tile so the
+        # render report can refuse to ship a fake icon where a real one was
+        # expected (audit H1).
         icon = self._fetch_icon(game.icon_url, game.name)
+        icon_real = icon is not None
+        if not icon_real:
+            icon = self._synthetic_icon(game.name)
+        if report is not None:
+            report.record_icon(game.name, ok=icon_real, had_url=bool(game.icon_url))
         if icon:
             isz = 168
             icon_r = icon.resize((isz, isz), Image.LANCZOS).convert("RGBA")
@@ -716,10 +766,15 @@ class CarouselGenerator:
         return _fetch_image(url) if url else None
 
     def _fetch_icon(self, url: Optional[str], name: str) -> Optional[Image.Image]:
+        """Fetch the REAL Roblox icon. Returns None when no URL is set or the
+        fetch fails — the caller builds the synthetic letter-tile and records the
+        fallback so the render gate can refuse to ship a fake icon (audit H1)."""
         if url:
-            img = _fetch_image(url)
-            if img:
-                return img
+            return _fetch_image(url)
+        return None
+
+    def _synthetic_icon(self, name: str) -> Image.Image:
+        """The letter-tile shown only when no real icon is available."""
         icon = Image.new("RGBA", (168, 168), self._initial_color(name))
         d = ImageDraw.Draw(icon)
         f = load_font("black", 96)

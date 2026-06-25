@@ -158,10 +158,15 @@ async function submitDna(e) {
     box.style.display = 'block';
     if (data.error) {
       box.innerHTML = '<div class="alert alert-warning py-2 mb-0">' + data.error + '</div>';
+    } else if (data.status === 'no_signal' || data.is_prior) {
+      // Extraction failed — the AI returned no usable patterns. Nothing saved.
+      box.innerHTML = '<div class="alert alert-warning py-2 mb-0">' +
+        (data.message || 'No DNA could be extracted from these screenshots. ' +
+         'Nothing was added to your blueprint.') + '</div>';
     } else {
-      box.innerHTML = '<div class="alert alert-info py-2 mb-0">extracted ' +
+      box.innerHTML = '<div class="alert alert-success py-2 mb-0">extracted ' +
         data.slides + ' slide(s) · ' + Math.round(data.overall_confidence*100) +
-        '% confidence' + (data.is_prior ? ' (prior)' : '') + '. reloading…</div>';
+        '% confidence. reloading…</div>';
       setTimeout(() => location.reload(), 1200);
     }
   } catch (err) {

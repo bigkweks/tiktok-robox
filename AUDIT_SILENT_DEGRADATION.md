@@ -9,6 +9,12 @@
 **Scope:** all of `src/` (discovery → rating → carousel → approval → export).
 **Date:** 2026-06-25 · **Branch:** `claude/handoff-file-continue-nmksfs`
 
+> **Remediation status (updated):** **C1, H1, and H2 are now fixed** (see
+> commits on this branch). M1 is substantially mitigated as a side-effect of C1
+> (fallback content can no longer reach the panel). M2, M3, and the Low items
+> remain open. The per-issue sections below describe the original finding; the
+> summary table at the bottom carries the current status.
+
 This codebase already has a strong remediation layer (the launch-readiness
 session): a placeholder-hero gate, an export validator, a rating floor, a
 three-reviewer panel, cross-post dedup, and an AI-status banner. Those gates are
@@ -217,18 +223,18 @@ flat-grey test.
 
 ## Summary table
 
-| ID | Severity | Issue | Gated today? |
-|----|----------|-------|--------------|
-| C1 | Critical | AI-failure ratings persist & ship as if AI-generated (`used_fallback` is a dead flag) | **No** |
-| H1 | High | Synthetic letter-avatar icon not recorded or gated | **No** |
-| H2 | High | DNA extraction silently returns generic prior, reports "extracted" | Partial (`is_prior` in payload only) |
-| M1 | Medium | Rule-based panel can't detect fabricated/fallback content | No |
-| M2 | Medium | Creator silently falls back to "Roblox" | No |
-| M3 | Medium | Video captions silently fall back to templates | Logged only |
-| L1 | Low | Icon fetch retries exhaust silently | Via H1 |
-| L2 | Low | Learning/DNA loads swallow exceptions to cold-start | Logged only |
-| L3 | Low | Edition mismatch → "Hidden Gems" default | Logged only |
-| L4 | Low | Export blank/placeholder checks are heuristic | N/A |
+| ID | Severity | Issue | Status |
+|----|----------|-------|--------|
+| C1 | Critical | AI-failure ratings persist & ship as if AI-generated (`used_fallback` was a dead flag) | **✅ Fixed** — column persisted, selection + defensive gate, "why" surfaced, UI markers, test |
+| H1 | High | Synthetic letter-avatar icon not recorded or gated | **✅ Fixed** — icon provenance in `RenderReport`, blocks when a real icon URL fails to load, tests |
+| H2 | High | DNA extraction silently returns generic prior, reports "extracted" | **✅ Fixed** — failed extraction reported as `no_signal`, prior never persisted/merged, UI warning, tests |
+| M1 | Medium | Rule-based panel can't detect fabricated/fallback content | **Mitigated** by C1 (fallback can't reach the panel); optional hard-failure still open |
+| M2 | Medium | Creator silently falls back to "Roblox" | Open |
+| M3 | Medium | Video captions silently fall back to templates | Open (logged only) |
+| L1 | Low | Icon fetch retries exhaust silently | Closed via H1 |
+| L2 | Low | Learning/DNA loads swallow exceptions to cold-start | Open (logged only) |
+| L3 | Low | Edition mismatch → "Hidden Gems" default | Open (logged only) |
+| L4 | Low | Export blank/placeholder checks are heuristic | Open |
 
 ## The one-line takeaway
 The visual gates (placeholder hero, dimensions, blank frame) are solid. The

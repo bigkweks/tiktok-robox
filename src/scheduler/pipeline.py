@@ -461,13 +461,15 @@ class Pipeline:
             log.error("pipeline.carousel_factory.placeholder_rejected", part=part,
                       placeholder_count=render.placeholder_count,
                       game_slides=render.game_slide_count,
-                      failed_games=render.failed_games)
+                      failed_games=render.failed_games,
+                      failed_icons=render.failed_icon_games)
             self._carousel_part_counter -= 1
             return {"carousels": 0, "rejected": True, "part": part,
                     "reason": "placeholder_thumbnails",
                     "message": render.failure_reason,
                     "placeholder_count": render.placeholder_count,
-                    "failed_games": render.failed_games}
+                    "failed_games": render.failed_games,
+                    "failed_icons": render.failed_icon_games}
 
         slide_paths = render.slides
 

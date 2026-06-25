@@ -45,6 +45,32 @@ def test_store_consolidated_merges_after_save(tmp_path):
     assert consolidated.patterns["hook_structure"].sample_count == 2
 
 
+def test_store_refuses_to_save_prior(tmp_path):
+    """Audit H2: a failed extraction returns a PRIOR; persisting it would pollute
+    the blueprint and look like success. The store must refuse."""
+    store = DNAStore(root=tmp_path)
+    pid = store.save_profile(seed_prior_profile())
+    assert pid == ""                       # not saved
+    assert store.list_profiles() == []     # corpus stays empty
+    assert store.get_consolidated().is_prior
+
+
+def test_consolidated_excludes_legacy_prior(tmp_path):
+    """A prior already on disk (from an older build) must not contribute to the
+    merged blueprint — only real extractions count."""
+    store = DNAStore(root=tmp_path)
+    # Force a prior onto disk the way an old build might have.
+    store._ensure_dirs()
+    import json
+    (store.profiles_dir / "legacy_prior.json").write_text(
+        json.dumps(seed_prior_profile().as_dict()))
+    store.save_profile(_profile(0.6))      # one genuine extraction
+    consolidated = store.rebuild_consolidated()
+    assert not consolidated.is_prior
+    # Only the single real source counts, not the legacy prior.
+    assert consolidated.patterns["hook_structure"].sample_count == 1
+
+
 def test_store_save_screenshots(tmp_path):
     store = DNAStore(root=tmp_path)
     saved = store.save_screenshots([("a.png", b"123"), ("b.png", b"456")])
