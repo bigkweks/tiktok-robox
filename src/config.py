@@ -62,7 +62,7 @@ class Settings(BaseSettings):
 
     # ── Dashboard ─────────────────────────────────────────────────────────
     DASHBOARD_HOST: str = "0.0.0.0"
-    DASHBOARD_PORT: int = 8000
+    DASHBOARD_PORT: int = int(__import__("os").environ.get("PORT", 8000))
     DASHBOARD_SECRET_KEY: str = "change-this-in-production"
 
     @field_validator("WEIGHT_GROWTH_VELOCITY", "WEIGHT_ENGAGEMENT_RATIO",

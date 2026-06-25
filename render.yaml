@@ -1,0 +1,12 @@
+services:
+  - type: web
+    name: tiktok-robox
+    env: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: python main.py serve
+    envVars:
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: GENERATE_VIDEOS
+        value: "false"
