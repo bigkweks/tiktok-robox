@@ -152,10 +152,30 @@ src/content/
                       arrow (the plain "→" was tofu in Poppins).
   description_engine.py  TikTok captions + hashtags. Hashtags lead with proven
                       search queries (#robloxgamestoplywithfriends etc).
+                      generate_local() builds captions WITHOUT an API call (used
+                      on the carousel path when GENERATE_VIDEOS is off).
+  ai_status.py      ★ NEW. AI credential validator. check_api_key(probe=) →
+                      AIStatus distinguishing missing/malformed/invalid/
+                      rate_limited/unreachable/valid (+ fallback_active). Injectable
+                      probe (token-free models.list) so it's testable offline.
+                      Used at startup, dashboard (/api/ai-status), onboarding.
+  dedup.py          ★ NEW. Cross-post duplicate detection. similarity() (token
+                      Jaccard + difflib ratio), is_near_duplicate(), dedupe_batch(),
+                      most_similar(), normalize(). Stops the same hook/caption
+                      shipping to the same followers across parts.
+  edition_match.py  ★ NEW. Genre↔edition. edition_for_games() derives the edition
+                      from the batch's genres (was a blind counter rotation);
+                      validate_edition_match() rejects a themed cover that doesn't
+                      fit the games. GENRE_EDITIONS / NEUTRAL_EDITIONS / MIN_GENRE_MATCH.
+  export_validator.py ★ NEW. validate_carousel_export() — pre-persist + pre-export
+                      gate: exact 1080×1920, not blank, not corrupt/missing, no
+                      placeholder hero. ExportValidation(ok, reasons).
+  pil_compat.py     ★ NEW. ensure_resampling() restores Image.ANTIALIAS etc. for
+                      moviepy 1.0.3 on Pillow 10+ (called before the moviepy import).
   video_assembler.py  Secondary 9:16 video (moviepy + gTTS, Ken Burns, captions,
-                      animated score count-up). Decorative emoji (👀 🔍 👁️ 👥 ⭐ 💎)
-                      now render via draw_mixed (were tofu); feature bullets use
-                      the color check ✔️ (U+2714); free-text fields are emoji-stripped.
+                      animated score count-up). Gated behind GENERATE_VIDEOS
+                      (default off — carousel is primary). Decorative emoji render
+                      via draw_mixed; free-text fields are emoji-stripped.
   thumbnail_generator.py  Video cover variants A/B. Emoji stripped from labels,
                       game name, and hook so they never tofu.
 src/learning/        ★ NEW. Performance Learning System (JSON corpus under
@@ -245,7 +265,7 @@ src/api/templates/   Premium dark theme (no template tells). base.html holds the
   Final Quality Score + the three reviewer scores).
 - **Dashboard is a premium, restrained creator tool** (no template tells — no
   gradient hero, no emoji labels, no rainbow borders, one accent, clean hierarchy).
-- **Test suite: 228 passing**. See "Testing" below.
+- **Test suite: 230 passing**. See "Testing" below.
 - **Performance Learning System**: every generated carousel (approved or
   rejected) is recorded as a genome; components are ranked (success confidence /
   effectiveness / diversity / novelty), classified (strong/weak/overused/
@@ -982,10 +1002,20 @@ Netlify/Cloudflare/`docs/` static site + TikTok domain-verification files (these
 existed only to get the posting app audited).
 
 ## Likely next steps (not yet done — pick up here)
+> ✅ **Resolved in the launch-readiness session:** placeholder-thumbnail gate,
+> API-key validation (startup/dashboard/onboarding), cross-post duplicate
+> rejection, rating≥7.4 floor, genre↔edition match + validation, export
+> safe-zone/dimension validation, ANTIALIAS fix, removal of auto-approval
+> (manual Approve/Reject/Regenerate), carousel-centric `CarouselPost` columns
+> (`generation_id`/`cover_hook`/`slide_captions`/`min_game_rating`/`exported_at`),
+> `GENERATE_VIDEOS=False` + concurrent description/thumbnail + one-AI-call path,
+> responsive dashboard, lifespan migration.
+
 1. **Feedback loop on carousels — PARTIALLY DONE.** The Performance Learning
    System now records a genome per carousel and learns from review-stage signals
-   (quality scores, edit-resilience, approval). What's still missing is *realised*
-   TikTok analytics for carousels: add `/analytics/ingest-carousel`, extend
+   (quality scores, edit-resilience, approval). `CarouselPost` now carries a
+   `generation_id` to link analytics. Still missing is *realised* TikTok
+   analytics for carousels: add `/analytics/ingest-carousel`, extend
    `CarouselPost` with view/like/save/follow fields, and call
    `PerformanceStore.update_outcome(genome_id, {performance_index, samples})` so
    `ranking.effectiveness` lets measured performance dominate the proxy. (Store
@@ -1028,7 +1058,7 @@ existed only to get the posting app audited).
     `/insights` for drill-down.
 
 ## Testing
-Run `python -m pytest -q` (**228 passing**). Test files:
+Run `python -m pytest -q` (**230 passing**). Test files:
 - `tests/test_scoring.py`, `tests/test_discovery.py`, `tests/test_content.py`
   — original suites (scoring, Roblox client/trend detector, rating/captions).
   `test_content.py` extended: fallback verdict no AI tell, score-tiered variety.
@@ -1091,6 +1121,25 @@ Run `python -m pytest -q` (**228 passing**). Test files:
 - `tests/test_workflow.py` (**new**) — the one-action orchestrator builds
   immediately when ready, retries once on panel rejection, reports retry when both
   drafts fail, warms up when games are scarce, and never double-warms.
+- `tests/test_thumbnail_gate.py` (**new**) — RenderReport counts for all/one/all
+  thumbnails failing, rate-limit + CDN-timeout → None, and the placeholder gate.
+- `tests/test_ai_status.py` (**new**) — valid/invalid/empty/malformed/rate-limited/
+  timeout credential states with an injected probe; default-probe SDK mapping.
+- `tests/test_dedup.py` (**new**) — normalize/similarity/is_near_duplicate/
+  dedupe_batch (exact, near, reordered, unrelated).
+- `tests/test_edition_match.py` (**new**) — edition derived from genres, neutral
+  fallback + rotation, validate rejects/accepts genre-specific editions.
+- `tests/test_export_validator.py` (**new**) — valid passes; placeholder hero,
+  wrong dims, blank, missing, corrupt, empty all fail.
+- `tests/test_pil_compat.py` (**new**) — ANTIALIAS restored + idempotent + a real
+  resize with the legacy constant.
+- `tests/test_workflow_gates.py` (**new**) — pending_review hides export + shows
+  Approve/Regenerate, approved unlocks export, AI banner on every page.
+- `tests/test_carousel_gates_integration.py` (**new**) — real temp-DB: rating
+  floor excludes weak games; a good batch persists status=pending_review with
+  cover_hook/slide_captions/generation_id/min_game_rating.
+- `tests/test_launch_polish.py` (**new**) — generate_local makes no API call;
+  base.html ships responsive @media breakpoints + collapsible nav labels.
 
 Sandbox verification pattern: render PNG slides and view them (no real network /
 moviepy needed). Templates are validated by parsing all of them and rendering
