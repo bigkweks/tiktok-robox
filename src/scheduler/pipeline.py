@@ -136,17 +136,21 @@ class Pipeline:
             log.info("pipeline.content_factory.no_games")
             return {"processed": 0}
 
-        processed = 0
-        for game in games:
-            try:
+        sem = asyncio.Semaphore(5)
+
+        async def _process(game: Game) -> None:
+            async with sem:
                 await self._generate_content_for_game(game)
-                processed += 1
-            except Exception as exc:
+
+        results = await asyncio.gather(*[_process(g) for g in games], return_exceptions=True)
+        processed = sum(1 for r in results if not isinstance(r, Exception))
+        for game, result in zip(games, results):
+            if isinstance(result, Exception):
                 log.error(
                     "pipeline.content_factory.game_failed",
                     game=game.name,
                     universe_id=game.universe_id,
-                    error=str(exc),
+                    error=str(result),
                 )
 
         log.info("pipeline.content_factory.complete", processed=processed, total=len(games))
@@ -175,15 +179,32 @@ class Pipeline:
 
         # Pull 5 approved/rated content items not yet in a carousel
         async with get_session() as session:
-            # Get game IDs already used in carousels
-            from sqlalchemy import select as sa_select, text as sa_text  # noqa: PLC0415
-            used_result = await session.execute(sa_select(CarouselPost.game_ids))
-            used_ids: set[int] = set()
-            for row in used_result.scalars().all():
+            # Build a cooldown set: exclude games that appeared in a carousel
+            # fewer than 50 unique other games ago (so no game repeats within
+            # the next 50 unique featured games after its last use).
+            from sqlalchemy import select as sa_select  # noqa: PLC0415
+            hist_result = await session.execute(
+                sa_select(CarouselPost.game_ids)
+                .order_by(CarouselPost.created_at.asc())
+            )
+            ordered_appearances: list[int] = []
+            for (row,) in hist_result:
                 try:
-                    used_ids.update(_json.loads(row))
+                    ordered_appearances.extend(_json.loads(row))
                 except Exception:
                     pass
+
+            # For each game, find the index of its last appearance and count
+            # how many unique games appeared after it.
+            last_idx: dict[int, int] = {}
+            for i, gid in enumerate(ordered_appearances):
+                last_idx[gid] = i
+
+            used_ids: set[int] = set()
+            for gid, idx in last_idx.items():
+                unique_after = len(set(ordered_appearances[idx + 1:]))
+                if unique_after < 50:
+                    used_ids.add(gid)
 
             # Fetch top-rated content not yet carouselled.
             # PRE-GENERATION RATING GATE: only games at/above the quality floor
@@ -498,6 +519,7 @@ class Pipeline:
         import uuid as _uuid  # noqa: PLC0415
         generation_id = _uuid.uuid4().hex[:12]
 
+        from datetime import timezone as _tz  # noqa: PLC0415
         async with get_session() as session:
             post = CarouselPost(
                 edition=edition,
@@ -517,6 +539,14 @@ class Pipeline:
                 min_game_rating=min(batch_scores) if batch_scores else None,
             )
             session.add(post)
+            # Track carousel usage on each featured game so the 50-game cooldown
+            # query has fresh data on the next run_carousel_factory call.
+            now_utc = datetime.now(_tz.utc)
+            for _, g in batch:
+                game_row = await session.get(Game, g.id)
+                if game_row:
+                    game_row.times_carouseled = (game_row.times_carouseled or 0) + 1
+                    game_row.last_carouseled_at = now_utc
 
         log.info("pipeline.carousel_factory.complete", part=part, edition=edition,
                  slides=len(slide_paths), final_score=approval.final_score,

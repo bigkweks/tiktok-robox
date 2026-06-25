@@ -74,6 +74,64 @@ class TrendDetector:
         log.info("trend_detector.run_complete", **stats)
         return stats
 
+    async def _claude_game_discovery(self, roblox_client: RobloxClient) -> list[str]:
+        """Ask Claude for underrated Roblox game names, then resolve them to universe IDs."""
+        import json as _json
+        import anthropic as _anthropic
+        from src.config import get_settings as _cfg
+
+        settings = _cfg()
+        if not settings.ANTHROPIC_API_KEY:
+            return []
+
+        prompt = (
+            "You are a Roblox content curator for a TikTok hidden-gems channel. "
+            "List exactly 25 underrated, genuinely fun Roblox games that deserve "
+            "more players and would perform well as TikTok recommendations. "
+            "Exclude mega-famous games (Adopt Me, Blox Fruits, Brookhaven, Jailbreak, "
+            "Murder Mystery 2, Blox Fruits, Tower of Hell, Piggy). "
+            "Mix genres: obby, tycoon, simulator, horror, roleplay, fighting, rpg. "
+            'Return ONLY a JSON array of exact game names, no commentary. Example: ["Name 1", "Name 2"]'
+        )
+
+        loop = asyncio.get_event_loop()
+        try:
+            def _call_claude():
+                c = _anthropic.Anthropic(api_key=settings.ANTHROPIC_API_KEY)
+                msg = c.messages.create(
+                    model=settings.ANTHROPIC_MODEL,
+                    max_tokens=512,
+                    messages=[{"role": "user", "content": prompt}],
+                )
+                return msg.content[0].text.strip()
+
+            raw_text = await loop.run_in_executor(None, _call_claude)
+            start = raw_text.index("[")
+            end = raw_text.rindex("]") + 1
+            names: list[str] = _json.loads(raw_text[start:end])
+            log.info("trend_detector.claude_names", count=len(names))
+        except Exception as exc:
+            log.warning("trend_detector.claude_names_failed", error=str(exc))
+            return []
+
+        # Resolve each name to universe IDs via Roblox search (concurrent)
+        async def _search_one(name: str) -> list[str]:
+            try:
+                ids = await roblox_client.omni_search(name)
+                return ids[:2]  # top 2 results per name to avoid irrelevant IDs
+            except Exception:
+                return []
+
+        results = await asyncio.gather(*[_search_one(n) for n in names])
+        ids: list[str] = []
+        seen_local: set[str] = set()
+        for batch in results:
+            for uid in batch:
+                if uid not in seen_local:
+                    seen_local.add(uid)
+                    ids.append(uid)
+        return ids
+
     async def _crawl_all_sources(self, client: RobloxClient) -> list[RobloxGame]:
         """
         Discovery using the public Roblox endpoints that actually work today.
@@ -99,7 +157,15 @@ class TrendDetector:
                     added += 1
             return added
 
-        # ── PRIMARY: modern explore-api homepage sorts ────────────────────
+        # ── PRIMARY: Claude AI picks underrated games by name → search lookup ──
+        try:
+            claude_ids = await self._claude_game_discovery(client)
+            n = _add(claude_ids)
+            log.info("trend_detector.claude_discovery", returned=len(claude_ids), added=n)
+        except Exception as exc:
+            log.warning("trend_detector.claude_discovery_failed", error=str(exc))
+
+        # ── TERTIARY: modern explore-api homepage sorts ────────────────────
         # (Popular, Up-and-Coming, genre rows — what roblox.com itself loads.)
         try:
             explore_ids = await client.explore_discover(max_sorts=12)
@@ -108,7 +174,7 @@ class TrendDetector:
         except Exception as exc:  # never let one source kill the run
             log.warning("trend_detector.explore_failed", error=str(exc))
 
-        # ── SECONDARY: public search API across genre keywords ────────────
+        # ── TERTIARY: public search API across genre keywords ─────────────
         # Run sequentially with a short pause — firing all 15 in parallel
         # saturates the search API's per-session rate limit (429 for everything).
         try:

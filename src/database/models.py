@@ -73,6 +73,10 @@ class Game(Base):
     blacklist_reason: Mapped[Optional[str]] = mapped_column(String(256))
     content_generated: Mapped[bool] = mapped_column(Boolean, default=False)
 
+    # ── Carousel tracking ─────────────────────────────────────────────
+    times_carouseled: Mapped[int] = mapped_column(Integer, default=0)
+    last_carouseled_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+
     # ── Relationships ─────────────────────────────────────────────────
     crawl_logs: Mapped[list[CrawlLog]] = relationship("CrawlLog", back_populates="game", cascade="all, delete-orphan")
     content_items: Mapped[list[Content]] = relationship("Content", back_populates="game", cascade="all, delete-orphan")

@@ -73,6 +73,8 @@ async def init_db() -> None:
             await _sqlite_add_column_if_missing(conn, "carousel_posts", "generation_id", "VARCHAR(40)")
             await _sqlite_add_column_if_missing(conn, "carousel_posts", "min_game_rating", "FLOAT")
             await _sqlite_add_column_if_missing(conn, "carousel_posts", "exported_at", "DATETIME")
+            await _sqlite_add_column_if_missing(conn, "games", "times_carouseled", "INTEGER DEFAULT 0")
+            await _sqlite_add_column_if_missing(conn, "games", "last_carouseled_at", "DATETIME")
     log.info("database.initialized")
 
 
