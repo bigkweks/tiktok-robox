@@ -56,8 +56,11 @@ src/discovery/
                       (secondary). Bulk details sub-chunks on HTTP 400 and
                       SKIPS the `filters` sortId (it returns category IDs, not
                       universe IDs, which poisoned whole batches). Chunk size 50.
-  trend_detector.py   Crawl→score→persist. get_top_unprocessed() re-ranks by
-                      tiktok_candidacy (rewards the discoverable-not-famous gem).
+  trend_detector.py   Crawl→score→persist. PRIMARY source is now _claude_game_discovery:
+                      one Claude call → 25 underrated game names → concurrent
+                      omni_search for each → universe IDs. explore-api + keyword
+                      search are TERTIARY fallbacks. get_top_unprocessed() re-ranks
+                      by tiktok_candidacy (rewards the discoverable-not-famous gem).
                       Keyword searches run SEQUENTIALLY with a 1.5s sleep between
                       each (parallel gather tripped Roblox 429 rate limits).
   viral_scorer.py     Weighted multi-factor scoring + tiktok_candidacy() +
@@ -205,10 +208,14 @@ src/learning/        ★ NEW. Performance Learning System (JSON corpus under
 src/scheduler/pipeline.py  Orchestrator (APScheduler). Jobs: discovery (4h),
                       content_factory (4h), carousel_factory (8h),
                       queue_maintenance (12h), analytics_update (24h).
-                      run_carousel_factory() batches 5 rated games, loads the
-                      consolidated Content DNA, runs the MANDATORY ContentApprovalSystem
-                      and persists a CarouselPost (status=approved, +review_score
-                      /review_summary) ONLY if it passes review. run_create_carousel()
+                      run_content_factory uses asyncio.gather + Semaphore(5) to
+                      rate up to 5 games concurrently (~5× faster than serial).
+                      run_carousel_factory() uses a 50-game cooldown (excludes
+                      any game until 50 unique others have been featured since its
+                      last use), updates times_carouseled + last_carouseled_at,
+                      loads the consolidated Content DNA, runs the MANDATORY
+                      ContentApprovalSystem and persists a CarouselPost
+                      (status=pending_review) ONLY if it passes. run_create_carousel()
                       = the one-action orchestrator (build now / retry / warm up
                       via _warmup_for_carousel).
 src/api/dashboard.py  FastAPI. Pages: / , /carousels (shows the review panel +
@@ -226,13 +233,21 @@ src/analytics/feedback_loop.py  Manual analytics ingest + weight update.
                       ingest_manual() rejects a non-existent content_id (was
                       silently writing orphan rows). get_performance_summary()
                       now also returns avg_follows_per_post.
-src/database/models.py  Game, Content (+carousel_caption, +used_fallback cols),
+src/database/models.py  Game (+ times_carouseled, last_carouseled_at carousel
+                      tracking cols), Content (+carousel_caption, +used_fallback),
                       CarouselPost (+review_score / review_summary), PostAnalytics,
                       ModelWeights, CrawlLog.
-src/database/connection.py  init_db() creates tables + auto-migrates
-                      content.carousel_caption, content.used_fallback, and
-                      carousel_posts.review_score / review_summary for existing DBs
-                      (SQLite WAL).
+src/database/connection.py  init_db() creates tables + auto-migrates all new
+                      columns including games.times_carouseled,
+                      games.last_carouseled_at, content.carousel_caption,
+                      content.used_fallback, and carousel_posts review/generation
+                      columns (SQLite WAL).
+src/api/static/       Self-hosted Bootstrap 5.3.0 (bootstrap.min.css +
+                      bootstrap.bundle.min.js) and Bootstrap Icons 1.11.0
+                      (bootstrap-icons.css + fonts/bootstrap-icons.woff2/.woff).
+                      Served at /static/ — avoids CDN dependency in Codespaces.
+render.yaml           Render free-tier deployment config (type=web, plan=free,
+                      python, ANTHROPIC_API_KEY env, GENERATE_VIDEOS=false).
 src/api/templates/   Premium dark theme (no template tells). base.html holds the
                       design system: .metric/.kv/.workflow-steps/.count-pill/
                       .action-hint/.review-panel + shared createCarousel(). index,
@@ -276,7 +291,7 @@ src/api/templates/   Premium dark theme (no template tells). base.html holds the
   Final Quality Score + the three reviewer scores).
 - **Dashboard is a premium, restrained creator tool** (no template tells — no
   gradient hero, no emoji labels, no rainbow borders, one accent, clean hierarchy).
-- **Test suite: 236 passing**. See "Testing" below.
+- **Test suite: 236 passing.** See "Testing" below.
 - **Performance Learning System**: every generated carousel (approved or
   rejected) is recorded as a genome; components are ranked (success confidence /
   effectiveness / diversity / novelty), classified (strong/weak/overused/
@@ -285,8 +300,70 @@ src/api/templates/   Premium dark theme (no template tells). base.html holds the
 - **Content DNA system**: upload screenshots of a proven carousel → Claude vision
   extracts WHY it worked across 14 dimensions into 5 reusable formulas with
   confidence scores; consolidated DNA drives cover generation. Dashboard `/dna`.
+- **Dashboard is always reachable** — deployed on Render free tier (`render.yaml`).
+  Bootstrap Icons and CSS are self-hosted so the UI renders correctly without CDN.
+- **Discovery is fast and working** — Claude picks 25 underrated game names per
+  run (~10s total), Roblox API is used only to resolve IDs + enrich (never for
+  discovery lists that return 403). Games are excluded from carousels for 50
+  unique-other-game turns after their last use. Content gen runs ~5× faster via
+  concurrent Claude calls (Semaphore 5).
 
-## Session changelog — Silent-Degradation Audit + Provenance Gates (latest)
+## Session changelog — Dashboard fix, Render deploy, Claude discovery + speed (latest)
+Brief: four improvements across a single session — (1) fix 500 errors on all
+dashboard routes caused by the Starlette 1.x API change; (2) self-host Bootstrap
+and Icons so they show up without CDN access; (3) add Render free-tier deployment
+so the app is always-on without Codespaces; (4) replace the 403-blocked Roblox API
+crawl with Claude-powered discovery, add a 50-game carousel cooldown, and make
+content generation concurrent. **236 tests passing (no change).**
+
+- **All dashboard routes returned 500 (`dashboard.py`).** Root cause: Starlette
+  1.3.1 changed `TemplateResponse` to take `request` as its first positional arg;
+  all 8 call-sites still passed the template name as `request` and the context dict
+  as the template name, causing Jinja2 to try to use a dict as a cache key
+  (`unhashable type: 'dict'`). Fixed all 8 calls to the new signature
+  `TemplateResponse(request, "template.html", {context})`.
+
+- **Bootstrap Icons not showing (`src/api/static/`, `src/api/templates/base.html`,
+  `dashboard.py`).** CDN (`cdn.jsdelivr.net`) is unreachable from Codespaces.
+  Downloaded Bootstrap CSS/JS (`bootstrap@5.3.0`) and Icons (`bootstrap-icons@1.11.0`,
+  including the two woff/woff2 font files) via `npm install` (npmjs.org is on the
+  allowlist). Mounted a `/static` route pointing at the new `src/api/static/`
+  directory; updated `base.html` to load all assets from `/static/`.
+
+- **Render free-tier deployment (`render.yaml`, `src/config.py`).** Added a
+  `render.yaml` service definition (`type: web`, `plan: free`, `python`, start
+  command `python main.py serve`, env vars for `ANTHROPIC_API_KEY` and
+  `GENERATE_VIDEOS=false`). Added `PORT` env-var reading to `DASHBOARD_PORT` in
+  `config.py` so Render's dynamic port is honoured. The app now stays live 24/7
+  on the free tier (sleeps after 15 min inactivity, wakes on first request).
+
+- **Claude-powered discovery replaces 403-blocked Roblox crawl
+  (`src/discovery/trend_detector.py`).** Added `_claude_game_discovery` method:
+  sends one Claude call asking for 25 underrated game names, then resolves each to
+  universe IDs via `omni_search` (all 25 searches run concurrently). Integrated as
+  the PRIMARY source in `_crawl_all_sources`; the existing explore-api + keyword
+  search are now TERTIARY fallbacks. Discovery time drops from 2+ min (mostly
+  4xx waits) to ~10 seconds.
+
+- **50-game carousel cooldown (`src/database/models.py`, `src/database/connection.py`,
+  `src/scheduler/pipeline.py`).** Added `times_carouseled` (int, default 0) and
+  `last_carouseled_at` (datetime, nullable) to the `Game` model with auto-migration
+  on startup. After a carousel is persisted, each featured game's
+  `times_carouseled` is incremented and `last_carouseled_at` is set. On subsequent
+  carousel runs, the exclusion query (`used_ids`) is replaced by a cooldown
+  calculation: for each game, count unique games that appeared in carousels AFTER
+  its last use — if fewer than 50, the game stays excluded. Prevents immediate
+  game repeats while still allowing reuse once the channel's audience has been
+  exposed to 50 other games.
+
+- **Concurrent content generation (`src/scheduler/pipeline.py`,
+  `run_content_factory`).** Replaced the sequential `for game in games: await
+  _generate_content_for_game(game)` loop with
+  `asyncio.gather(*[_process(g) for g in games])` gated by
+  `asyncio.Semaphore(5)`. A 10-game batch now runs ~5× faster (all 10 Claude
+  rating calls fire concurrently up to 5 at a time instead of one by one).
+
+## Session changelog — Silent-Degradation Audit + Provenance Gates (prior)
 Brief: audit the whole codebase for every place it silently produces
 lower-quality content while *appearing* successful, write a severity-ranked
 report, then fix it. The product must never quietly ship degraded content as if
@@ -1077,6 +1154,13 @@ Netlify/Cloudflare/`docs/` static site + TikTok domain-verification files (these
 existed only to get the posting app audited).
 
 ## Likely next steps (not yet done — pick up here)
+> ✅ **Resolved this session:** 500 errors on all dashboard routes (Starlette 1.x
+> TemplateResponse API change); Bootstrap Icons missing (now self-hosted at
+> `/static/`); Render free-tier deployment (`render.yaml` + PORT env var);
+> Claude-powered discovery replaces 403-blocked Roblox crawl; 50-game carousel
+> cooldown (`times_carouseled` / `last_carouseled_at` on Game); concurrent content
+> generation with Semaphore(5).
+>
 > ✅ **Resolved in the launch-readiness session:** placeholder-thumbnail gate,
 > API-key validation (startup/dashboard/onboarding), cross-post duplicate
 > rejection, rating≥7.4 floor, genre↔edition match + validation, export
@@ -1144,7 +1228,7 @@ existed only to get the posting app audited).
     `/insights` for drill-down.
 
 ## Testing
-Run `python -m pytest -q` (**230 passing**). Test files:
+Run `python -m pytest -q` (**236 passing**). Test files:
 - `tests/test_scoring.py`, `tests/test_discovery.py`, `tests/test_content.py`
   — original suites (scoring, Roblox client/trend detector, rating/captions).
   `test_content.py` extended: fallback verdict no AI tell, score-tiered variety.
