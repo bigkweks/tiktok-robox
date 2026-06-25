@@ -644,20 +644,37 @@ class Pipeline:
         # Steps 3 & 4 both depend only on the rating and are independent of each
         # other, so run them CONCURRENTLY instead of serially (was two awaited
         # executor calls back-to-back). Captions + thumbnails overlap.
-        desc_fut = loop.run_in_executor(
-            None,
-            functools.partial(
-                self._description.generate,
-                name=game.name,
-                score=rating.score,
-                label=rating.label,
-                verdict=rating.verdict,
-                visits=game.visits,
-                genre=game.genre,
-                hook_text=rating.hook_text,
-                controversy_angle=rating.controversy_angle,
-            ),
-        )
+        #
+        # The TikTok *video* captions (description_a/b) cost a SECOND Claude call
+        # per game. The carousel — the primary product — never uses them, so when
+        # videos are off we build them locally (rule-based) and save that call.
+        if self._settings.GENERATE_VIDEOS:
+            desc_fut = loop.run_in_executor(
+                None,
+                functools.partial(
+                    self._description.generate,
+                    name=game.name,
+                    score=rating.score,
+                    label=rating.label,
+                    verdict=rating.verdict,
+                    visits=game.visits,
+                    genre=game.genre,
+                    hook_text=rating.hook_text,
+                    controversy_angle=rating.controversy_angle,
+                ),
+            )
+        else:
+            desc_fut = loop.run_in_executor(
+                None,
+                functools.partial(
+                    self._description.generate_local,
+                    name=game.name,
+                    score=rating.score,
+                    label=rating.label,
+                    visits=game.visits,
+                    genre=game.genre,
+                ),
+            )
         thumb_fut = loop.run_in_executor(
             None,
             functools.partial(

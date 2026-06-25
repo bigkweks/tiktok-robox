@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+from contextlib import asynccontextmanager
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
@@ -38,7 +39,33 @@ from src.scheduler.pipeline import Pipeline
 
 log = structlog.get_logger(__name__)
 
-app = FastAPI(title="TikTok Robox Dashboard", version="1.0.0")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # ── startup ──
+    global _pipeline
+    await init_db()
+    _settings.ensure_dirs()
+    # Validate the AI credentials up front so a bad key surfaces immediately
+    # instead of silently degrading every rating into fallback mode.
+    try:
+        status = await _refresh_ai_status()
+        if not status.get("ok"):
+            log.error("dashboard.ai_key_check_failed", **status)
+    except Exception as exc:  # never let a check failure block startup
+        log.warning("dashboard.ai_key_check_error", error=str(exc))
+    _pipeline = Pipeline()
+    await _pipeline.start()
+    log.info("dashboard.started")
+    try:
+        yield
+    finally:
+        # ── shutdown ──
+        if _pipeline:
+            await _pipeline.stop()
+
+
+app = FastAPI(title="TikTok Robox Dashboard", version="1.0.0", lifespan=lifespan)
 app.add_middleware(GZipMiddleware, minimum_size=500)
 
 _settings = get_settings()
@@ -66,30 +93,6 @@ templates = Jinja2Templates(directory=str(templates_dir))
 output_dir = Path(_settings.OUTPUT_DIR)
 if output_dir.exists():
     app.mount("/output", StaticFiles(directory=str(output_dir)), name="output")
-
-
-@app.on_event("startup")
-async def startup():
-    global _pipeline
-    await init_db()
-    _settings.ensure_dirs()
-    # Validate the AI credentials up front so a bad key surfaces immediately
-    # instead of silently degrading every rating into fallback mode.
-    try:
-        status = await _refresh_ai_status()
-        if not status.get("ok"):
-            log.error("dashboard.ai_key_check_failed", **status)
-    except Exception as exc:  # never let a check failure block startup
-        log.warning("dashboard.ai_key_check_error", error=str(exc))
-    _pipeline = Pipeline()
-    await _pipeline.start()
-    log.info("dashboard.started")
-
-
-@app.on_event("shutdown")
-async def shutdown():
-    if _pipeline:
-        await _pipeline.stop()
 
 
 # ── Pages ─────────────────────────────────────────────────────────────

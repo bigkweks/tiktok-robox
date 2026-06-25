@@ -487,6 +487,41 @@
     details > summary::before { content: '▶ '; font-size: 0.6rem; }
     details[open] > summary::before { content: '▼ '; }
     details > summary::-webkit-details-marker { display: none; }
+
+    /* ── Responsive: this is operated from an iPad/phone, so the nav and
+       layout must hold up under 1024px. The nav is a fixed flex-row of 7 links;
+       on narrow widths we let it scroll horizontally instead of overflowing,
+       tighten padding, and stack the page header. ── */
+    @media (max-width: 1024px) {
+      .navbar { padding: 0 0.85rem; }
+      .navbar-nav.flex-row {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        scrollbar-width: none;            /* hide the scrollbar, keep the scroll */
+        flex-wrap: nowrap;
+        max-width: 100%;
+      }
+      .navbar-nav.flex-row::-webkit-scrollbar { display: none; }
+      .nav-link { white-space: nowrap; padding: 0.4rem 0.6rem !important; }
+      .navbar-brand.me-4 { margin-right: 0.75rem !important; }
+    }
+    @media (max-width: 768px) {
+      .navbar-brand { font-size: 1rem; }
+      .nav-link { font-size: 0.78rem; }
+      /* On a phone the icons carry the meaning; hide the text labels so all
+         7 destinations fit without a cramped horizontal scroll. */
+      .nav-link span.nav-text { display: none; }
+      .page-header { flex-direction: column; align-items: stretch; }
+      .page-header .btn { width: 100%; }
+      .container-fluid.py-4 { padding-left: 0.85rem; padding-right: 0.85rem; }
+      .metric .stat-number { font-size: 1.4rem; }
+      /* Tap targets: comfortable minimum height for touch. */
+      .btn { min-height: 40px; }
+    }
+    @media (max-width: 480px) {
+      .page-title { font-size: 1rem; }
+      .card-header { flex-wrap: wrap; }
+    }
   </style>
 </head>
 <body>
@@ -495,38 +530,38 @@
       <a class="navbar-brand me-4" href="/"><span class="brand-mark"></span>the gem<span class="brand-sub">vault</span></a>
       <div class="navbar-nav ms-auto d-flex flex-row gap-1">
         <div class="nav-item">
-          <a class="nav-link {% if request.url.path == '/' %}active{% endif %}" href="/">
-            <i class="bi bi-speedometer2"></i>Dashboard
+          <a class="nav-link {% if request.url.path == '/' %}active{% endif %}" href="/" title="Dashboard">
+            <i class="bi bi-speedometer2"></i><span class="nav-text">Dashboard</span>
           </a>
         </div>
         <div class="nav-item">
-          <a class="nav-link {% if '/carousels' in request.url.path %}active{% endif %}" href="/carousels">
-            <i class="bi bi-images"></i>Carousels
+          <a class="nav-link {% if '/carousels' in request.url.path %}active{% endif %}" href="/carousels" title="Carousels">
+            <i class="bi bi-images"></i><span class="nav-text">Carousels</span>
           </a>
         </div>
         <div class="nav-item">
-          <a class="nav-link {% if '/queue' in request.url.path %}active{% endif %}" href="/queue">
-            <i class="bi bi-list-check"></i>Queue
+          <a class="nav-link {% if '/queue' in request.url.path %}active{% endif %}" href="/queue" title="Queue">
+            <i class="bi bi-list-check"></i><span class="nav-text">Queue</span>
           </a>
         </div>
         <div class="nav-item">
-          <a class="nav-link {% if '/games' in request.url.path %}active{% endif %}" href="/games">
-            <i class="bi bi-controller"></i>Games
+          <a class="nav-link {% if '/games' in request.url.path %}active{% endif %}" href="/games" title="Games">
+            <i class="bi bi-controller"></i><span class="nav-text">Games</span>
           </a>
         </div>
         <div class="nav-item">
-          <a class="nav-link {% if '/analytics' in request.url.path %}active{% endif %}" href="/analytics">
-            <i class="bi bi-graph-up"></i>Analytics
+          <a class="nav-link {% if '/analytics' in request.url.path %}active{% endif %}" href="/analytics" title="Analytics">
+            <i class="bi bi-graph-up"></i><span class="nav-text">Analytics</span>
           </a>
         </div>
         <div class="nav-item">
-          <a class="nav-link {% if '/dna' in request.url.path %}active{% endif %}" href="/dna">
-            <i class="bi bi-fingerprint"></i>DNA
+          <a class="nav-link {% if '/dna' in request.url.path %}active{% endif %}" href="/dna" title="DNA">
+            <i class="bi bi-fingerprint"></i><span class="nav-text">DNA</span>
           </a>
         </div>
         <div class="nav-item">
-          <a class="nav-link {% if '/insights' in request.url.path %}active{% endif %}" href="/insights">
-            <i class="bi bi-lightbulb"></i>Insights
+          <a class="nav-link {% if '/insights' in request.url.path %}active{% endif %}" href="/insights" title="Insights">
+            <i class="bi bi-lightbulb"></i><span class="nav-text">Insights</span>
           </a>
         </div>
       </div>

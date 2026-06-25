@@ -151,6 +151,27 @@ class DescriptionEngine:
             hashtags_str=" ".join(hashtags),
         )
 
+    def generate_local(
+        self,
+        name: str,
+        score: float,
+        label: str,
+        visits: int,
+        genre: Optional[str],
+    ) -> DescriptionResult:
+        """Build TikTok video captions WITHOUT an API call, using the same
+        rule-based fallbacks the AI path falls back to. Used on the carousel-only
+        path (videos off) so we don't spend a second Claude call per game on
+        captions the carousel never uses."""
+        visits_str = self._format_visits(visits)
+        hashtags = self._build_hashtags(genre, name)
+        return DescriptionResult(
+            description_a=self._fallback_a(name, score, label, visits_str),
+            description_b=self._fallback_b(name, score, visits_str),
+            hashtags=hashtags,
+            hashtags_str=" ".join(hashtags),
+        )
+
     def _build_hashtags(self, genre: Optional[str], name: str) -> list[str]:
         tags: list[str] = []
 

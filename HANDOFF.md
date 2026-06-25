@@ -329,13 +329,22 @@ speed up generation. Trust beats convenience. **228 tests passing.**
 `test_pil_compat.py`, `test_dedup.py`, `test_edition_match.py`,
 `test_export_validator.py`, `test_workflow_gates.py`,
 `test_carousel_gates_integration.py` (real temp-DB: rating floor + pending_review
-persistence). **178 → 228 passing.**
+persistence). **178 → 230 passing.**
 
-**Remaining (documented, not blocking):** dashboard still has no `@media`
-responsive CSS (iPad portrait cramped); rating + description make 2 separate
-Claude calls per game (could be merged); `@app.on_event` is deprecated (works,
-migrate to lifespan later); banks could still be expanded for more caption
-variety. None gate launch.
+**Launch polish (this session, all fixed):**
+- **Responsive dashboard** — base.html now has `@media` breakpoints (1024/768/
+  480px): the 7-link nav scrolls horizontally then collapses to icon-only
+  (`.nav-text` spans hidden) on phones; page header stacks; tap targets ≥40px.
+- **One Claude call per game on the carousel path** — `DescriptionEngine.
+  generate_local()` builds the video captions rule-based (no API) and the
+  pipeline uses it whenever `GENERATE_VIDEOS` is off, halving per-game API spend.
+- **Lifespan migration** — `@app.on_event` startup/shutdown replaced with a
+  FastAPI `lifespan` context manager (deprecation warnings gone).
+
+**Remaining (documented, not blocking):** caption/hook banks could still be
+expanded for even more variety (dedup already prevents cross-post repeats);
+destructive endpoints are unauthenticated + bound to 0.0.0.0 (Codespaces ports
+are private by default). Neither gates launch.
 
 ## Session changelog — Performance Learning System (prior)
 Brief: build a feedback architecture so the platform continuously improves
