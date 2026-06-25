@@ -26,7 +26,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.database.connection import get_session
 from src.database.models import CrawlLog, Game, ModelWeights
 from src.discovery.roblox_client import (
-    GENRE_IDS,
     SEED_UNIVERSE_IDS,
     RobloxClient,
     RobloxGame,
@@ -36,15 +35,6 @@ from src.discovery.viral_scorer import ViralScorer
 log = structlog.get_logger(__name__)
 
 MAX_GAMES_PER_RUN = 500
-
-# Keywords fed to the public search API to surface games across genres.
-# Combined with the explore-api homepage sorts, these give broad coverage;
-# the tiktok_candidacy re-ranking later filters down to the hidden-gem range.
-HIDDEN_GEM_KEYWORDS: list[str] = [
-    "tower defense", "anime", "simulator", "obby", "tycoon",
-    "horror", "survival", "fighting", "roleplay", "rpg",
-    "fps", "racing", "story", "escape", "clicker",
-]
 
 
 class TrendDetector:
@@ -164,98 +154,31 @@ class TrendDetector:
 
     async def _crawl_all_sources(self, client: RobloxClient) -> list[RobloxGame]:
         """
-        Discovery using the public Roblox endpoints that actually work today.
+        Claude picks game names; Roblox API only resolves and enriches those picks.
 
-        Collect candidate universe IDs from every source, then do a SINGLE
-        enrichment pass (details + thumbnails + votes) for correct data.
-
-        Seed games are mega-famous (Adopt Me, Blox Fruits, etc.) and are
-        excluded up front so they never enter the content pool — they are not
-        even used as a discovery source anymore because the legacy
-        recommendations endpoint Roblox exposed for them is dead.
+        Seed IDs (mega-famous games) are excluded so they never enter the pool.
         """
-        # Pre-populate seen with all seed IDs so they are never added as candidates.
-        seen: set[str] = set(SEED_UNIVERSE_IDS)
-        candidate_ids: list[str] = []
+        excluded: set[str] = set(SEED_UNIVERSE_IDS)
 
-        def _add(ids: list[str]) -> int:
-            added = 0
-            for uid in ids:
-                if uid and uid not in seen:
-                    seen.add(uid)
-                    candidate_ids.append(uid)
-                    added += 1
-            return added
-
-        # ── PRIMARY: Claude AI picks underrated games by name → search lookup ──
         try:
-            claude_ids = await self._claude_game_discovery(client)
-            n = _add(claude_ids)
-            log.info("trend_detector.claude_discovery", returned=len(claude_ids), added=n)
+            candidate_ids = await self._claude_game_discovery(client)
         except Exception as exc:
             log.warning("trend_detector.claude_discovery_failed", error=str(exc))
+            candidate_ids = []
 
-        # ── TERTIARY: modern explore-api homepage sorts ────────────────────
-        # (Popular, Up-and-Coming, genre rows — what roblox.com itself loads.)
-        try:
-            explore_ids = await client.explore_discover(max_sorts=12)
-            n = _add(explore_ids)
-            log.info("trend_detector.explore", returned=len(explore_ids), added=n)
-        except Exception as exc:  # never let one source kill the run
-            log.warning("trend_detector.explore_failed", error=str(exc))
-
-        # ── TERTIARY: public search API across genre keywords ─────────────
-        # Run sequentially with a short pause — firing all 15 in parallel
-        # saturates the search API's per-session rate limit (429 for everything).
-        try:
-            search_added = 0
-            for keyword in HIDDEN_GEM_KEYWORDS:
-                try:
-                    res = await client.omni_search(keyword)
-                    search_added += _add(res)
-                except Exception as exc:
-                    log.debug("trend_detector.search_kw_failed", keyword=keyword, error=str(exc))
-                await asyncio.sleep(1.5)
-            log.info("trend_detector.search", added=search_added)
-        except Exception as exc:
-            log.warning("trend_detector.search_failed", error=str(exc))
-
-        # ── TERTIARY (legacy fallbacks, may be dead): recommendations ─────
-        # Kept only as a safety net; harmless when the endpoint returns nothing.
-        try:
-            rec_tasks = [client.get_recommendations(uid, max_rows=20) for uid in SEED_UNIVERSE_IDS]
-            rec_results = await asyncio.gather(*rec_tasks, return_exceptions=True)
-            rec_added = 0
-            for res in rec_results:
-                if isinstance(res, list):
-                    rec_added += _add(res)
-            if rec_added:
-                log.info("trend_detector.recommendations", added=rec_added)
-        except Exception as exc:
-            log.debug("trend_detector.recommendations_failed", error=str(exc))
-
-        # ── TERTIARY: legacy genre lists (may 403 without auth) ───────────
-        try:
-            for _genre_name, genre_id in list(GENRE_IDS.items())[:8]:
-                uids = await client.try_games_list(genre_id=genre_id, max_rows=60)
-                _add(uids)
-        except Exception as exc:
-            log.debug("trend_detector.genre_failed", error=str(exc))
-
+        candidate_ids = [uid for uid in candidate_ids if uid not in excluded]
         log.info("trend_detector.candidates_collected", total=len(candidate_ids))
 
         if not candidate_ids:
             log.error(
                 "trend_detector.no_candidates",
-                hint="All discovery sources returned 0 IDs. Run "
-                     "`python main.py diagnose` to see which endpoints are reachable.",
+                hint="Claude discovery returned no IDs.",
             )
             return []
 
-        # ── Single enrichment pass: authoritative details + thumbs + votes ─
-        games = await client.fetch_games_with_enrichment(candidate_ids[: MAX_GAMES_PER_RUN * 2])
-        log.info("trend_detector.crawled", candidates=len(candidate_ids), enriched=len(games))
-        return games[:MAX_GAMES_PER_RUN]
+        games = await client.fetch_games_with_enrichment(candidate_ids)
+        log.info("trend_detector.enriched", count=len(games))
+        return games
 
     async def _process_games(
         self,
