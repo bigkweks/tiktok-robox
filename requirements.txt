@@ -20,7 +20,7 @@ beautifulsoup4==4.12.3
 lxml==5.2.2
 
 # Content generation - AI
-anthropic==0.28.1
+anthropic>=0.40.0
 
 # Image processing / Thumbnail generation
 Pillow==10.3.0

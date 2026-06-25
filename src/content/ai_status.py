@@ -154,9 +154,16 @@ def _default_probe(key: str) -> str:
     import anthropic  # noqa: PLC0415
     try:
         client = anthropic.Anthropic(api_key=key, timeout=10.0, max_retries=0)
-        # models.list is an authenticated, token-free call — it proves the key
-        # works without spending generation tokens.
-        client.models.list(limit=1)
+        # Prefer models.list (token-free). Fall back to a 1-token message on
+        # older SDK versions that predate the models endpoint (<0.40).
+        try:
+            client.models.list(limit=1)
+        except AttributeError:
+            client.messages.create(
+                model="claude-haiku-4-5-20251001",
+                max_tokens=1,
+                messages=[{"role": "user", "content": "ping"}],
+            )
         return PROBE_VALID
     except anthropic.AuthenticationError:
         return PROBE_INVALID
