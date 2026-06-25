@@ -245,7 +245,7 @@ src/api/templates/   Premium dark theme (no template tells). base.html holds the
   Final Quality Score + the three reviewer scores).
 - **Dashboard is a premium, restrained creator tool** (no template tells — no
   gradient hero, no emoji labels, no rainbow borders, one accent, clean hierarchy).
-- **Test suite: 178 passing**. See "Testing" below.
+- **Test suite: 228 passing**. See "Testing" below.
 - **Performance Learning System**: every generated carousel (approved or
   rejected) is recorded as a genome; components are ranked (success confidence /
   effectiveness / diversity / novelty), classified (strong/weak/overused/
@@ -255,7 +255,89 @@ src/api/templates/   Premium dark theme (no template tells). base.html holds the
   extracts WHY it worked across 14 dimensions into 5 reusable formulas with
   confidence scores; consolidated DNA drives cover generation. Dashboard `/dna`.
 
-## Session changelog — Performance Learning System (latest)
+## Session changelog — Launch-Readiness Remediation (latest)
+Brief: make the product trustworthy + launch-ready — fix every place degraded
+content can appear successful, kill cross-post duplicates, enforce a rating
+floor, match cover genre to games, remove auto-approval, validate exports, and
+speed up generation. Trust beats convenience. **228 tests passing.**
+
+**PHASE 1 — Trust & reliability (the launch blockers).**
+- **Placeholder-thumbnail gate (P0-A).** `carousel_generator.generate()` now
+  returns a `RenderReport` (successful/failed/placeholder counts + failed game
+  names + `ok`/`failure_reason`). `_make_game_slide(report=)` records whether the
+  REAL Roblox hero loaded. The pipeline REFUSES to persist a render whose report
+  isn't ok (rolls back the part number, returns `rejected reason=placeholder_
+  thumbnails` with a clear message); `run_create_carousel` surfaces it as
+  `image_error`. A grey-box carousel can no longer be approved/exported/published.
+- **API-key validation (P0-B).** New `src/content/ai_status.py` —
+  `check_api_key(probe=)` distinguishes missing / malformed / invalid(revoked) /
+  rate_limited / unreachable / valid, with an injectable probe (`models.list`,
+  token-free) so it's testable offline. Validated at **startup** (dashboard),
+  **on the dashboard** (`GET /api/ai-status` + a loud banner in base.html that
+  polls and offers Re-check), and **onboarding** (`scripts/check_api_key.py`,
+  called by quickstart.sh step 5b). `RatingResult.used_fallback` flags rule-based
+  output and `rating.fallback_active` logs loudly — fallback is never mistaken
+  for AI.
+
+**PHASE 2 — Content quality (root causes, not symptoms).**
+- **Rating floor `MIN_CAROUSEL_RATING=7.4`** enforced at SELECTION (SQL filter)
+  AND as a defensive pre-approval check — a single below-floor game blocks the
+  carousel.
+- **Cross-post duplicate detection** — new `src/content/dedup.py` (normalized
+  token-Jaccard + difflib ratio, `similarity` / `is_near_duplicate` /
+  `dedupe_batch`). The pipeline loads cover hooks + captions of the last 25
+  carousels (`_recent_text_history`), feeds them into the approval as
+  `used_hooks`, and **rejects** an approved cover/caption that's a near-duplicate
+  of history (`reason=near_duplicate`). Root cause fixed: dedup was previously
+  per-run only, so the same followers saw repeated lines across parts.
+- **Genre/edition match** — new `src/content/edition_match.py`. Edition is now
+  DERIVED from the batch's genres (`edition_for_games`, was a blind counter
+  rotation) and VALIDATED (`validate_edition_match`) so a "Horror edition" cover
+  can't sit on non-horror games.
+
+**PHASE 3 — Visual & export correctness.**
+- **Export validation layer** — new `src/content/export_validator.py`
+  (`validate_carousel_export`): exact 1080×1920 dims, not blank, not
+  corrupt/missing, no placeholder hero. Wired pre-persist (pipeline) AND
+  pre-export (`/download` → 409 with reasons).
+- **PIL.Image.ANTIALIAS fix** — `src/content/pil_compat.py` `ensure_resampling()`
+  restores the legacy resampling constants moviepy 1.0.3 needs on Pillow 10+
+  (called before the moviepy import in video_assembler) — fixes the
+  "module 'PIL.Image' has no attribute 'ANTIALIAS'" video crash.
+
+**PHASE 4 — Workflow + analytics.**
+- **No auto-approval.** Carousels persist as `status="pending_review"` (was
+  auto-`approved`). Dashboard shows explicit **Approve / Reject / Regenerate**
+  (`/carousel/{id}/regenerate` added); export + mark-posted are **gated** behind
+  approval (server-side 409 + UI gating). Generate → Review → Approve → Publish,
+  all in-app.
+- **Carousel-centric identity.** New `CarouselPost` columns (auto-migrated):
+  `cover_hook`, `slide_captions`, `generation_id`, `min_game_rating`,
+  `exported_at`.
+
+**PHASE 5 — Performance (measured, not guessed).**
+- Profiled locally: carousel render ≈760ms, approval ≈4ms, export validation
+  ≈154ms — local compute is NOT the bottleneck; per-game AI calls + the video
+  render are (seconds each, network/ffmpeg).
+- **`GENERATE_VIDEOS=False` by default** — the expensive per-game moviepy/ffmpeg/
+  gTTS video is skipped on the (primary) carousel path; flip on only to post
+  videos. Biggest warm-up speed-up.
+- Caption + thumbnail generation (independent, both depend only on the rating)
+  now run **concurrently** via `asyncio.gather` instead of serial executor awaits.
+
+**Tests added (all green):** `test_thumbnail_gate.py`, `test_ai_status.py`,
+`test_pil_compat.py`, `test_dedup.py`, `test_edition_match.py`,
+`test_export_validator.py`, `test_workflow_gates.py`,
+`test_carousel_gates_integration.py` (real temp-DB: rating floor + pending_review
+persistence). **178 → 228 passing.**
+
+**Remaining (documented, not blocking):** dashboard still has no `@media`
+responsive CSS (iPad portrait cramped); rating + description make 2 separate
+Claude calls per game (could be merged); `@app.on_event` is deprecated (works,
+migrate to lifespan later); banks could still be expanded for more caption
+variety. None gate launch.
+
+## Session changelog — Performance Learning System (prior)
 Brief: build a feedback architecture so the platform continuously improves
 generation quality from outcomes — learn which generated outputs consistently
 produce the highest-quality content, rank every generation component, and feed
@@ -937,7 +1019,7 @@ existed only to get the posting app audited).
     `/insights` for drill-down.
 
 ## Testing
-Run `python -m pytest -q` (**178 passing**). Test files:
+Run `python -m pytest -q` (**228 passing**). Test files:
 - `tests/test_scoring.py`, `tests/test_discovery.py`, `tests/test_content.py`
   — original suites (scoring, Roblox client/trend detector, rating/captions).
   `test_content.py` extended: fallback verdict no AI tell, score-tiered variety.
