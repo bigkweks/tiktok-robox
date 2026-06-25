@@ -1,11 +1,18 @@
 ---
 name: handoff
-description: Generate and merge a session handoff into HANDOFF.md, then commit and push. Run ONCE when wrapping up a working session, batching everything since the last handoff — not after every change or every /goal. Invoke with /handoff.
+description: Generate and merge a session handoff into HANDOFF.md, then commit, push, and clear the conversation. Run ONCE when wrapping up a working session, batching everything since the last handoff — not after every change or every /goal. Invoke with /handoff. Terminates by clearing context.
 ---
 
 # Handoff Skill
 
-Generate a complete session handoff, merge it into `HANDOFF.md`, commit, and push to the current branch.
+Generate a complete session handoff, merge it into `HANDOFF.md`, commit, push to the current branch, and then clear the conversation so the next session starts cold from the file.
+
+## Single-run + auto-clear contract
+
+This skill is a **one-shot, terminal** action:
+
+1. It runs **exactly once per invocation**, only when the user explicitly commands `/handoff` (or says they're wrapping up). Never auto-run it, never loop it, and never run it a second time in the same turn — if it has already produced and pushed a handoff commit this turn, stop.
+2. When it finishes, it **automatically clears the conversation** (final step below). `HANDOFF.md` is now the complete surviving state, so the chat context is disposable — clearing it keeps the next session lean and forces it to read the file. The clear is the last thing the skill does; nothing runs after it.
 
 ## When to use
 
@@ -90,12 +97,22 @@ git push -u origin <current-branch>
 
 Replace `<session-title>` with a 3-5 word summary of what the session accomplished.
 
+### 8. Clear the conversation (terminal step)
+
+This is the **last** action — nothing runs after it. Once the handoff commit is pushed, reset the context so the next session starts cold from `HANDOFF.md`:
+
+- First print the short confirmation block (see Output format below) so the user sees what shipped.
+- Then issue the built-in `/clear` command as the final output of the turn to wipe the conversation. Do not add tool calls, follow-up questions, or prose after it.
+- If the runtime cannot clear context on the model's behalf, end with the single line: `Context not auto-cleared — run /clear to reset.` so the user knows to do it manually. Never silently skip the clear.
+
+Guardrails: only clear after the push has actually succeeded (a real commit hash exists on the remote). Never clear if the handoff failed, tests are red, or there are uncommitted changes you haven't accounted for — surface the problem instead.
+
 ## Output format
 
-After pushing, reply with:
+After pushing and immediately before the clear, reply with exactly this block:
 
 ```
-Handoff updated and pushed.
+Handoff updated and pushed. Clearing context now.
 
 Session title  : <title>
 Commits this session : N
@@ -108,4 +125,4 @@ New entry covers:
 ...
 ```
 
-No other prose. The file is the record.
+No other prose. The file is the record. Then perform step 8's clear.
