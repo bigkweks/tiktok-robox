@@ -30,6 +30,19 @@
   {% endif %}
 </div>
 
+{% if content.used_fallback %}
+  <div class="alert alert-warning d-flex align-items-start gap-2 mb-4" role="alert">
+    <i class="bi bi-exclamation-triangle-fill mt-1"></i>
+    <div>
+      <strong>Rule-based rating — NOT AI-generated.</strong>
+      The AI call failed when this was rated, so the score, verdict and caption
+      come from a deterministic fallback, not Claude. It is excluded from
+      carousels. Fix the API key (see the banner up top), then regenerate to get
+      a real AI rating.
+    </div>
+  </div>
+{% endif %}
+
 <div class="row g-3">
 
   {# ── Col 1: Thumbnails + Video ── #}

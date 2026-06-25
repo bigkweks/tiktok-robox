@@ -190,6 +190,9 @@ class Pipeline:
             # (MIN_CAROUSEL_RATING) are even eligible — one weak game makes the
             # whole carousel read as filler.
             min_rating = self._settings.MIN_CAROUSEL_RATING
+            # PROVENANCE GATE: exclude rule-based fallback content (AI call failed)
+            # so a fabricated rating/caption never ships as if it were AI-curated
+            # (audit C1). `used_fallback` is False/NULL for genuine AI output.
             result = await session.execute(
                 sa_select(Content, Game)
                 .join(Game, Content.game_id == Game.id)
@@ -197,6 +200,7 @@ class Pipeline:
                 .where(Content.rating_score.isnot(None))
                 .where(Content.rating_score >= min_rating)
                 .where(Content.carousel_caption.isnot(None))
+                .where(Content.used_fallback.isnot(True))
                 .order_by(Content.queue_priority.desc())
                 .limit(80)
             )
@@ -220,8 +224,28 @@ class Pipeline:
                 candidates.append((c, g))
 
         if len(candidates) < 5:
-            log.info("pipeline.carousel_factory.not_enough_games", count=len(candidates))
-            return {"carousels": 0}
+            # If the library is thin because AI ratings fell back to rule-based
+            # output (and were therefore excluded by the provenance gate), say so
+            # — otherwise "not enough games" looks like a discovery problem when
+            # the real cause is a missing/invalid key or a rate-limit (C1).
+            async with get_session() as session:
+                from sqlalchemy import func as sa_func  # noqa: PLC0415
+                fallback_count = await session.scalar(
+                    sa_select(sa_func.count(Content.id))
+                    .where(Content.used_fallback.is_(True))
+                    .where(Content.rating_score >= min_rating)
+                ) or 0
+            log.info("pipeline.carousel_factory.not_enough_games",
+                     count=len(candidates), excluded_fallback=fallback_count)
+            result: dict = {"carousels": 0, "eligible": len(candidates)}
+            if fallback_count:
+                result["reason"] = "fallback_content"
+                result["message"] = (
+                    f"{fallback_count} rated game(s) were excluded because their "
+                    f"ratings are rule-based fallback (the AI call failed — check "
+                    f"the API-key banner). Fix the key so real AI ratings can be "
+                    f"generated, then try again.")
+            return result
 
         # Sequence the 5 games for a RETENTION ARC instead of a flat
         # highest-first ranking (predictable = scrollable). Open strong, dip,
@@ -241,6 +265,19 @@ class Pipeline:
             return {"carousels": 0, "rejected": True, "reason": "below_rating_floor",
                     "message": (f"Some selected games are below the {min_rating} "
                                 f"rating floor ({below}). Not building a carousel.")}
+
+        # DEFENSIVE PROVENANCE GATE (pre-approval): the selection query already
+        # excludes fallback content, but never let a rule-based rating reach
+        # generation — a fabricated rating must never ship as if AI-curated (C1).
+        fallback_games = [g.name for c, g in batch if getattr(c, "used_fallback", False)]
+        if fallback_games:
+            log.error("pipeline.carousel_factory.fallback_in_batch",
+                      games=fallback_games)
+            return {"carousels": 0, "rejected": True, "reason": "fallback_content",
+                    "message": (f"Some selected games have rule-based (non-AI) "
+                                f"ratings ({fallback_games}) because the AI call "
+                                f"failed. Not building a carousel until real AI "
+                                f"ratings are available.")}
 
         # GENRE-AWARE EDITION (replaces the blind counter rotation): pick an
         # edition that actually fits the batch's genres, so a themed cover never
@@ -748,6 +785,10 @@ class Pipeline:
             rating_label=rating.label,
             rating_verdict=rating.verdict,
             rating_breakdown=_json.dumps(rating.breakdown),
+            # Record provenance: if the AI call failed, this is rule-based output.
+            # The carousel selection gate excludes it so fabricated ratings never
+            # ship as if AI-curated (audit C1).
+            used_fallback=bool(getattr(rating, "used_fallback", False)),
             hook_text=rating.hook_text,
             carousel_caption=rating.carousel_caption,
             tts_script=rating.tts_script,

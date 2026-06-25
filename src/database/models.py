@@ -124,6 +124,10 @@ class Content(Base):
     rating_label: Mapped[Optional[str]] = mapped_column(String(64))
     rating_verdict: Mapped[Optional[str]] = mapped_column(Text)
     rating_breakdown: Mapped[Optional[str]] = mapped_column(Text)  # JSON
+    # True when the AI call failed and this rating/caption is rule-based fallback,
+    # NOT AI-generated. Persisted so fallback content is never silently selected
+    # into a carousel and presented as if it were AI-curated (see audit C1).
+    used_fallback: Mapped[bool] = mapped_column(Boolean, default=False)
 
     # ── Captions / copy ───────────────────────────────────────────────
     hook_text: Mapped[Optional[str]] = mapped_column(Text)

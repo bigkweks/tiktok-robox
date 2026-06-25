@@ -49,6 +49,12 @@
         <span class="id-chip copyable mt-1" style="align-self:flex-start"
               onclick="copyId('{{ content.id }}', this)"
               title="Content / Generation ID — use this when logging analytics">Content #{{ content.id }}</span>
+        {% if content.used_fallback %}
+          <span class="badge bg-warning text-dark mt-1" style="align-self:flex-start;font-size:0.62rem"
+                title="The AI call failed — this rating is rule-based fallback, not AI-generated. Excluded from carousels.">
+            <i class="bi bi-exclamation-triangle-fill me-1"></i>rule-based
+          </span>
+        {% endif %}
       </div>
       {% if content.rating_score %}
         {% if content.rating_score >= 9 %}

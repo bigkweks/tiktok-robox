@@ -45,7 +45,7 @@ def _pipeline(tmp_path):
     return p
 
 
-async def _setup(tmp_path, scores):
+async def _setup(tmp_path, scores, used_fallback=False):
     url = f"sqlite+aiosqlite:///{tmp_path/'gate.db'}"
     engine = create_async_engine(url, connect_args={"check_same_thread": False})
     factory = async_sessionmaker(bind=engine, expire_on_commit=False,
@@ -66,19 +66,20 @@ async def _setup(tmp_path, scores):
                 game_id=g.id, rating_score=score, rating_label="WORTH PLAYING 🎮",
                 rating_verdict="quietly one of the more polished ones out here",
                 carousel_caption=f"hidden gem number {i}", status="pending",
-                queue_priority=100 - i,
+                queue_priority=100 - i, used_fallback=used_fallback,
             ))
         await s.commit()
     return engine, factory
 
 
-def _run_test(tmp_path, monkeypatch, scores, body):
+def _run_test(tmp_path, monkeypatch, scores, body, used_fallback=False):
     """Run one test fully inside a fresh loop with the temp DB wired in."""
     _stub_network(monkeypatch)
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
     try:
-        engine, factory = loop.run_until_complete(_setup(tmp_path, scores))
+        engine, factory = loop.run_until_complete(
+            _setup(tmp_path, scores, used_fallback=used_fallback))
         monkeypatch.setattr(conn, "_engine", engine)
         monkeypatch.setattr(conn, "_session_factory", factory)
         try:
@@ -95,6 +96,21 @@ def test_rating_floor_excludes_weak_games(tmp_path, monkeypatch):
         out = await p.run_carousel_factory()
         assert out["carousels"] == 0      # all below the 7.4 floor → nothing built
     _run_test(tmp_path, monkeypatch, [6.0, 6.5, 7.0, 7.3, 5.5], body)
+
+
+def test_fallback_content_excluded_from_carousels(tmp_path, monkeypatch):
+    """Provenance gate (audit C1): rule-based (used_fallback) ratings, even with
+    high scores above the floor, must NEVER be selected into a carousel — a
+    fabricated rating can't ship as if it were AI-curated."""
+    async def body(p, factory):
+        out = await p.run_carousel_factory()
+        assert out["carousels"] == 0          # nothing built from fallback content
+        # The factory explains WHY (so "not enough games" isn't mistaken for a
+        # discovery problem when the real cause is the AI key).
+        assert out.get("reason") == "fallback_content"
+    # All five score well above the 7.4 floor but are flagged rule-based.
+    _run_test(tmp_path, monkeypatch, [9.1, 8.6, 8.2, 7.9, 7.6], body,
+              used_fallback=True)
 
 
 def test_good_batch_persists_pending_review(tmp_path, monkeypatch):
