@@ -434,6 +434,19 @@ class Pipeline:
 
         slide_paths = render.slides
 
+        # ── EXPORT VALIDATION GATE (safe-zone / dimensions / integrity) ──
+        # The render loaded real thumbnails; this confirms every slide is a valid
+        # 1080×1920 frame, not blank/corrupt, before we ever persist it.
+        from src.content.export_validator import validate_carousel_export  # noqa: PLC0415
+        export_check = validate_carousel_export([str(p) for p in slide_paths])
+        if not export_check.ok:
+            log.error("pipeline.carousel_factory.export_invalid", part=part,
+                      reasons=export_check.reasons)
+            self._carousel_part_counter -= 1
+            return {"carousels": 0, "rejected": True, "part": part,
+                    "reason": "export_invalid",
+                    "message": "Render failed validation: " + "; ".join(export_check.reasons)}
+
         # De-templated TikTok caption (keeps the proven search anchor) + CTA.
         caption = f"{approval.post_caption}\n\n{approval.cta}"
         # Per-post hashtags: proven search anchors pinned, the rest rotated by
@@ -628,8 +641,10 @@ class Pipeline:
             ),
         )
 
-        # 3. Captions — sync call, run in thread
-        desc = await loop.run_in_executor(
+        # Steps 3 & 4 both depend only on the rating and are independent of each
+        # other, so run them CONCURRENTLY instead of serially (was two awaited
+        # executor calls back-to-back). Captions + thumbnails overlap.
+        desc_fut = loop.run_in_executor(
             None,
             functools.partial(
                 self._description.generate,
@@ -643,9 +658,7 @@ class Pipeline:
                 controversy_angle=rating.controversy_angle,
             ),
         )
-
-        # 4. Thumbnails A + B — CPU-bound Pillow, run in thread
-        thumb_a, thumb_b = await loop.run_in_executor(
+        thumb_fut = loop.run_in_executor(
             None,
             functools.partial(
                 self._thumbgen.generate_both,
@@ -658,6 +671,7 @@ class Pipeline:
                 thumbnail_url=game.thumbnail_url,
             ),
         )
+        desc, (thumb_a, thumb_b) = await asyncio.gather(desc_fut, thumb_fut)
 
         # 5. TikTok performance predictions
         from src.discovery.viral_scorer import ViralScorer, ScoreBreakdown  # noqa: PLC0415
@@ -678,27 +692,32 @@ class Pipeline:
         )
         predictions = scorer.predict_tiktok_performance(breakdown, rating.score, game.name)
 
-        # 6. Video assembly — CPU+I/O-bound, run in thread
-        features = self._extract_features(game.description or "", 3)
-        video_path = await loop.run_in_executor(
-            None,
-            functools.partial(
-                self._video.assemble,
-                universe_id=game.universe_id,
-                game_name=game.name,
-                score=rating.score,
-                label=rating.label,
-                verdict=rating.verdict,
-                hook_text=rating.hook_text,
-                visits=game.visits,
-                active_players=game.active_players,
-                favorites=game.favorites,
-                tts_script=rating.tts_script or "",
-                thumbnail_path=game_thumb,
-                thumbnail_url=game.thumbnail_url,
-                features=features,
-            ),
-        )
+        # 6. Video assembly — the single most expensive step (moviepy + ffmpeg +
+        # gTTS). The carousel is the primary product and doesn't use the video, so
+        # this is SKIPPED unless GENERATE_VIDEOS is enabled. This is the biggest
+        # speed-up on the carousel warm-up path (no per-game video render).
+        video_path = None
+        if self._settings.GENERATE_VIDEOS:
+            features = self._extract_features(game.description or "", 3)
+            video_path = await loop.run_in_executor(
+                None,
+                functools.partial(
+                    self._video.assemble,
+                    universe_id=game.universe_id,
+                    game_name=game.name,
+                    score=rating.score,
+                    label=rating.label,
+                    verdict=rating.verdict,
+                    hook_text=rating.hook_text,
+                    visits=game.visits,
+                    active_players=game.active_players,
+                    favorites=game.favorites,
+                    tts_script=rating.tts_script or "",
+                    thumbnail_path=game_thumb,
+                    thumbnail_url=game.thumbnail_url,
+                    features=features,
+                ),
+            )
 
         # 7. Persist content package
         import json as _json  # noqa: PLC0415

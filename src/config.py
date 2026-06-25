@@ -31,6 +31,10 @@ class Settings(BaseSettings):
 
     # ── Content generation ───────────────────────────────────────────────
     THUMBNAIL_VARIANTS: int = 2
+    # The carousel is the primary product; the 9:16 video is secondary and the
+    # single most expensive step (moviepy + ffmpeg + gTTS network). Off by
+    # default so the carousel pipeline is fast — flip on only if you post videos.
+    GENERATE_VIDEOS: bool = False
     VIDEO_FPS: int = 30
     VIDEO_WIDTH: int = 1080
     VIDEO_HEIGHT: int = 1920

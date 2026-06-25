@@ -426,6 +426,15 @@ async def download_carousel_zip(carousel_id: int):
     if not slide_paths:
         raise HTTPException(404, "This carousel has no slides yet")
 
+    # PRE-EXPORT SAFE-ZONE / INTEGRITY GATE: never hand the user a broken export
+    # (wrong dimensions, blank/corrupt slide, or a placeholder hero).
+    from src.content.export_validator import validate_carousel_export  # noqa: PLC0415
+    validation = validate_carousel_export(slide_paths)
+    if not validation.ok:
+        raise HTTPException(
+            409, "This carousel failed export validation: "
+            + "; ".join(validation.reasons))
+
     data = build_slides_zip(slide_paths)
     if not data:
         raise HTTPException(404, "Slide image files are missing on disk")
