@@ -25,7 +25,7 @@ from sqlalchemy import select
 from src.analytics.feedback_loop import FeedbackLoop
 from src.capture.screenshot_engine import ScreenshotEngine
 from src.config import get_settings
-from src.content.carousel_generator import CarouselGame, CarouselGenerator, EDITIONS
+from src.content.carousel_generator import CarouselGame, CarouselGenerator
 from src.content.description_engine import DescriptionEngine
 from src.content.rating_engine import RatingEngine
 from src.content.thumbnail_generator import ThumbnailGenerator
@@ -185,12 +185,17 @@ class Pipeline:
                 except Exception:
                     pass
 
-            # Fetch top-rated content not yet carouselled
+            # Fetch top-rated content not yet carouselled.
+            # PRE-GENERATION RATING GATE: only games at/above the quality floor
+            # (MIN_CAROUSEL_RATING) are even eligible — one weak game makes the
+            # whole carousel read as filler.
+            min_rating = self._settings.MIN_CAROUSEL_RATING
             result = await session.execute(
                 sa_select(Content, Game)
                 .join(Game, Content.game_id == Game.id)
                 .where(Content.status.in_(["pending", "approved"]))
                 .where(Content.rating_score.isnot(None))
+                .where(Content.rating_score >= min_rating)
                 .where(Content.carousel_caption.isnot(None))
                 .order_by(Content.queue_priority.desc())
                 .limit(80)
@@ -223,9 +228,41 @@ class Pipeline:
         # build back, and save the single best game for the last slide so
         # finishing the carousel feels rewarded — which lifts completion rate.
         batch = self._retention_order(candidates[:5], key=lambda cg: cg[0].rating_score or 0.0)
-        edition = EDITIONS[self._carousel_part_counter % len(EDITIONS)][0]
+
+        # DEFENSIVE RATING GATE (pre-approval): even though the query filtered by
+        # rating, never let a below-floor game reach generation — fail safe.
+        min_rating = self._settings.MIN_CAROUSEL_RATING
+        batch_scores = [c.rating_score or 0.0 for c, g in batch]
+        below = [(g.name, c.rating_score) for c, g in batch
+                 if (c.rating_score or 0.0) < min_rating]
+        if below:
+            log.error("pipeline.carousel_factory.below_rating_floor",
+                      min_rating=min_rating, below=below)
+            return {"carousels": 0, "rejected": True, "reason": "below_rating_floor",
+                    "message": (f"Some selected games are below the {min_rating} "
+                                f"rating floor ({below}). Not building a carousel.")}
+
+        # GENRE-AWARE EDITION (replaces the blind counter rotation): pick an
+        # edition that actually fits the batch's genres, so a themed cover never
+        # lies about the games underneath it.
+        from src.content.edition_match import (  # noqa: PLC0415
+            edition_for_games, validate_edition_match,
+        )
+        batch_genres = [g.genre for c, g in batch]
         part = self._carousel_part_counter
+        edition = edition_for_games(batch_genres, part)
+        ed_ok, ed_reason = validate_edition_match(edition, batch_genres)
+        if not ed_ok:
+            # Should not happen (edition_for_games only returns a fitting edition),
+            # but if it ever does, fall back to a safe neutral edition.
+            log.warning("pipeline.carousel_factory.edition_mismatch", reason=ed_reason)
+            edition = "Hidden Gems"
         self._carousel_part_counter += 1
+
+        # HISTORICAL DEDUP: load the cover hooks + captions of recently shipped
+        # carousels so the approval gate never reuses a hook/caption the same
+        # followers already saw (the #1 "this is a bot" tell).
+        used_hooks_hist, used_caps_hist = await self._recent_text_history(limit=25)
 
         # ── MANDATORY approval gate (runs BEFORE we render or persist) ──
         # A carousel is not complete until it survives the three-reviewer panel.
@@ -264,6 +301,7 @@ class Pipeline:
             game_names=[g.name for c, g in batch],
             dna=dna_profile,
             performance=cover_bias or None,
+            used_hooks=used_hooks_hist,   # don't reuse a hook history already saw
         )
 
         # ── Record this carousel's genome (approved OR rejected) into the
@@ -312,6 +350,26 @@ class Pipeline:
             return {"carousels": 0, "rejected": True, "part": part,
                     "final_score": approval.final_score,
                     "hard_failures": approval.panel.hard_failures}
+
+        # ── NEAR-DUPLICATE GATE (vs shipped history) ──────────────────
+        # The panel guarantees intra-carousel variety; this guards across posts.
+        # If the approved cover hook or any caption is a near-duplicate of a
+        # recently shipped one, reject so the retry produces something fresh.
+        from src.content.dedup import is_near_duplicate  # noqa: PLC0415
+        dup_reason = None
+        if is_near_duplicate(approval.cover_hook, used_hooks_hist):
+            dup_reason = f"cover hook too similar to a recent post: '{approval.cover_hook}'"
+        else:
+            for cap in approval.captions:
+                if is_near_duplicate(cap, used_caps_hist):
+                    dup_reason = f"caption too similar to a recent post: '{cap}'"
+                    break
+        if dup_reason:
+            log.warning("pipeline.carousel_factory.near_duplicate", part=part,
+                        reason=dup_reason)
+            self._carousel_part_counter -= 1
+            return {"carousels": 0, "rejected": True, "part": part,
+                    "reason": "near_duplicate", "message": dup_reason}
 
         log.info("pipeline.carousel_factory.approved", part=part,
                  final_score=approval.final_score, cycles=approval.cycles,
@@ -385,6 +443,9 @@ class Pipeline:
             part, edition, game_names=[g.name for c, g in batch],
         )
 
+        import uuid as _uuid  # noqa: PLC0415
+        generation_id = _uuid.uuid4().hex[:12]
+
         async with get_session() as session:
             post = CarouselPost(
                 edition=edition,
@@ -393,20 +454,26 @@ class Pipeline:
                 slide_paths=_json.dumps([str(p) for p in slide_paths]),
                 caption=caption,
                 hashtags=_json.dumps(hashtags),
-                # It already survived the mandatory three-reviewer panel, so it
-                # ships ready-to-post — no redundant human approval click.
-                status="approved",
+                # It passed the automated panel + image gate, but the HUMAN makes
+                # the call to publish. It lands in review, never auto-approved.
+                status="pending_review",
                 review_score=approval.final_score,
                 review_summary=_json.dumps(approval.panel.as_dict()),
+                cover_hook=cover_hook,
+                slide_captions=_json.dumps(list(deduped_captions)),
+                generation_id=generation_id,
+                min_game_rating=min(batch_scores) if batch_scores else None,
             )
             session.add(post)
 
         log.info("pipeline.carousel_factory.complete", part=part, edition=edition,
                  slides=len(slide_paths), final_score=approval.final_score,
-                 cycles=approval.cycles, games=[g.name for g in carousel_games])
+                 cycles=approval.cycles, generation_id=generation_id,
+                 games=[g.name for g in carousel_games])
         return {"carousels": 1, "part": part, "edition": edition,
-                "final_score": approval.final_score, "approved": True,
-                "cycles": approval.cycles}
+                "generation_id": generation_id,
+                "final_score": approval.final_score, "approved": False,
+                "status": "pending_review", "cycles": approval.cycles}
 
     async def run_create_carousel(self) -> dict:
         """
@@ -418,9 +485,16 @@ class Pipeline:
         library is thin, then rate, then build) in the background and tell the
         user it's warming up — a carousel will be ready shortly.
         """
+        def _created(r: dict) -> dict:
+            # A carousel was generated and is waiting in review (NOT auto-approved).
+            # `status` is forced to 'created' so it isn't shadowed by the inner
+            # 'pending_review'; the JS routes the user to the in-app review page.
+            return {**r, "status": "created", "review_required": True,
+                    "carousel_status": "pending_review"}
+
         result = await self.run_carousel_factory()
         if result.get("carousels"):
-            return {"status": "created", **result}
+            return _created(result)
 
         # It tried but the draft was rejected — one quick retry. A retry helps
         # both rejection causes: the panel (different ordering / cover hooks often
@@ -429,7 +503,7 @@ class Pipeline:
         if result.get("rejected"):
             retry = await self.run_carousel_factory()
             if retry.get("carousels"):
-                return {"status": "created", **retry}
+                return _created(retry)
             # If the failure is missing game art (Roblox CDN / rate-limit), say so
             # explicitly — it's a network condition, not a quality problem, and the
             # honest message keeps the user from thinking the AI is broken.
@@ -465,6 +539,32 @@ class Pipeline:
             log.error("pipeline.warmup_failed", error=str(exc))
         finally:
             self._warming = False
+
+    async def _recent_text_history(self, limit: int = 25) -> tuple[list[str], list[str]]:
+        """Load the cover hooks and slide captions of recently created carousels
+        for cross-post duplicate detection. Returns (hooks, captions)."""
+        import json as _json  # noqa: PLC0415
+        from sqlalchemy import select as sa_select  # noqa: PLC0415
+        hooks: list[str] = []
+        caps: list[str] = []
+        try:
+            async with get_session() as session:
+                rows = await session.execute(
+                    sa_select(CarouselPost.cover_hook, CarouselPost.slide_captions)
+                    .order_by(CarouselPost.created_at.desc())
+                    .limit(limit)
+                )
+                for hook, slide_caps in rows:
+                    if hook:
+                        hooks.append(hook)
+                    if slide_caps:
+                        try:
+                            caps.extend([c for c in _json.loads(slide_caps) if c])
+                        except Exception:
+                            pass
+        except Exception as exc:  # history is best-effort; never block generation
+            log.warning("pipeline.carousel_factory.history_load_failed", error=str(exc))
+        return hooks, caps
 
     @staticmethod
     def _retention_order(items: list, key) -> list:

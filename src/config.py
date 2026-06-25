@@ -24,6 +24,10 @@ class Settings(BaseSettings):
     MAX_QUEUE_SIZE: int = 150
     TARGET_DAILY_POSTS: int = 3
     MIN_VIRAL_SCORE: float = 0.45
+    # Only genuinely good games make a carousel. Enforced at selection, before
+    # approval, and at export — a single below-bar game makes the whole post look
+    # like filler. 7.4 = the floor of "WORTH PLAYING" once rounded.
+    MIN_CAROUSEL_RATING: float = 7.4
 
     # ── Content generation ───────────────────────────────────────────────
     THUMBNAIL_VARIANTS: int = 2

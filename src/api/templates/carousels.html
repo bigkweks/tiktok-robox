@@ -5,16 +5,16 @@
 <div class="page-header">
   <div>
     <h1 class="page-title">Carousels</h1>
-    <p class="page-subtitle">6 slides · 5 games per drop · every one passes a 3-reviewer panel before it appears.</p>
+    <p class="page-subtitle">6 slides · 5 games per drop · passes an automated 3-reviewer panel, then waits for <em>your</em> approval before export.</p>
     <p class="page-subtitle text-accent" id="createNote" style="min-height:1px"></p>
   </div>
   <button class="btn btn-primary btn-lg px-4" onclick="createCarousel(this)" id="carouselBtn">Create a carousel</button>
 </div>
 
 <div class="workflow-steps mb-4">
-  <span><b>1</b> Approve</span>
-  <span><b>2</b> Save all 6 slides</span>
-  <span><b>3</b> Copy caption</span>
+  <span><b>1</b> Review the draft</span>
+  <span><b>2</b> Approve (or Reject / Regenerate)</span>
+  <span><b>3</b> Save all 6 slides + caption</span>
   <span><b>4</b> Post to TikTok as a photo</span>
   <span><b>5</b> Mark as posted</span>
 </div>
@@ -39,19 +39,27 @@
       <span class="fw-bold" style="font-size:0.95rem">Part {{ post.part_number }} — {{ post.edition }}</span>
       <span class="id-chip" title="Carousel ID">Carousel #{{ post.id }}</span>
       <span class="badge
-        {% if post.status == 'pending' %}bg-warning text-dark
+        {% if post.status == 'pending_review' %}bg-warning text-dark
         {% elif post.status == 'approved' %}bg-success
         {% elif post.status == 'posted' %}bg-primary
         {% else %}bg-secondary{% endif %}">
-        {{ post.status }}
+        {% if post.status == 'pending_review' %}awaiting your approval{% else %}{{ post.status }}{% endif %}
       </span>
       <small class="text-muted">{{ post.created_at.strftime('%b %d · %H:%M') }}</small>
     </div>
     <div class="d-flex gap-2">
-      {# The primary publish actions live in the body, next to the export step.
-         Up here we keep only a quiet discard for a carousel you don't want. #}
+      {# Explicit review actions. No auto-approval: a draft only ships when the
+         human approves it here. #}
+      {% if post.status == 'pending_review' %}
+        <button class="btn btn-sm btn-success" onclick="approveCarousel({{ post.id }})">
+          <i class="bi bi-check-lg me-1"></i>Approve
+        </button>
+        <button class="btn btn-sm btn-outline-secondary" onclick="regenerateCarousel({{ post.id }}, this)" title="Discard and build a fresh one">
+          <i class="bi bi-arrow-repeat me-1"></i>Regenerate
+        </button>
+      {% endif %}
       {% if post.status != 'posted' %}
-        <button class="btn btn-sm btn-reject" onclick="rejectCarousel({{ post.id }})" title="Discard">
+        <button class="btn btn-sm btn-reject" onclick="rejectCarousel({{ post.id }})" title="Reject / discard">
           <i class="bi bi-x-lg"></i>
         </button>
       {% endif %}
@@ -63,7 +71,9 @@
     {% if post.review %}
     <div class="review-panel mb-3">
       <div class="review-head">
-        <span class="review-verdict">Passed review</span>
+        <span class="review-verdict">
+          {% if post.status == 'pending_review' %}Passed automated review — your approval needed{% else %}Passed review{% endif %}
+        </span>
         <span class="review-score">{{ post.review_score | round(0) | int }}<span class="review-score-max">/100</span></span>
       </div>
       <div class="review-reviewers">
@@ -101,9 +111,17 @@
       {% endfor %}
     </div>
 
+    {# EXPORT IS GATED ON APPROVAL: a draft awaiting review cannot be saved or
+       posted until the creator approves it. #}
+    {% if post.status == 'pending_review' %}
+    <div class="alert mb-3" style="background:var(--surface-3);border:1px solid var(--border-hi);border-radius:8px;padding:0.75rem 1rem;font-size:0.85rem">
+      <i class="bi bi-eye me-1"></i>Review this draft, then <strong>Approve</strong> to unlock saving &amp; posting — or <strong>Regenerate</strong> for a fresh one.
+    </div>
+    {% endif %}
+
     {# Export in ONE tap: copy the caption to the clipboard AND open the iPad
        share sheet to save every slide. Zip is the desktop fallback. #}
-    {% if post.slide_urls %}
+    {% if post.slide_urls and post.status in ('approved', 'posted') %}
     <div class="d-flex align-items-center gap-2 flex-wrap mb-3">
       <button class="btn btn-primary"
               data-slides='{{ post.slide_urls | tojson }}'
@@ -196,8 +214,21 @@ async function saveCarouselToPhotos(btn) {
   }
   setTimeout(() => { btn.innerHTML = original; btn.disabled = false; }, 2500);
 }
+async function approveCarousel(id) {
+  await post(`/carousel/${id}/approve`);
+  location.reload();
+}
 async function rejectCarousel(id) {
+  if (!confirm('Reject and discard this carousel?')) return;
   await post(`/carousel/${id}/reject`);
+  location.reload();
+}
+async function regenerateCarousel(id, btn) {
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Working…';
+  try {
+    await post(`/carousel/${id}/regenerate`);
+  } catch (e) {}
   location.reload();
 }
 async function markPosted(id, btn) {

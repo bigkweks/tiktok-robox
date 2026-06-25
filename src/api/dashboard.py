@@ -346,6 +346,21 @@ async def reject_carousel(carousel_id: int):
     return {"status": "rejected"}
 
 
+@app.post("/carousel/{carousel_id}/regenerate")
+async def regenerate_carousel(carousel_id: int):
+    """Reject this draft and build a fresh one. Explicit creator action — part of
+    the Generate → Review → Approve/Reject/Regenerate workflow."""
+    async with get_session() as session:
+        post = await session.get(CarouselPost, carousel_id)
+        if not post:
+            raise HTTPException(404, "Carousel not found")
+        post.status = "rejected"
+    if _pipeline:
+        result = await _pipeline.run_create_carousel()
+        return {"status": "regenerating", "result": result}
+    return {"status": "error", "message": "Pipeline not initialized"}
+
+
 @app.post("/carousel/{carousel_id}/mark-posted")
 async def mark_carousel_posted(carousel_id: int):
     """Mark a carousel as posted after you've uploaded it to TikTok yourself."""
@@ -393,6 +408,15 @@ async def download_carousel_zip(carousel_id: int):
         post = await session.get(CarouselPost, carousel_id)
         if not post:
             raise HTTPException(404, "Carousel not found")
+        # EXPORT GATE: a carousel is only exportable once a human has approved it
+        # (or it's already posted). This enforces Generate → Review → Approve →
+        # Publish — you cannot export something still pending review or rejected.
+        if post.status not in ("approved", "posted"):
+            raise HTTPException(
+                409,
+                f"This carousel is '{post.status}', not approved. Review and "
+                f"approve it before exporting.",
+            )
         try:
             slide_paths = json.loads(post.slide_paths or "[]")
         except Exception:

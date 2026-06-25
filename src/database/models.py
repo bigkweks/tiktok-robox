@@ -238,6 +238,22 @@ class CarouselPost(Base):
     review_score: Mapped[Optional[float]] = mapped_column(Float)   # Final Quality Score 0–100
     review_summary: Mapped[Optional[str]] = mapped_column(Text)    # JSON: reviewers + dimensions
 
+    # ── Generated text (persisted for cross-post duplicate detection) ──
+    # The cover hook and per-slide captions are stored so future generations can
+    # reject near-duplicates of what already shipped (the same followers see
+    # consecutive parts, so repetition is the #1 "this is a bot" tell).
+    cover_hook: Mapped[Optional[str]] = mapped_column(Text)
+    slide_captions: Mapped[Optional[str]] = mapped_column(Text)    # JSON list
+
+    # ── Carousel-centric identity ──────────────────────────────────────
+    # A stable per-generation id (distinct from the row id) so analytics and the
+    # learning corpus key on the CAROUSEL, not the underlying games.
+    generation_id: Mapped[Optional[str]] = mapped_column(String(40), index=True)
+    min_game_rating: Mapped[Optional[float]] = mapped_column(Float)  # lowest score in the batch
+
+    # ── Lifecycle flags (carousel-centric analytics) ───────────────────
+    exported_at: Mapped[Optional[datetime]] = mapped_column(DateTime)
+
     created_at: Mapped[datetime] = mapped_column(DateTime, default=func.now())
 
 

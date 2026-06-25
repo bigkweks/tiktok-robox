@@ -236,6 +236,11 @@ class VideoAssembler:
         Build the complete TikTok video.
         Returns the path to the output .mp4 file.
         """
+        # Restore legacy PIL resampling constants (Image.ANTIALIAS etc.) that
+        # moviepy 1.0.3 still uses but Pillow 10+ removed — otherwise resize
+        # crashes mid-render with "module 'PIL.Image' has no attribute 'ANTIALIAS'".
+        from src.content.pil_compat import ensure_resampling  # noqa: PLC0415
+        ensure_resampling()
         try:
             from moviepy.editor import (  # noqa: PLC0415
                 AudioFileClip,
