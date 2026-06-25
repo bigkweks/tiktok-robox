@@ -125,7 +125,7 @@ class Pipeline:
             log.error("pipeline.discovery.failed", error=str(exc))
             return {"error": str(exc)}
 
-    async def run_content_factory(self, batch_size: int = 10) -> dict:
+    async def run_content_factory(self, batch_size: int = 5) -> dict:
         """
         Generate content packages for the top unprocessed games.
         Each game gets: screenshots, thumbnail A+B, AI rating, captions, video.
@@ -678,6 +678,18 @@ class Pipeline:
     # ── Content generation ────────────────────────────────────────────
 
     async def _generate_content_for_game(self, game: Game) -> Content:
+        # Guard against double-processing when two factory runs overlap (e.g.
+        # startup task + scheduled job both pick up the same game before either
+        # sets content_generated=True).
+        async with get_session() as session:
+            from sqlalchemy import select as _sa_select  # noqa: PLC0415
+            already = await session.scalar(
+                _sa_select(Content.id).where(Content.game_id == game.id).limit(1)
+            )
+            if already:
+                log.info("pipeline.generating.skipped_duplicate", game=game.name)
+                return await session.get(Content, already)
+
         log.info("pipeline.generating", game=game.name, universe_id=game.universe_id)
         loop = asyncio.get_event_loop()
 

@@ -118,7 +118,7 @@ class TrendDetector:
         async def _search_one(name: str) -> list[str]:
             try:
                 ids = await roblox_client.omni_search(name)
-                return ids[:2]  # top 2 results per name to avoid irrelevant IDs
+                return ids[:1]  # top result only — most relevant match for the name
             except Exception:
                 return []
 
