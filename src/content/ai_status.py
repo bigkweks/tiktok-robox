@@ -138,8 +138,11 @@ def _status_for_probe(state: str) -> AIStatus:
         state="error", ok=False, fallback_active=True,
         title="Anthropic check failed — FALLBACK mode",
         message=(
-            "An unexpected error occurred while checking the Anthropic API. "
-            "Content may use rule-based fallback. See the logs for details."
+            "An unexpected error occurred while checking the Anthropic API "
+            "(see the 'ai_status.probe_unexpected_error' log line above for the "
+            "exact error). Most common causes: (1) the key has a copy-paste "
+            "problem — open .env and paste it again; (2) the Anthropic API is "
+            "temporarily unreachable from your network."
         ),
     )
 
@@ -169,8 +172,11 @@ def _default_probe(key: str) -> str:
             return PROBE_INVALID
         if code == 429:
             return PROBE_RATE_LIMITED
+        log.error("ai_status.probe_api_error", status_code=code, error=str(exc))
         return PROBE_ERROR
-    except Exception:  # noqa: BLE001 — any other failure is a non-valid state
+    except Exception as exc:  # noqa: BLE001 — any other failure is a non-valid state
+        log.error("ai_status.probe_unexpected_error",
+                  exc_type=type(exc).__name__, error=str(exc))
         return PROBE_ERROR
 
 
