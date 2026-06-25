@@ -84,14 +84,44 @@ class TrendDetector:
         if not settings.ANTHROPIC_API_KEY:
             return []
 
+        import random as _random  # noqa: PLC0415
+        # Rotate the genre focus each call so repeated discoveries surface fresh games.
+        genre_sets = [
+            "horror, psychological thriller, survival",
+            "obby, parkour, escape room",
+            "fighting, pvp, battle royale",
+            "roleplay, life sim, social",
+            "tycoon, idle, clicker",
+            "rpg, anime, fantasy adventure",
+            "simulator, sandbox, creative",
+            "mystery, puzzle, detective",
+        ]
+        focus_genres = _random.choice(genre_sets)
+
         prompt = (
-            "You are a Roblox content curator for a TikTok hidden-gems channel. "
-            "List exactly 25 underrated, genuinely fun Roblox games that deserve "
-            "more players and would perform well as TikTok recommendations. "
-            "Exclude mega-famous games (Adopt Me, Blox Fruits, Brookhaven, Jailbreak, "
-            "Murder Mystery 2, Blox Fruits, Tower of Hell, Piggy). "
-            "Mix genres: obby, tycoon, simulator, horror, roleplay, fighting, rpg. "
-            'Return ONLY a JSON array of exact game names, no commentary. Example: ["Name 1", "Name 2"]'
+            "You are a Roblox trend spotter for a TikTok channel called 'hidden gems'. "
+            "Your picks need to cause a reaction — viewers comment 'HOW did I not know about this?!' "
+            "and 'I can't believe this only has X players, it's insane'. "
+            "\n\n"
+            "Pick exactly 25 Roblox games that ALL meet EVERY criterion below:\n"
+            "1. UNDERRATED — not a household name. Not Adopt Me, Blox Fruits, Brookhaven, "
+            "Jailbreak, Murder Mystery 2, Tower of Hell, Piggy, Pet Simulator, Arsenal, "
+            "Doors, Shindo Life, Anime Fighting Simulator, or any game with 1B+ visits.\n"
+            "2. GENUINELY GOOD — high like ratio, polished, players actually enjoy it. "
+            "Not half-finished or low-effort.\n"
+            "3. ON THE RISE — getting more players lately, recently updated, growing community. "
+            "Not a dead game.\n"
+            "4. SHOCK FACTOR — has a unique hook or mechanic that makes someone say "
+            "'wait, THIS is on Roblox?!'\n"
+            "5. TIKTOK-WORTHY — the concept can be explained in one sentence and sounds exciting.\n"
+            "\n"
+            f"Focus this batch heavily on: {focus_genres}. Mix in a few other genres too.\n"
+            "\n"
+            "Think of games that real Roblox players love but outsiders haven't heard of. "
+            "Be specific and varied — no two games should feel like the same experience.\n"
+            "\n"
+            'Return ONLY a JSON array of the exact Roblox game names. No explanations, no numbering. '
+            'Example: ["Evade", "Fisch", "Type Soul"]'
         )
 
         loop = asyncio.get_event_loop()
