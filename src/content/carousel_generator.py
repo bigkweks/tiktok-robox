@@ -24,7 +24,7 @@ from __future__ import annotations
 import io
 import re
 import textwrap
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
 
@@ -138,6 +138,66 @@ class CarouselGame:
     visits: int
     description: str = ""       # real Roblox description (fills the lower card)
     blurb: str = ""            # punchy AI "why it slaps" one-liner (highlighted callout)
+
+
+@dataclass
+class RenderReport:
+    """
+    The result of rendering a carousel, carrying the slide paths AND a record of
+    whether every game slide used the game's REAL Roblox hero thumbnail or fell
+    back to a grey placeholder.
+
+    The core product promise is that each game slide looks like a genuine Roblox
+    game page — which is only true when the real homepage thumbnail loads. A
+    placeholder ("Roblox" on grey) breaks that promise, so a carousel with ANY
+    placeholder must NOT be approved or exported. `ok` is the single gate the
+    pipeline checks before persisting.
+    """
+    slides: list[Path] = field(default_factory=list)
+    successful_thumbnails: int = 0
+    failed_thumbnails: int = 0
+    placeholder_count: int = 0
+    game_slide_count: int = 0
+    failed_games: list[str] = field(default_factory=list)
+
+    def record_hero(self, game_name: str, *, ok: bool) -> None:
+        self.game_slide_count += 1
+        if ok:
+            self.successful_thumbnails += 1
+        else:
+            self.failed_thumbnails += 1
+            self.placeholder_count += 1
+            self.failed_games.append(game_name)
+
+    @property
+    def ok(self) -> bool:
+        """True only when every game slide rendered with a real thumbnail."""
+        return self.placeholder_count == 0 and self.game_slide_count > 0
+
+    @property
+    def failure_reason(self) -> str:
+        if self.ok:
+            return ""
+        if self.game_slide_count == 0:
+            return "No game slides were rendered."
+        names = ", ".join(self.failed_games[:5]) or "some games"
+        return (
+            f"{self.placeholder_count} of {self.game_slide_count} game slides "
+            f"could not load the real Roblox thumbnail ({names}) and fell back to "
+            f"a placeholder. Roblox may be rate-limiting or its image CDN may be "
+            f"unreachable. Not shipping a carousel with placeholder art."
+        )
+
+    def as_dict(self) -> dict:
+        return {
+            "successful_thumbnails": self.successful_thumbnails,
+            "failed_thumbnails": self.failed_thumbnails,
+            "placeholder_count": self.placeholder_count,
+            "game_slide_count": self.game_slide_count,
+            "failed_games": list(self.failed_games),
+            "ok": self.ok,
+            "failure_reason": self.failure_reason,
+        }
 
 
 def _fetch_image(url: str, retries: int = 2) -> Optional[Image.Image]:
@@ -291,6 +351,7 @@ def _draw_stat_pills(
 class CarouselGenerator:
     def __init__(self):
         self._settings = get_settings()
+        self.last_render_report: Optional[RenderReport] = None
 
     def generate(
         self,
@@ -301,7 +362,13 @@ class CarouselGenerator:
         slug: str = "carousel",
         cover_hook: Optional[str] = None,
         final_cta: Optional[str] = None,
-    ) -> list[Path]:
+    ) -> RenderReport:
+        """Render all 6 slides and return a RenderReport.
+
+        The report records, per game slide, whether the real Roblox thumbnail
+        loaded or a placeholder was used. Callers MUST check ``report.ok`` before
+        approving/persisting — a carousel with any placeholder must not ship.
+        """
         if output_dir is None:
             output_dir = Path(self._settings.OUTPUT_DIR, "carousels", slug)
         output_dir.mkdir(parents=True, exist_ok=True)
@@ -309,14 +376,14 @@ class CarouselGenerator:
         # Resolve edition meta
         ed_meta = next((e for e in EDITIONS if e[0] == edition), EDITIONS[0])
 
-        slides: list[Path] = []
+        report = RenderReport()
         chosen = games[:5]
 
         title_path = output_dir / "slide_00_title.png"
         self._make_title_slide(
             ed_meta, part_number, count=len(chosen), cover_hook=cover_hook,
         ).save(str(title_path))
-        slides.append(title_path)
+        report.slides.append(title_path)
 
         for i, game in enumerate(chosen):
             safe = "".join(c for c in game.name[:20] if c.isalnum() or c in " _").replace(" ", "_")
@@ -324,12 +391,21 @@ class CarouselGenerator:
             # The last slide carries a creator-native follow nudge (the payoff
             # slide — viewers who reach it are the most likely to convert).
             cta = final_cta if (i == len(chosen) - 1) else None
-            self._make_game_slide(game, final_cta=cta).save(str(path))
-            slides.append(path)
+            self._make_game_slide(game, final_cta=cta, report=report).save(str(path))
+            report.slides.append(path)
             log.info("carousel.slide_saved", slide=i + 1, game=game.name)
 
-        log.info("carousel.complete", slides=len(slides), edition=edition, part=part_number)
-        return slides
+        self.last_render_report = report
+        if report.ok:
+            log.info("carousel.complete", slides=len(report.slides), edition=edition,
+                     part=part_number, thumbnails_ok=report.successful_thumbnails)
+        else:
+            # FAIL SAFE: surface loudly. The pipeline gate will refuse to ship it.
+            log.error("carousel.placeholder_thumbnails", part=part_number,
+                      edition=edition, placeholder_count=report.placeholder_count,
+                      game_slides=report.game_slide_count,
+                      failed_games=report.failed_games)
+        return report
 
     # ── Title slide ───────────────────────────────────────────────────
 
@@ -465,7 +541,12 @@ class CarouselGenerator:
 
     # ── Game slide ────────────────────────────────────────────────────
 
-    def _make_game_slide(self, game: CarouselGame, final_cta: Optional[str] = None) -> Image.Image:
+    def _make_game_slide(
+        self,
+        game: CarouselGame,
+        final_cta: Optional[str] = None,
+        report: Optional[RenderReport] = None,
+    ) -> Image.Image:
         img = Image.new("RGB", (W, H), (255, 255, 255))
         draw = ImageDraw.Draw(img)
 
@@ -510,8 +591,16 @@ class CarouselGenerator:
         thumb = self._fetch_thumbnail(game.thumbnail_url)
         if thumb:
             filled = _cover_fill(thumb.convert("RGB"), W, thumb_h)
+            if report is not None:
+                report.record_hero(game.name, ok=True)
         else:
+            # The real Roblox hero thumbnail could not be loaded. We still render
+            # a placeholder so the file exists, but we RECORD the failure so the
+            # pipeline can refuse to ship this carousel (fail safe, never ship
+            # placeholder art as if it were the real game page).
             filled = self._placeholder(thumb_h)
+            if report is not None:
+                report.record_hero(game.name, ok=False)
         img.paste(filled, (0, thumb_top))
 
         # ── Burned-in score + caption (TikTok classic style) ──────────

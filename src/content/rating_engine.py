@@ -39,6 +39,7 @@ class RatingResult:
     controversy_angle: str          # the opinion that will spark debate
     hook_text: str = ""             # first 2s on screen (≤9 words, no emoji)
     carousel_caption: str = ""      # short casual line for photo carousel slides
+    used_fallback: bool = False     # True when AI failed and this is rule-based output
 
     @property
     def display_score(self) -> str:
@@ -262,10 +263,15 @@ class RatingEngine:
             return result
 
         except Exception as exc:
-            log.error("rating.failed", game=name, error=str(exc))
+            # Loud by design: rule-based fallback must never pass as AI output.
+            # The dashboard's AI-status banner surfaces the credential state; this
+            # log line records that THIS specific rating was not AI-generated.
+            log.error("rating.fallback_active", game=name, error=str(exc),
+                      reason="anthropic_call_failed")
             fb = self._fallback_rating(name, visits, viral_score)
             fb.hook_text = self._fallback_hook(name, visits)
             fb.carousel_caption = self._fallback_carousel_caption(name, fb.score, visits, genre)
+            fb.used_fallback = True
             return fb
 
     def _fallback_rating(self, name: str, visits: int, viral_score: float) -> RatingResult:

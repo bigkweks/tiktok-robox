@@ -532,6 +532,9 @@
       </div>
     </div>
   </nav>
+  <!-- AI credential banner — populated from /api/ai-status. Stays hidden when
+       the key is valid; turns loud when output would silently fall back. -->
+  <div id="ai-status-banner" style="display:none"></div>
   <div class="container-fluid py-4" style="max-width:1440px">
     {% block content %}{% endblock %}
   </div>
@@ -594,6 +597,12 @@
         } else if (r.status === 'retry') {
           btn.innerHTML = 'Try again'; btn.disabled = false;
           if (note) note.textContent = r.message;
+        } else if (r.status === 'image_error') {
+          // Honest, specific failure: the real Roblox art couldn't load, so
+          // nothing was shipped (fail safe, never a placeholder carousel).
+          btn.classList.remove('btn-primary'); btn.classList.add('btn-warning');
+          btn.innerHTML = 'Image load failed'; btn.disabled = false;
+          if (note) note.textContent = r.message;
         } else {
           btn.innerHTML = original; btn.disabled = false;
         }
@@ -601,6 +610,34 @@
         btn.innerHTML = original; btn.disabled = false;
       }
     }
+    // ── AI credential banner ──────────────────────────────────────────────
+    // Poll the credential state and show a loud, unmissable bar whenever output
+    // would fall back to non-AI. The user must never mistake fallback for AI.
+    async function refreshAiStatus() {
+      const el = document.getElementById('ai-status-banner');
+      if (!el) return;
+      try {
+        const r = await fetch('/api/ai-status');
+        const s = await r.json();
+        if (s.ok) { el.style.display = 'none'; return; }
+        const color = s.state === 'rate_limited' ? '#8a6d00'
+                    : s.state === 'unreachable' ? '#5a4a00' : '#7a1620';
+        el.style.cssText = 'display:block;background:' + color + ';color:#fff;'
+          + 'padding:10px 18px;font-size:0.9rem;line-height:1.4;'
+          + 'border-bottom:1px solid rgba(255,255,255,0.15)';
+        el.innerHTML = '<strong><i class="bi bi-exclamation-triangle-fill me-2"></i>'
+          + (s.title || 'AI unavailable') + '</strong> — ' + (s.message || '')
+          + ' <button onclick="recheckAi(this)" style="margin-left:10px;'
+          + 'background:rgba(255,255,255,0.15);color:#fff;border:none;'
+          + 'border-radius:6px;padding:3px 12px;cursor:pointer">Re-check</button>';
+      } catch (e) { /* leave banner as-is on a transient fetch error */ }
+    }
+    async function recheckAi(btn) {
+      btn.disabled = true; btn.textContent = 'Checking…';
+      try { await fetch('/api/ai-status?recheck=1'); } catch (e) {}
+      await refreshAiStatus();
+    }
+    refreshAiStatus();
   </script>
   {% block scripts %}{% endblock %}
 </body>

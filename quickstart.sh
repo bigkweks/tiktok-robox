@@ -119,6 +119,12 @@ PYEOF
   fi
 fi
 
+# ── Step 5b: Verify the AI key actually works ───────────────
+# A saved key isn't a working key. Probe Anthropic now so a missing / invalid /
+# expired / rate-limited key is caught here, not silently as "weak AI" later.
+say "Checking your AI key actually works..."
+$PY scripts/check_api_key.py || true
+
 # ── Step 6: Build the robot's memory ────────────────────────
 say "Step 6 of 7: Building the database..."
 $PY scripts/init_db.py

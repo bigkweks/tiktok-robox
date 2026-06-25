@@ -46,6 +46,20 @@ _queue = ContentQueue()
 _feedback = FeedbackLoop()
 _pipeline: Optional[Pipeline] = None
 
+# Cached AI credential state, refreshed at startup and on demand. None until the
+# first check runs. The dashboard surfaces this so a missing/invalid/expired key
+# can never silently downgrade users into fallback mode without them knowing.
+_ai_status: Optional[dict] = None
+
+
+async def _refresh_ai_status() -> dict:
+    """Probe the Anthropic key off the event loop and cache the result."""
+    global _ai_status
+    from src.content.ai_status import check_api_key  # noqa: PLC0415
+    status = await asyncio.get_event_loop().run_in_executor(None, check_api_key)
+    _ai_status = status.as_dict()
+    return _ai_status
+
 templates_dir = Path(__file__).parent / "templates"
 templates = Jinja2Templates(directory=str(templates_dir))
 
@@ -59,6 +73,14 @@ async def startup():
     global _pipeline
     await init_db()
     _settings.ensure_dirs()
+    # Validate the AI credentials up front so a bad key surfaces immediately
+    # instead of silently degrading every rating into fallback mode.
+    try:
+        status = await _refresh_ai_status()
+        if not status.get("ok"):
+            log.error("dashboard.ai_key_check_failed", **status)
+    except Exception as exc:  # never let a check failure block startup
+        log.warning("dashboard.ai_key_check_error", error=str(exc))
     _pipeline = Pipeline()
     await _pipeline.start()
     log.info("dashboard.started")
@@ -592,8 +614,22 @@ async def health():
     return {
         "status": "ok",
         "pipeline_running": _pipeline._running if _pipeline else False,
+        "ai": _ai_status or {"state": "unchecked", "ok": False},
         "timestamp": datetime.utcnow().isoformat(),
     }
+
+
+@app.get("/api/ai-status")
+async def api_ai_status(recheck: bool = False):
+    """Current Anthropic credential state. The dashboard polls this to render a
+    visible banner whenever the key is missing/invalid/rate-limited so users are
+    never silently downgraded into fallback mode without knowing.
+
+    Pass ?recheck=1 to re-probe after fixing the key (no restart needed)."""
+    global _ai_status
+    if recheck or _ai_status is None:
+        return await _refresh_ai_status()
+    return _ai_status
 
 
 # ── Game deletion ──────────────────────────────────────────────────────

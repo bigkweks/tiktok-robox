@@ -341,7 +341,7 @@ class Pipeline:
 
         slug = f"part{part:03d}"
         loop = asyncio.get_event_loop()
-        slide_paths = await loop.run_in_executor(
+        render = await loop.run_in_executor(
             None,
             functools.partial(
                 self._carousel.generate,
@@ -353,6 +353,28 @@ class Pipeline:
                 final_cta=footer_cta,
             ),
         )
+
+        # ── FAIL-SAFE IMAGE GATE (runs AFTER render, BEFORE persist) ──
+        # The text passed the three-reviewer panel, but the carousel is only
+        # shippable if every game slide loaded the REAL Roblox hero thumbnail.
+        # If any slide fell back to a grey placeholder (Roblox rate-limit / CDN
+        # timeout / dead thumbnail URL), we DO NOT persist it. A carousel that is
+        # never persisted is never approved and never exportable. We roll back the
+        # part counter so the next attempt reuses this Part N, and report a clear
+        # reason so run_create_carousel can retry / tell the user.
+        if not render.ok:
+            log.error("pipeline.carousel_factory.placeholder_rejected", part=part,
+                      placeholder_count=render.placeholder_count,
+                      game_slides=render.game_slide_count,
+                      failed_games=render.failed_games)
+            self._carousel_part_counter -= 1
+            return {"carousels": 0, "rejected": True, "part": part,
+                    "reason": "placeholder_thumbnails",
+                    "message": render.failure_reason,
+                    "placeholder_count": render.placeholder_count,
+                    "failed_games": render.failed_games}
+
+        slide_paths = render.slides
 
         # De-templated TikTok caption (keeps the proven search anchor) + CTA.
         caption = f"{approval.post_caption}\n\n{approval.cta}"
@@ -400,12 +422,24 @@ class Pipeline:
         if result.get("carousels"):
             return {"status": "created", **result}
 
-        # It tried but the panel rejected the draft — one quick retry (different
-        # ordering / cover hooks often clears the bar).
+        # It tried but the draft was rejected — one quick retry. A retry helps
+        # both rejection causes: the panel (different ordering / cover hooks often
+        # clears the bar) AND a transient placeholder failure (re-fetching the
+        # Roblox thumbnails often succeeds on the second pass).
         if result.get("rejected"):
             retry = await self.run_carousel_factory()
             if retry.get("carousels"):
                 return {"status": "created", **retry}
+            # If the failure is missing game art (Roblox CDN / rate-limit), say so
+            # explicitly — it's a network condition, not a quality problem, and the
+            # honest message keeps the user from thinking the AI is broken.
+            if retry.get("reason") == "placeholder_thumbnails" or \
+               result.get("reason") == "placeholder_thumbnails":
+                return {"status": "image_error",
+                        "reason": "placeholder_thumbnails",
+                        "message": retry.get("message") or result.get("message")
+                        or "Couldn't load the real Roblox game images (network or "
+                           "Roblox rate-limit). Nothing was posted. Try again shortly."}
             return {"status": "retry",
                     "message": "A draft didn't pass review — tap again in a moment."}
 
