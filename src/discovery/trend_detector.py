@@ -1,17 +1,9 @@
 """
 Trend detection layer.
 
-Aggregates games from multiple Roblox discovery sources, scores them,
-deduplicates, and persists new/updated games to the database.
-
-Discovery strategy (403-resistant):
-  1. Use all SEED_UNIVERSE_IDS ONLY for fetching recommendations — seeds are
-     mega-famous games and are explicitly excluded from the content pool so we
-     never generate "hidden gem" content about Adopt Me or Blox Fruits.
-  2. Fan out recommendations from all 46 seeds in parallel (up to 920 IDs).
-  3. Fetch full details + thumbnails for all recommendation IDs.
-  4. Try genre-specific game lists as a supplementary source.
-  5. Score every game and persist to DB.
+Claude picks underrated game names via prompt, Roblox API resolves those
+exact names to universe IDs and enriches them with stats/thumbnails.
+No bulk Roblox crawling — only the specific games Claude chooses are fetched.
 """
 from __future__ import annotations
 
@@ -26,7 +18,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.database.connection import get_session
 from src.database.models import CrawlLog, Game, ModelWeights
 from src.discovery.roblox_client import (
-    SEED_UNIVERSE_IDS,
     RobloxClient,
     RobloxGame,
 )
@@ -156,17 +147,14 @@ class TrendDetector:
         """
         Claude picks game names; Roblox API only resolves and enriches those picks.
 
-        Seed IDs (mega-famous games) are excluded so they never enter the pool.
+        Claude's prompt already excludes mega-famous games, so no ID filtering needed.
         """
-        excluded: set[str] = set(SEED_UNIVERSE_IDS)
-
         try:
             candidate_ids = await self._claude_game_discovery(client)
         except Exception as exc:
             log.warning("trend_detector.claude_discovery_failed", error=str(exc))
             candidate_ids = []
 
-        candidate_ids = [uid for uid in candidate_ids if uid not in excluded]
         log.info("trend_detector.candidates_collected", total=len(candidate_ids))
 
         if not candidate_ids:
