@@ -94,6 +94,10 @@ output_dir = Path(_settings.OUTPUT_DIR)
 if output_dir.exists():
     app.mount("/output", StaticFiles(directory=str(output_dir)), name="output")
 
+static_dir = Path(__file__).parent / "static"
+if static_dir.exists():
+    app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
+
 
 # ── Pages ─────────────────────────────────────────────────────────────
 
@@ -104,8 +108,7 @@ async def index(request: Request):
         _queue.get_dashboard_stats(),
         _feedback.get_performance_summary(),
     )
-    return templates.TemplateResponse("index.html", {
-        "request": request,
+    return templates.TemplateResponse(request, "index.html", {
         "stats": stats,
         "perf": perf,
         "now": datetime.utcnow(),
@@ -124,8 +127,7 @@ async def queue_page(request: Request, status: str = "pending"):
         )
         items = [(c, g) for c, g in result]
 
-    return templates.TemplateResponse("queue.html", {
-        "request": request,
+    return templates.TemplateResponse(request, "queue.html", {
         "items": items,
         "status": status,
         "statuses": ["pending", "approved", "posted", "rejected"],
@@ -144,8 +146,7 @@ async def games_page(request: Request, sort: str = "viral_score"):
         )
         games = result.scalars().all()
 
-    return templates.TemplateResponse("games.html", {
-        "request": request,
+    return templates.TemplateResponse(request, "games.html", {
         "games": games,
         "sort": sort,
     })
@@ -174,8 +175,7 @@ async def analytics_page(request: Request, content_id: Optional[int] = None):
                 .where(Content.id == content_id)
             )
 
-    return templates.TemplateResponse("analytics.html", {
-        "request": request,
+    return templates.TemplateResponse(request, "analytics.html", {
         "perf": perf,
         "recent": recent,
         "prefill_content_id": content_id,
@@ -211,8 +211,7 @@ async def content_detail(request: Request, content_id: int):
         except Exception:
             pass
 
-    return templates.TemplateResponse("content_detail.html", {
-        "request": request,
+    return templates.TemplateResponse(request, "content_detail.html", {
         "content": content,
         "game": game,
         "hashtags": hashtags,
@@ -324,8 +323,7 @@ async def carousels_page(request: Request):
             "review": review,
         })
 
-    return templates.TemplateResponse("carousels.html", {
-        "request": request,
+    return templates.TemplateResponse(request, "carousels.html", {
         "carousels": enriched,
         "settings": _settings,
     })
@@ -467,8 +465,7 @@ async def dna_page(request: Request):
     store = DNAStore()
     consolidated = store.get_consolidated()
     profiles = store.list_profiles()
-    return templates.TemplateResponse("dna.html", {
-        "request": request,
+    return templates.TemplateResponse(request, "dna.html", {
         "consolidated": consolidated.as_dict(),
         "profiles": [p.as_dict() for p in profiles],
         "dimensions": list(DIMENSIONS),
@@ -548,8 +545,7 @@ async def insights_page(request: Request):
     which generation choices produce the highest-quality content."""
     from src.learning import PerformanceStore
     data = PerformanceStore().insights()
-    return templates.TemplateResponse("insights.html", {
-        "request": request,
+    return templates.TemplateResponse(request, "insights.html", {
         "ins": data,
     })
 
