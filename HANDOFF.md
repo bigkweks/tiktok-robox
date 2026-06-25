@@ -115,7 +115,9 @@ src/content/
   dna_store.py      ★ NEW. JSON corpus under output/content_dna/. DNAStore
                       save_screenshots/save_profile/list_profiles/
                       rebuild_consolidated/get_consolidated. Consolidated blueprint
-                      is what generation reads.
+                      is what generation reads. save_profile REFUSES priors and
+                      rebuild_consolidated EXCLUDES priors (audit H2 — a failed
+                      extraction must never pollute the blueprint).
   dna_directives.py ★ NEW. DNA → generation bridge. derive_directives(profile) →
                       GenerationDirectives (prefer_curiosity_gap/specificity/
                       first_person, max_hook_words, require_save/follow_trigger,
@@ -140,20 +142,28 @@ src/content/
                       trigger_following). Dead slides (empty/generic/AI content)
                       flagged in report.issues. brief_for(edition) → AudienceBrief.
   rating_engine.py    Claude rates a game → RatingResult(score, label, verdict,
-                      tts_script, hook_text, carousel_caption, ...). Prompt has
-                      HOOK RULES + CAROUSEL CAPTION VOICE. Prompt was de-seeded so
-                      it no longer over-anchors "if ukuk"; stuttering captions are
-                      sanitized at the source.
+                      tts_script, hook_text, carousel_caption, used_fallback).
+                      Prompt has HOOK RULES + CAROUSEL CAPTION VOICE. Prompt was
+                      de-seeded so it no longer over-anchors "if ukuk"; stuttering
+                      captions are sanitized at the source. used_fallback=True on
+                      any AI failure → now PERSISTED on Content + excluded from
+                      carousel selection (audit C1 — fallback never ships as AI).
   carousel_generator.py  ★ THE viral format. CarouselGenerator.generate(games,
-                      edition, part_number) → 6 slide PNGs. CarouselGame dataclass.
-                      EDITIONS list carries (label, theme_emoji, [stickers]).
-                      Strips emoji from free-text (name/creator/caption/description)
+                      edition, part_number) → RenderReport (6 slide PNGs + hero AND
+                      icon provenance). CarouselGame dataclass. EDITIONS list carries
+                      (label, theme_emoji, [stickers]). Strips emoji from free-text
                       so user/AI emoji can't tofu; "swipe ➡️" uses the Noto color
-                      arrow (the plain "→" was tofu in Poppins).
+                      arrow. RenderReport.ok gates persistence: blocks on any
+                      placeholder hero OR an icon that had a real URL but failed to
+                      load (audit H1); a genuinely-absent icon URL doesn't block.
+                      Unknown creator renders "Roblox creator", never "Roblox" (M2).
   description_engine.py  TikTok captions + hashtags. Hashtags lead with proven
                       search queries (#robloxgamestoplywithfriends etc).
                       generate_local() builds captions WITHOUT an API call (used
                       on the carousel path when GENERATE_VIDEOS is off).
+                      DescriptionResult.used_fallback flags rule-based captions on
+                      the AI path (audit M3); generate_local stays False (it's
+                      intentional local copy, not a failure).
   ai_status.py      ★ NEW. AI credential validator. check_api_key(probe=) →
                       AIStatus distinguishing missing/malformed/invalid/
                       rate_limited/unreachable/valid (+ fallback_active). Injectable
@@ -216,12 +226,13 @@ src/analytics/feedback_loop.py  Manual analytics ingest + weight update.
                       ingest_manual() rejects a non-existent content_id (was
                       silently writing orphan rows). get_performance_summary()
                       now also returns avg_follows_per_post.
-src/database/models.py  Game, Content (+carousel_caption col), CarouselPost
-                      (+review_score / review_summary), PostAnalytics, ModelWeights,
-                      CrawlLog.
+src/database/models.py  Game, Content (+carousel_caption, +used_fallback cols),
+                      CarouselPost (+review_score / review_summary), PostAnalytics,
+                      ModelWeights, CrawlLog.
 src/database/connection.py  init_db() creates tables + auto-migrates
-                      content.carousel_caption and carousel_posts.review_score /
-                      review_summary for existing DBs (SQLite WAL).
+                      content.carousel_caption, content.used_fallback, and
+                      carousel_posts.review_score / review_summary for existing DBs
+                      (SQLite WAL).
 src/api/templates/   Premium dark theme (no template tells). base.html holds the
                       design system: .metric/.kv/.workflow-steps/.count-pill/
                       .action-hint/.review-panel + shared createCarousel(). index,
@@ -265,7 +276,7 @@ src/api/templates/   Premium dark theme (no template tells). base.html holds the
   Final Quality Score + the three reviewer scores).
 - **Dashboard is a premium, restrained creator tool** (no template tells — no
   gradient hero, no emoji labels, no rainbow borders, one accent, clean hierarchy).
-- **Test suite: 230 passing**. See "Testing" below.
+- **Test suite: 236 passing**. See "Testing" below.
 - **Performance Learning System**: every generated carousel (approved or
   rejected) is recorded as a genome; components are ranked (success confidence /
   effectiveness / diversity / novelty), classified (strong/weak/overused/
@@ -275,7 +286,71 @@ src/api/templates/   Premium dark theme (no template tells). base.html holds the
   extracts WHY it worked across 14 dimensions into 5 reusable formulas with
   confidence scores; consolidated DNA drives cover generation. Dashboard `/dna`.
 
-## Session changelog — Launch-Readiness Remediation (latest)
+## Session changelog — Silent-Degradation Audit + Provenance Gates (latest)
+Brief: audit the whole codebase for every place it silently produces
+lower-quality content while *appearing* successful, write a severity-ranked
+report, then fix it. The product must never quietly ship degraded content as if
+it were the real thing. Full report lives in `AUDIT_SILENT_DEGRADATION.md` (10
+findings, Critical→Low). **236 tests passing.**
+
+The framing that drove the fixes: the prior remediation gated everything visible
+in the rendered PNG (placeholder hero, dimensions, blank frame) but **nothing
+gated provenance** — when the AI silently failed, rule-based output was persisted
+indistinguishable from real AI output and sailed through downstream gates that
+are themselves rule-based. These changes close that seam.
+
+- **Provenance gate for AI-failure ratings — the Critical fix (`models.py`,
+  `connection.py`, `pipeline.py`, `rating_engine.py`).** `RatingResult.used_fallback`
+  was a DEAD flag — set on every Anthropic failure but read nowhere, never
+  persisted. A deterministic name-hash fallback rating (which can score above the
+  7.4 floor) flowed into approved carousels indistinguishable from real AI output;
+  the only signal was a global key-state banner that misses transient
+  429s/timeouts on a valid key. Fix: new `Content.used_fallback` column (+ SQLite
+  auto-migration), the pipeline persists `rating.used_fallback`, and
+  `run_carousel_factory` **excludes fallback content** from selection
+  (`.where(Content.used_fallback.isnot(True))`) plus a defensive pre-approval
+  batch check (mirrors the rating-floor gate). "Not enough games" now explains
+  when AI fallback is the cause (so it's not mistaken for a discovery problem).
+  UI: rule-based warning banner on content detail + a "rule-based" chip on the
+  queue list. Test: high-scoring fallback content is excluded with
+  `reason=fallback_content`.
+- **Icon provenance gate (`carousel_generator.py`).** The header icon silently
+  fell back to a synthetic letter-tile that was never recorded or gated, so a fake
+  icon shipped beside a real hero while `RenderReport.ok` stayed True. `_fetch_icon`
+  now returns the REAL icon or None; `_synthetic_icon` is separate; `RenderReport`
+  records icon outcomes via `record_icon(ok=, had_url=)`. An icon that had a real
+  URL but failed to load (transient/retryable) is a **blocking** failure like a
+  placeholder hero; a genuinely-absent URL is recorded (`missing_icon_games`) but
+  does NOT block (a retry could never produce it). `failure_reason` + pipeline log
+  cover icons. Tests: URL-but-failed blocks; no-URL doesn't.
+- **DNA "extraction" no longer fakes success (`dashboard.py`, `dna_store.py`,
+  `dna.html`).** A failed vision call returned a generic prior, but `/dna/extract`
+  reported `status:"extracted"` AND persisted the prior into the corpus, polluting
+  the consolidated blueprint that steers all generation. Fix: a prior result is
+  reported as `status:"no_signal"` with a clear message and is **never saved**;
+  `DNAStore.save_profile` refuses priors; `rebuild_consolidated` excludes priors
+  from the merge (also drops any legacy prior already on disk). The DNA page shows
+  the failure as a warning instead of fake success. Tests: store refuses a prior;
+  consolidated ignores a legacy prior.
+- **No fabricated creator (`carousel_generator.py`).** The game slide credited an
+  unknown creator to "Roblox" (the company) — a false on-image fact on a format
+  whose whole value is authenticity. Unknown creators now render "Roblox creator",
+  never falsely crediting Roblox itself.
+- **Flagged caption fallback (`description_engine.py`, `pipeline.py`).**
+  `DescriptionResult.used_fallback` is now set on the AI path when captions fall
+  back to templates (NOT on `generate_local`, which is intentional local copy);
+  the pipeline logs it loudly when videos are on, so degraded video copy is never
+  mistaken for AI output. Test covers both.
+- **Low items L2–L4 triaged as accepted residual risk** in the report (learning/
+  DNA loads swallow to cold-start; edition→neutral "Hidden Gems" default; heuristic
+  export checks) — they degrade robustness/telemetry, not shipped content.
+- **Tests added/changed (all green):** `test_carousel_gates_integration.py`
+  (fallback excluded from carousels), `test_thumbnail_gate.py` (icon-failure
+  blocks / missing-icon doesn't), `test_dna_store.py` (store refuses prior,
+  consolidated excludes legacy prior), `test_launch_polish.py` (description
+  used_fallback flag). **230 → 236 passing.**
+
+## Session changelog — Launch-Readiness Remediation (prior)
 Brief: make the product trustworthy + launch-ready — fix every place degraded
 content can appear successful, kill cross-post duplicates, enforce a rating
 floor, match cover genre to games, remove auto-approval, validate exports, and
@@ -1010,6 +1085,17 @@ existed only to get the posting app audited).
 > (`generation_id`/`cover_hook`/`slide_captions`/`min_game_rating`/`exported_at`),
 > `GENERATE_VIDEOS=False` + concurrent description/thumbnail + one-AI-call path,
 > responsive dashboard, lifespan migration.
+>
+> ✅ **Resolved in the silent-degradation audit session** (see
+> `AUDIT_SILENT_DEGRADATION.md`): provenance gate so AI-fallback ratings can't
+> ship as if AI-curated (`Content.used_fallback` persisted + excluded from
+> carousel selection + UI markers); icon provenance gate (fake letter-tile where
+> a real icon URL failed now blocks); DNA extraction reports `no_signal` and
+> never persists/merges a failed-extraction prior; unknown creator no longer
+> falsely credited to "Roblox"; `DescriptionResult.used_fallback` flagged on the
+> video path. Open residual (accepted, low): learning/DNA loads swallow to
+> cold-start, edition→neutral default, heuristic export checks. Optional follow-up:
+> make `used_fallback` a hard-failure inside the review panel too (M1).
 
 1. **Feedback loop on carousels — PARTIALLY DONE.** The Performance Learning
    System now records a genome per carousel and learns from review-stage signals
