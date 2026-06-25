@@ -369,6 +369,12 @@ async def mark_carousel_posted(carousel_id: int):
         post = await session.get(CarouselPost, carousel_id)
         if not post:
             raise HTTPException(404, "Carousel not found")
+        # Can't mark something posted that was never approved — that would skip
+        # the mandatory human review step.
+        if post.status not in ("approved", "posted"):
+            raise HTTPException(
+                409, f"Approve this carousel before marking it posted "
+                f"(it's currently '{post.status}').")
         post.status = "posted"
         post.posted_at = datetime.now(timezone.utc)
     return {"status": "posted", "carousel_id": carousel_id}
