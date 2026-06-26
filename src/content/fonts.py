@@ -55,7 +55,14 @@ _FALLBACK = {
     "regular": "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
 }
 
-_NOTO_EMOJI = "/usr/share/fonts/truetype/noto/NotoColorEmoji.ttf"
+_NOTO_EMOJI_CANDIDATES = [
+    # Bundled in repo (works everywhere including Render)
+    str(Path(get_settings().ASSETS_DIR, "fonts", "NotoColorEmoji.ttf")),
+    # System install (local dev after apt-get install fonts-noto-color-emoji)
+    "/usr/share/fonts/truetype/noto/NotoColorEmoji.ttf",
+    "/usr/share/fonts/noto/NotoColorEmoji.ttf",
+]
+_NOTO_EMOJI = next((p for p in _NOTO_EMOJI_CANDIDATES if Path(p).exists()), "")
 _EMOJI_NATIVE = 109  # Noto Color Emoji only rasterizes at this pixel size
 
 
@@ -84,7 +91,7 @@ def emoji_image(char: str, size: int) -> Optional[Image.Image]:
     Render a single emoji to a transparent RGBA image at `size` px.
     Returns None if emoji rendering isn't available.
     """
-    if not Path(_NOTO_EMOJI).exists():
+    if not _NOTO_EMOJI:
         return None
     try:
         font = ImageFont.truetype(_NOTO_EMOJI, _EMOJI_NATIVE)
