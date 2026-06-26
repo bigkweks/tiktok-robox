@@ -904,10 +904,12 @@ _NEWS_COVER_CSS = _GRADE_BASE + """
 }
 .rule-d{border-top:4px solid var(--ink);border-bottom:1px solid var(--ink);height:5px;}
 .masthead{
-    text-align:center;font-family:'Fraunces';font-weight:900;
-    font-size:74px;line-height:1;letter-spacing:-1px;color:var(--ink);
+    display:flex;align-items:center;gap:26px;
+    font-family:'Fraunces';font-weight:900;
+    font-size:80px;line-height:1;letter-spacing:-1px;color:var(--ink);
     margin:18px 0 16px;white-space:nowrap;
 }
+.masthead::before,.masthead::after{content:'';flex:1;height:1px;background:var(--ink);}
 .dateline{
     display:flex;justify-content:space-between;align-items:center;
     padding:14px 4px;border-top:1px solid var(--ink);border-bottom:1px solid var(--ink);
@@ -920,7 +922,7 @@ _NEWS_COVER_CSS = _GRADE_BASE + """
 }
 .headline{
     text-align:center;font-family:'Fraunces';font-weight:900;
-    font-size:96px;line-height:.97;letter-spacing:-3px;color:var(--ink);
+    font-size:110px;line-height:.94;letter-spacing:-4px;color:var(--ink);
     margin-top:16px;
 }
 .deck{
@@ -957,6 +959,177 @@ _NEWS_COVER_CSS = _GRADE_BASE + """
     letter-spacing:.01em;color:var(--ink);
 }
 .teaser .ar{color:var(--ember);}
+/* Paper-fiber texture — horizontal striations simulating newsprint stock */
+.paper-tex{
+    position:absolute;inset:0;pointer-events:none;z-index:50;
+    opacity:.04;mix-blend-mode:multiply;
+    background-image:repeating-linear-gradient(
+        0deg,rgba(28,24,19,.75) 0px,transparent 1px,transparent 3px);
+}
+/* Aged-newsprint edge vignette — darkens corners like old press stock */
+.vign{
+    position:absolute;inset:0;pointer-events:none;z-index:52;
+    background:radial-gradient(130% 130% at 50% 50%,transparent 46%,rgba(18,14,10,.18) 100%);
+}
+"""
+
+
+# ── Gazette inner-page review column ────────────────────────────────────────
+# Each game slide reads as an interior page of the same newspaper issue as the
+# front-page cover: masthead banner, bold headline (the game name), full-width
+# duotone screenshot as a "cut" photo, grade medallion + sub-grade ledger, and
+# the assessment as traditional review body copy.
+_GAZETTE_SLIDE_CSS = _GRADE_BASE + """
+.page{
+    position:absolute;inset:0;padding:64px 88px 52px;
+    display:flex;flex-direction:column;
+}
+.banner{
+    display:flex;justify-content:space-between;align-items:baseline;
+    padding-bottom:12px;
+}
+.banner-title{
+    font-family:'Fraunces';font-weight:900;font-size:30px;
+    letter-spacing:.01em;color:var(--ink);
+}
+.banner-title em{font-style:italic;font-weight:400;color:var(--ink-soft);}
+.banner-meta{
+    font-weight:500;font-size:20px;letter-spacing:.22em;
+    text-transform:uppercase;color:var(--ink-faint);
+}
+.rule-d{border-top:4px solid var(--ink);border-bottom:1px solid var(--ink);height:5px;margin-bottom:16px;}
+/* Swipe-progress ticks */
+.progress{display:flex;gap:8px;align-items:center;margin-bottom:16px;}
+.tick{height:3px;border-radius:1.5px;background:rgba(28,24,19,.18);flex:1;}
+.tick.on{background:var(--ember);}
+/* Game name as newspaper headline — left-aligned, full-column width */
+.headline{
+    font-family:'Fraunces';font-weight:900;
+    font-size:90px;line-height:.94;letter-spacing:-3px;
+    color:var(--ink);margin-bottom:12px;
+}
+.byline{
+    font-weight:500;font-size:20px;letter-spacing:.22em;text-transform:uppercase;
+    color:var(--ink-faint);
+    padding-bottom:12px;border-bottom:1px solid var(--line);
+    margin-bottom:16px;
+}
+/* Full-width photo block — flex: 1 so it fills remaining height */
+.photo-block{
+    border:2px solid var(--ink);padding:10px;background:#fff;
+    flex:1;min-height:0;display:flex;flex-direction:column;
+    margin-bottom:16px;
+}
+.photo-wrap{flex:1;min-height:0;position:relative;overflow:hidden;}
+.photo-img{
+    position:absolute;inset:0;
+    background-size:cover;background-position:center 35%;
+}
+.halftone{
+    position:absolute;inset:0;mix-blend-mode:multiply;opacity:.22;
+    background-image:radial-gradient(circle,rgba(20,15,10,.9) 0.7px,transparent 1.4px);
+    background-size:5px 5px;
+}
+.photo-edge{position:absolute;inset:0;box-shadow:inset 0 0 0 1px rgba(20,15,10,.22);}
+.photo-cap{
+    margin-top:9px;
+    font-weight:500;font-size:19px;letter-spacing:.06em;color:var(--ink-soft);
+}
+/* Grade medallion + sub-grades row */
+.grade-row{
+    display:flex;border:2px solid var(--ink);border-radius:8px;overflow:hidden;
+    margin-bottom:16px;flex-shrink:0;
+}
+.grade-box{
+    width:196px;flex-shrink:0;
+    display:flex;flex-direction:column;align-items:center;justify-content:center;
+    border-right:2px solid var(--ink);padding:14px 8px;
+}
+.grade-label{
+    font-weight:500;font-size:18px;letter-spacing:.3em;text-transform:uppercase;
+    color:var(--ink-faint);margin-bottom:2px;
+}
+.grade-letter{
+    font-family:'Fraunces';font-weight:900;font-size:124px;line-height:.85;
+    letter-spacing:-.04em;
+}
+.grade-sub{
+    font-weight:700;font-size:18px;letter-spacing:.26em;text-transform:uppercase;
+    color:var(--ink-soft);margin-top:8px;
+}
+.subgrades{
+    flex:1;display:flex;flex-direction:column;justify-content:center;
+    padding:14px 24px;gap:5px;
+}
+.sg-row{
+    display:flex;align-items:baseline;justify-content:space-between;
+    border-bottom:1px solid var(--line);padding-bottom:5px;
+}
+.sg-row:last-child{border-bottom:none;padding-bottom:0;}
+.sg-key{
+    font-weight:500;font-size:20px;letter-spacing:.2em;text-transform:uppercase;
+    color:var(--ink-faint);
+}
+.sg-val{
+    font-family:'Fraunces';font-weight:900;font-size:40px;line-height:1;letter-spacing:-.02em;
+}
+/* Examiner's assessment — review body copy */
+.assess{flex-shrink:0;margin-bottom:16px;}
+.assess-kicker{
+    font-weight:700;font-size:20px;letter-spacing:.36em;text-transform:uppercase;
+    color:var(--ember);margin-bottom:10px;
+}
+.assess-text{
+    font-family:'Fraunces';font-weight:400;font-style:italic;
+    font-size:42px;line-height:1.32;color:var(--ink);letter-spacing:-.005em;
+}
+/* Verdict + visits row */
+.verdict-row{
+    display:flex;align-items:center;justify-content:space-between;
+    padding-top:14px;border-top:1px solid var(--line);
+    gap:20px;flex-shrink:0;margin-bottom:16px;
+}
+.verdict-stamp{
+    display:inline-flex;align-items:baseline;gap:12px;flex-shrink:0;
+    border:2.5px solid var(--ember);border-radius:6px;padding:12px 24px;
+    transform:rotate(-2deg);
+}
+.vs-lead{
+    font-family:'Space Grotesk';font-weight:700;font-size:18px;
+    letter-spacing:.2em;text-transform:uppercase;color:var(--ink-faint);
+}
+.vs-main{
+    font-family:'Fraunces';font-weight:900;font-size:34px;
+    letter-spacing:.02em;color:var(--ember);text-transform:uppercase;
+}
+.visits{
+    font-family:'Fraunces';font-weight:400;font-style:italic;
+    font-size:26px;color:var(--ink-faint);text-align:right;line-height:1.3;
+}
+/* Footer — double-rule at bottom, matching cover style */
+.foot{
+    display:flex;justify-content:space-between;align-items:center;
+    padding-top:14px;border-top:4px double var(--ink);flex-shrink:0;
+}
+.foot span{
+    font-weight:500;font-size:20px;letter-spacing:.2em;text-transform:uppercase;
+    color:var(--ink-faint);
+}
+.foot .sig{
+    font-family:'Fraunces';font-weight:700;font-style:italic;
+    font-size:24px;letter-spacing:0;text-transform:none;color:var(--ink-soft);
+}
+/* Paper-fiber + vignette reused from cover */
+.paper-tex{
+    position:absolute;inset:0;pointer-events:none;z-index:50;
+    opacity:.04;mix-blend-mode:multiply;
+    background-image:repeating-linear-gradient(
+        0deg,rgba(28,24,19,.75) 0px,transparent 1px,transparent 3px);
+}
+.vign{
+    position:absolute;inset:0;pointer-events:none;z-index:52;
+    background:radial-gradient(130% 130% at 50% 50%,transparent 46%,rgba(18,14,10,.16) 100%);
+}
 """
 
 
@@ -1010,7 +1183,9 @@ class GradeReportVariant:
   </div>
   <div class="teaser">Full grades &amp; verdicts inside <span class="ar">▸▸</span> swipe</div>
 </div>
-{_grain(0.05)}
+<div class="paper-tex"></div>
+<div class="vign"></div>
+{_grain(0.06)}
 </body></html>"""
 
     def cover_html(self, l1: str, l3: str, sub: str, part: int,
@@ -1122,5 +1297,97 @@ class GradeReportVariant:
   <span class="sig">— assessed by hand</span>
   <span>No. {part:02d}</span>
 </div>
+{_grain(0.045)}
+</body></html>"""
+
+    def gazette_slide_html(
+        self, name: str, creator: str, overall: str, subgrades: dict[str, str],
+        assessment: str, visits_label: str, recommended: bool, part: int, index: int,
+        art=None, total: int = 5,
+    ) -> str:
+        """Inner page of The Gemvault Gazette — newspaper review-column layout.
+
+        Replaces the certificate card with a press-column that flows directly from
+        the newspaper front-page cover: masthead banner → bold game-name headline →
+        full-width duotone screenshot → grade medallion + sub-grade ledger →
+        examiner's assessment as traditional review body copy.
+        """
+        ff = _font_faces()
+        h = _html.escape
+        ink = _GRADE_INK.get(overall, "#A6332B")
+        art_uri = img_to_uri(art)
+        # Bake a newspaper duotone into the review photo via CSS filter — consistent
+        # with the front-page treatment so the issue reads as one print run.
+        photo_bg = (
+            f"background-image:url('{art_uri}');"
+            f"filter:grayscale(.58) contrast(1.20) sepia(.46) brightness(.97);"
+            if art_uri else ""
+        )
+        ticks = "".join(
+            f'<div class="tick{" on" if i < index else ""}"></div>'
+            for i in range(total)
+        )
+        sg_rows = "".join(
+            f'<div class="sg-row"><span class="sg-key">{h(k)}</span>'
+            f'<span class="sg-val" style="color:{_GRADE_INK.get(v, "#1C1813")};">'
+            f'{h(v)}</span></div>'
+            for k, v in subgrades.items()
+        )
+        if recommended:
+            stamp = (
+                '<div class="verdict-stamp">'
+                '<span class="vs-lead">Verdict</span>'
+                '<span class="vs-main">Recommended</span></div>'
+            )
+        else:
+            stamp = (
+                '<div class="verdict-stamp" style="border-color:#6B6357;">'
+                '<span class="vs-lead">Verdict</span>'
+                '<span class="vs-main" style="color:#6B6357;">Pass For Now</span></div>'
+            )
+        return f"""<!DOCTYPE html><html><head><meta charset="utf-8">
+<style>{ff}\n{_GAZETTE_SLIDE_CSS}</style></head><body>
+<div class="deckle"></div><div class="deckle2"></div>
+<div class="page">
+  <div class="banner">
+    <div class="banner-title">The Gemvault <em>Gazette</em></div>
+    <div class="banner-meta">Entry {index:02d} / {total:02d} · No. {part:02d}</div>
+  </div>
+  <div class="rule-d"></div>
+  <div class="progress">{ticks}</div>
+  <div class="headline">{h(name)}</div>
+  <div class="byline">by {h(creator)} · Gazette Desk · Independent Review</div>
+  <div class="photo-block">
+    <div class="photo-wrap">
+      <div class="photo-img" style="{photo_bg}"></div>
+      <div class="halftone"></div>
+      <div class="photo-edge"></div>
+    </div>
+    <div class="photo-cap">Exhibit {index:02d} · in-game capture · The Gemvault Desk</div>
+  </div>
+  <div class="grade-row">
+    <div class="grade-box">
+      <div class="grade-label">Overall</div>
+      <div class="grade-letter" style="color:{ink};">{h(overall)}</div>
+      <div class="grade-sub">Final grade</div>
+    </div>
+    <div class="subgrades">{sg_rows}</div>
+  </div>
+  <div class="assess">
+    <div class="assess-kicker">Examiner's assessment</div>
+    <div class="assess-text">"{h(assessment)}"</div>
+  </div>
+  <div class="verdict-row">
+    {stamp}
+    <div class="visits">{h(visits_label)}<br>visits on record</div>
+  </div>
+  <div class="foot">
+    <span>@gemvault</span>
+    <span class="sig">— assessed by hand</span>
+    <span>No. {part:02d}</span>
+  </div>
+</div>
+<div class="paper-tex"></div>
+<div class="vign"></div>
 {_grain(0.045)}
 </body></html>"""

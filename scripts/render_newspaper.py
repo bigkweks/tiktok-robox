@@ -38,7 +38,7 @@ def main():
     v = GradeReportVariant()
     print("\n📰  Rendering Gazette cover · 3 theme-matched hero treatments\n")
     for t in TREATMENTS:
-        hero = theme_duotone(HERO_SRC, treatment=t)
+        hero = theme_duotone(HERO_SRC, treatment=t, contrast=1.30)
         html = v.newspaper_cover_html(
             headline=HEADLINE, deck=DECK, caption=CAPTION, part=12,
             hero=hero, photo_filter="none",   # duotone already baked in
@@ -48,7 +48,7 @@ def main():
         print(f"  ✓ {t:9s} → {path}")
 
     # Default cover = sepia (closest harmony with the cream stock)
-    hero = theme_duotone(HERO_SRC, treatment="sepia")
+    hero = theme_duotone(HERO_SRC, treatment="sepia", contrast=1.30)
     _render_html(v.newspaper_cover_html(
         headline=HEADLINE, deck=DECK, caption=CAPTION, part=12,
         hero=hero, photo_filter="none",

@@ -20,6 +20,7 @@ from src.content.carousel_variants import (
     TierDropVariant,
     GradeReportVariant,
     _render_html,
+    theme_duotone,
 )
 from scripts._demo_scenes import game_scene, game_icon, roblox_hero
 
@@ -114,11 +115,12 @@ def render_grade():
              "popular list.",
         caption="PICTURED: this week's No. 1, graded S",
         part=12,
-        hero=ROBLOX_HERO,
+        hero=theme_duotone(ROBLOX_HERO, treatment="sepia", contrast=1.28),
+        photo_filter="none",
     )).save(str(folder / "slide_00_cover.png"))
 
-    print("  ▸ S grade slide …")
-    _render_html(v.game_slide_html(
+    print("  ▸ S grade slide (Gazette review column) …")
+    _render_html(v.gazette_slide_html(
         name="Tower of Misery", creator="xXBuilderXx", overall="S",
         subgrades={"Fun": "S", "Value": "A+", "Original": "A+", "Social": "B"},
         assessment="Mechanically sound in ways most funded studios miss. "
@@ -127,8 +129,8 @@ def render_grade():
         part=12, index=1, art=TOWER_SCENE,
     )).save(str(folder / "slide_01_s_grade.png"))
 
-    print("  ▸ A+ grade slide …")
-    _render_html(v.game_slide_html(
+    print("  ▸ A+ grade slide (Gazette review column) …")
+    _render_html(v.gazette_slide_html(
         name="Nocturnia: Shadow Realms", creator="DarkCraft Studios", overall="A+",
         subgrades={"Fun": "A+", "Value": "S", "Original": "S", "Social": "C"},
         assessment="Exceeds expectation in atmosphere and worldbuilding. "
