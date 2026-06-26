@@ -481,179 +481,34 @@ class CarouselGenerator:
         cover_hook: Optional[str] = None,
     ) -> Image.Image:
         """
-        Cover slide — Minimal Editorial (refined).
+        Cover slide — HTML/Playwright renderer.
 
-        Hierarchy rule: the curiosity driver (hook) must be the largest element
-        on the canvas. The brand name (ROBLOX) is a category signal, not the
-        reason to stop scrolling. In v1 the hook was 62px and ROBLOX was 250px —
-        inverted priority. Here the hook is auto-sized up to 200px and ROBLOX
-        sits at 110px below it.
+        Generates a dark gaming-poster cover with:
+          - CSS gradient background with atmospheric red glow
+          - CSS Roblox noob character peeking from the bottom centre
+          - Poppins Black hook text auto-sized to 2 lines via JS
+          - Red separator, value phrase, ROBLOX brand, cred and CTA
+          - Part N badge (red outlined, top-right)
 
-        Composition: centered manifesto (not left-aligned). Centering reads as
-        editorial authority. The v1 left-rail felt template-made at thumbnail
-        size because the rail was the most visually distinctive element.
-
-        Structural accent: one 3px Roblox-red separator between the hook block
-        and the value phrase. One structural use of red is authoritative. Two
-        (rail + wordmark) competed and diluted both.
-
-        Part N badge: top-right, red-outlined on canvas-fill. Series signal that
-        drives follows without entering the main typographic hierarchy. Addressed
-        the authenticity gap (real creators always mark the series drop).
-
-        Canvas: (251, 249, 246) — very slightly warm. Cold white reads as
-        SaaS-generated. A 1% warmth shift reads as human-made at no cost to the
-        pattern-interrupt effect on dark feeds.
-
-        CTA: retained but subordinated. A single medium-weight save line sits
-        below the credibility text. The hook IS the primary CTA; the save nudge
-        is a quiet backup for viewers who made it this far.
-
-        TikTok UI safety: entire block sits between y=200 and y=1400, well
-        above the bottom UI overlay (covers approximately y=1440 onward).
+        Replaces the old PIL drawing code which could not produce smooth
+        gradients, real text-shadow glows, or credible character art.
         """
+        from src.content.html_cover import make_cover_html, render_cover
+
         edition, _theme_emoji, _stickers = ed_meta
-        img = Image.new("RGB", (W, H), (251, 249, 246))
-        draw = ImageDraw.Draw(img)
-
-        ink = (13, 13, 16)
-        grey = (138, 140, 148)
-        cx = W // 2
-
         hook = (cover_hook or "").strip().lower() or TITLE_KICKERS[part_number % len(TITLE_KICKERS)]
         value = _value_phrase(edition)
         cred = _credibility_line(part_number)
         cta_text = _cover_cta(part_number)
 
-        avail = W - SAFE * 2  # 900px working width
-
-        # ── Part N badge (top-right) — series signal, red-outlined ──────────
-        # Drawn before measuring the block so it never overlaps: badge sits at
-        # y=SAFE (top), block starts at y≥200.
-        f_badge = load_font("semibold", 46)
-        badge_label = f"part {part_number}"
-        bdg_tw = _text_w(draw, badge_label, f_badge)
-        bdg_pad_x, bdg_h = 28, 72
-        bdg_w = bdg_tw + bdg_pad_x * 2
-        bdg_x = W - SAFE - bdg_w
-        bdg_y = SAFE - 8
-        border = 3
-        # Outer red fill → inner canvas fill → text in red
-        draw.rounded_rectangle(
-            [bdg_x, bdg_y, bdg_x + bdg_w, bdg_y + bdg_h],
-            radius=10, fill=ROBLOX_RED,
+        html = make_cover_html(
+            hook=hook,
+            value=value,
+            cred=cred,
+            cta=cta_text,
+            part_number=part_number,
         )
-        draw.rounded_rectangle(
-            [bdg_x + border, bdg_y + border,
-             bdg_x + bdg_w - border, bdg_y + bdg_h - border],
-            radius=8, fill=(251, 249, 246),
-        )
-        draw.text(
-            (bdg_x + bdg_pad_x, bdg_y + (bdg_h - 46) // 2),
-            badge_label, font=f_badge, fill=ROBLOX_RED,
-        )
-
-        # ── Hook — the curiosity driver, largest element ─────────────────────
-        # Auto-size down from 200px until:
-        #   (a) all lines are within avail — catches single long words that
-        #       cannot break mid-word (e.g. "brookhaven" at 200px = 1291px)
-        #   (b) the full hook text fits in at most 2 lines — _wrap_to_width
-        #       truncates at max_lines, so a 5-word hook at too large a size
-        #       may only show 2 words; shrink until all words are visible
-        hook_words = len(hook.split())
-        h_size = 200
-        f_hook = load_font("black", h_size)
-        hook_lines = _wrap_to_width(draw, hook, f_hook, avail, max_lines=2)
-        while h_size > 80 and (
-            len(hook_lines) > 2
-            or any(_text_w(draw, ln, f_hook) > avail for ln in hook_lines)
-            or len(" ".join(hook_lines).split()) < hook_words
-        ):
-            h_size -= 8
-            f_hook = load_font("black", h_size)
-            hook_lines = _wrap_to_width(draw, hook, f_hook, avail, max_lines=2)
-        hook_lh = int(h_size * 1.0)  # tight leading — essential for display type
-
-        # ── Value / search phrase ────────────────────────────────────────────
-        v_size = 82
-        f_val = load_font("extrabold", v_size)
-        val_lines = _wrap_to_width(draw, value, f_val, avail, max_lines=2)
-        while len(val_lines) > 2 and v_size > 62:
-            v_size -= 6
-            f_val = load_font("extrabold", v_size)
-            val_lines = _wrap_to_width(draw, value, f_val, avail, max_lines=2)
-        val_lh = int(v_size * 1.1)
-
-        # ── ROBLOX wordmark — category signal, subordinate to hook ───────────
-        rob_size = 110
-        f_rob = load_font("black", rob_size)
-        while _text_w(draw, "ROBLOX", f_rob) > avail and rob_size > 80:
-            rob_size -= 6
-            f_rob = load_font("black", rob_size)
-        _, rt, _, rb = draw.textbbox((0, 0), "ROBLOX", font=f_rob)
-        rob_h = rb - rt
-
-        # ── Credibility and CTA ───────────────────────────────────────────────
-        f_cred = load_font("semibold", 48)
-        f_cta = load_font("medium", 44)
-        cred_h, cta_h = 58, 54
-
-        # ── Vertical layout — center block at 44% of canvas ─────────────────
-        # 44% = 845px. Block sits upper-weighted and clear of TikTok's bottom
-        # UI overlay (~y=1440 onward). All gaps are optical, not mathematical.
-        gap_hook_sep = 64    # hook → separator
-        gap_sep_val = 56     # separator → value
-        gap_val_rob = 52     # value → ROBLOX
-        gap_rob_cred = 58    # ROBLOX → credibility
-        gap_cred_cta = 52    # credibility → CTA
-        sep_h = 3
-
-        block_h = (
-            len(hook_lines) * hook_lh
-            + gap_hook_sep + sep_h
-            + gap_sep_val + len(val_lines) * val_lh
-            + gap_val_rob + rob_h
-            + gap_rob_cred + cred_h
-            + gap_cred_cta + cta_h
-        )
-        top = max(200, int(H * 0.44) - block_h // 2)
-
-        y = top
-
-        # Hook — centered, black weight
-        for line in hook_lines:
-            lw = _text_w(draw, line, f_hook)
-            draw.text((cx - lw // 2, y), line, font=f_hook, fill=ink)
-            y += hook_lh
-
-        # Separator — single structural red accent
-        y += gap_hook_sep
-        draw.rectangle([SAFE, y, W - SAFE, y + sep_h], fill=ROBLOX_RED)
-        y += sep_h + gap_sep_val
-
-        # Value phrase — centered, extrabold
-        for line in val_lines:
-            lw = _text_w(draw, line, f_val)
-            draw.text((cx - lw // 2, y), line, font=f_val, fill=ink)
-            y += val_lh
-
-        # ROBLOX — centered, red, subordinate brand signal
-        y += gap_val_rob
-        rob_w = _text_w(draw, "ROBLOX", f_rob)
-        draw.text((cx - rob_w // 2, y - rt), "ROBLOX", font=f_rob, fill=ROBLOX_RED)
-        y += rob_h + gap_rob_cred
-
-        # Credibility — centered, grey
-        cred_w = _text_w(draw, cred, f_cred)
-        draw.text((cx - cred_w // 2, y), cred, font=f_cred, fill=grey)
-        y += cred_h + gap_cred_cta
-
-        # CTA — quiet save nudge, medium weight, lighter grey
-        cta_full = f"-> {cta_text}"
-        cta_w = _text_w(draw, cta_full, f_cta)
-        draw.text((cx - cta_w // 2, y), cta_full, font=f_cta, fill=(165, 167, 175))
-
-        return img
+        return render_cover(html)
 
     # ── Game slide ────────────────────────────────────────────────────
 
