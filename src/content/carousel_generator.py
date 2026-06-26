@@ -482,6 +482,8 @@ class CarouselGenerator:
         top_center_y = text_top - emoji_sz // 2 - 60
         top_center_y = max(emoji_sz // 2 + 60, top_center_y)
         img = paste_emoji(img, top_emoji, cx, top_center_y, emoji_sz)
+        # paste_emoji returns a NEW image — must recreate draw or text draws on stale canvas
+        draw = ImageDraw.Draw(img)
 
         # ── Text block ──────────────────────────────────────────────────
         y = text_top
@@ -491,9 +493,9 @@ class CarouselGenerator:
         draw.text((cx - aw // 2, y), "actually good", font=f_actually, fill=ink)
         y += actually_h + gap_ac_rob
 
-        # "ROBLOX" in brand red — the single colour accent
+        # "ROBLOX" — large black, matching the viral reference
         rw = _text_w(draw, "ROBLOX", f_rob)
-        draw.text((cx - rw // 2, y - rob_t), "ROBLOX", font=f_rob, fill=ROBLOX_RED)
+        draw.text((cx - rw // 2, y - rob_t), "ROBLOX", font=f_rob, fill=ink)
         y += roblox_h + gap_rob_gm
 
         # "games to play"
@@ -507,6 +509,7 @@ class CarouselGenerator:
         ew = measure_mixed(draw, edition_line, f_edition, em_px)
         img = draw_mixed(img, (cx - ew // 2, y), edition_line,
                          f_edition, ink, emoji_size=em_px, anchor="la")
+        draw = ImageDraw.Draw(img)  # draw_mixed also returns a new image
         edition_bottom = y + edition_h
 
         # ── Big emoji: bottom ───────────────────────────────────────────
