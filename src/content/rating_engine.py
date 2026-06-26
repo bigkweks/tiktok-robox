@@ -104,7 +104,7 @@ Generate a JSON rating with this exact structure:
     "visual_quality": <float 0-10>,
     "community": <float 0-10>
   }},
-  "verdict": "<one punchy, HIGH-ENERGY sentence, max 12 words, no emojis. Sound genuinely hyped (for gems) or genuinely fired-up (for overhyped ones) — never flat or corporate. Vary the sentence shape every time; do not start with the game name every time.>",
+  "verdict": "<one punchy, HIGH-ENERGY sentence, max 12 words, no emojis. Sound genuinely hyped (for gems) or genuinely fired-up (for overhyped ones) — never flat or corporate. Vary the sentence shape every time; do not start with the game name every time. OPTIONAL engagement bait: ~1 in 3 times, use a slightly wrong but debatable comparison in the verdict too (e.g. 'basically the roblox version of GTA' when it's more like Payday) — makes players argue in the comments.>",
   "controversy_angle": "<the mildly controversial opinion that will spark comment debate, 1 sentence>",
   "tts_script": "<15-20 second narration script for the video, natural spoken English, include the score reveal at the end, no special chars>",
   "hook_text": "<the first 2 seconds of text shown on screen — max 9 words>",
@@ -133,7 +133,19 @@ Hard rules for carousel_caption:
     as a crutch you reach for every time. A plain specific caption beats a
     generic slang one.
   - Pick ONE of these angles, whichever fits the game best:
-      * genre comparison: "GTA in roblox", "minecraft dropper", "valorant but roblox"
+      * ENGAGEMENT BAIT comparison (use this roughly 1 in 3 times — it drives the
+        most comments): make a game comparison that is SLIGHTLY wrong or debatable.
+        The comparison should be close enough to feel like a genuine hot take but
+        off enough that players feel compelled to correct it.
+        Examples of the format — study the PATTERN, do NOT copy verbatim:
+          "basically GTA" (when it's actually more like Payday — crime theme but heist)
+          "minecraft but better" (when it's more like Terraria)
+          "roblox fortnite" (when it's more of a hero-shooter, not battle royale)
+          "dark souls in roblox" (when it's actually more like Hollow Knight)
+          "pokemon but in roblox" (when it's more of a creature-collector like Temtem)
+        The key: pick a FAMOUS game the audience knows, make the comparison slightly
+        wrong but defensible, so comments fill up with "bro this is nothing like X its
+        more like Y". Use the game's actual genre/mechanic to pick the "wrong" famous game.
       * personal flex: "spent 30+ hours in this", "cant stop playing this"
       * underrated: "no one talks about this", "criminally underrated"
       * pure hype (only for 9.5+): "MUST check out", "actual masterpiece"
