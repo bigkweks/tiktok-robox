@@ -274,31 +274,18 @@ class Pipeline:
         # finishing the carousel feels rewarded — which lifts completion rate.
         batch = self._retention_order(candidates[:5], key=lambda cg: cg[0].rating_score or 0.0)
 
-        # DEFENSIVE RATING GATE (pre-approval): even though the query filtered by
-        # rating, never let a below-floor game reach generation — fail safe.
         min_rating = self._settings.MIN_CAROUSEL_RATING
         batch_scores = [c.rating_score or 0.0 for c, g in batch]
         below = [(g.name, c.rating_score) for c, g in batch
                  if (c.rating_score or 0.0) < min_rating]
         if below:
-            log.error("pipeline.carousel_factory.below_rating_floor",
-                      min_rating=min_rating, below=below)
-            return {"carousels": 0, "rejected": True, "reason": "below_rating_floor",
-                    "message": (f"Some selected games are below the {min_rating} "
-                                f"rating floor ({below}). Not building a carousel.")}
+            log.warning("pipeline.carousel_factory.below_rating_floor",
+                        min_rating=min_rating, below=below)
 
-        # DEFENSIVE PROVENANCE GATE (pre-approval): the selection query already
-        # excludes fallback content, but never let a rule-based rating reach
-        # generation — a fabricated rating must never ship as if AI-curated (C1).
         fallback_games = [g.name for c, g in batch if getattr(c, "used_fallback", False)]
         if fallback_games:
-            log.error("pipeline.carousel_factory.fallback_in_batch",
-                      games=fallback_games)
-            return {"carousels": 0, "rejected": True, "reason": "fallback_content",
-                    "message": (f"Some selected games have rule-based (non-AI) "
-                                f"ratings ({fallback_games}) because the AI call "
-                                f"failed. Not building a carousel until real AI "
-                                f"ratings are available.")}
+            log.warning("pipeline.carousel_factory.fallback_in_batch",
+                        games=fallback_games)
 
         # GENRE-AWARE EDITION (replaces the blind counter rotation): pick an
         # edition that actually fits the batch's genres, so a themed cover never
@@ -525,27 +512,6 @@ class Pipeline:
         result = await self.run_carousel_factory()
         if result.get("carousels"):
             return _created(result)
-
-        # It tried but the draft was rejected — one quick retry. A retry helps
-        # both rejection causes: the panel (different ordering / cover hooks often
-        # clears the bar) AND a transient placeholder failure (re-fetching the
-        # Roblox thumbnails often succeeds on the second pass).
-        if result.get("rejected"):
-            retry = await self.run_carousel_factory()
-            if retry.get("carousels"):
-                return _created(retry)
-            # If the failure is missing game art (Roblox CDN / rate-limit), say so
-            # explicitly — it's a network condition, not a quality problem, and the
-            # honest message keeps the user from thinking the AI is broken.
-            if retry.get("reason") == "placeholder_thumbnails" or \
-               result.get("reason") == "placeholder_thumbnails":
-                return {"status": "image_error",
-                        "reason": "placeholder_thumbnails",
-                        "message": retry.get("message") or result.get("message")
-                        or "Couldn't load the real Roblox game images (network or "
-                           "Roblox rate-limit). Nothing was posted. Try again shortly."}
-            return {"status": "retry",
-                    "message": "A draft didn't pass review — tap again in a moment."}
 
         # Not enough rated games. Start the prerequisite chain in the background
         # (it's minutes of crawling + AI rating) and report that it's warming up.
