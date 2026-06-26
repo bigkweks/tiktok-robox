@@ -21,7 +21,7 @@ from src.content.carousel_variants import (
     GradeReportVariant,
     _render_html,
 )
-from scripts._demo_scenes import game_scene, game_icon
+from scripts._demo_scenes import game_scene, game_icon, roblox_hero
 
 OUT = Path("output/variant_demos")
 
@@ -30,6 +30,18 @@ TOWER_SCENE = game_scene("obby", seed=11)
 TOWER_ICON = game_icon("T", (226, 96, 84), seed=2)
 NOCT_SCENE = game_scene("horror", seed=23)
 NOCT_ICON = game_icon("N", (96, 72, 150), seed=5)
+
+# Five varied scenes for the cover montages (the "what's inside" preview)
+LINEUP = [
+    game_scene("obby", seed=11),
+    game_scene("horror", seed=23),
+    game_scene("dusk", seed=4),
+    game_scene("obby", seed=31),
+    game_scene("horror", seed=17),
+]
+
+# Roblox-themed hero photo for the newspaper front page
+ROBLOX_HERO = roblox_hero(seed=11)
 
 
 def render_scout():
@@ -43,7 +55,7 @@ def render_scout():
         hook_em="worth your night",
         sub="five Roblox titles I actually sat down and played — "
             "logged, scored, and written up.",
-        part=12,
+        part=12, arts=LINEUP,
     )).save(str(folder / "slide_00_cover.png"))
 
     print("  ▸ game slide …")
@@ -68,7 +80,7 @@ def render_tier():
     print("  ▸ cover …")
     _render_html(v.cover_html(
         tagline="you have been sleeping on every single one of these",
-        part=12,
+        part=12, arts=LINEUP,
     )).save(str(folder / "slide_00_cover.png"))
 
     print("  ▸ S-tier slide …")
@@ -94,13 +106,15 @@ def render_grade():
     folder = OUT / "3_grade_report"
     folder.mkdir(parents=True, exist_ok=True)
 
-    print("  ▸ cover …")
-    _render_html(v.cover_html(
-        l1="the official",
-        l3="game grades",
-        sub="nobody asked for a grading scale. I built one anyway, "
-            "and these five earned their marks.",
+    print("  ▸ newspaper cover …")
+    _render_html(v.newspaper_cover_html(
+        headline="The 5 Roblox Games The Algorithm Is Hiding",
+        deck="An independent review desk played, scored and graded the gems "
+             "buried under the front page. The verdicts are not kind to the "
+             "popular list.",
+        caption="PICTURED: this week's No. 1, graded S",
         part=12,
+        hero=ROBLOX_HERO,
     )).save(str(folder / "slide_00_cover.png"))
 
     print("  ▸ S grade slide …")

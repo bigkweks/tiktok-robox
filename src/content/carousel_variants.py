@@ -358,8 +358,8 @@ _SCOUT_COVER_CSS = _SCOUT_BASE + """
     letter-spacing:.3em;text-transform:uppercase;color:var(--ink-faint);
 }
 .center{
-    position:absolute;top:0;bottom:0;left:118px;right:118px;
-    display:flex;flex-direction:column;justify-content:center;
+    position:absolute;top:330px;left:118px;right:118px;
+    display:flex;flex-direction:column;
 }
 .over{
     font-size:26px;letter-spacing:.4em;text-transform:uppercase;
@@ -368,17 +368,34 @@ _SCOUT_COVER_CSS = _SCOUT_BASE + """
 }
 .over::before{content:'';width:72px;height:1px;background:#B5512F;}
 .hook{
-    font-family:'Fraunces';font-weight:900;font-size:150px;line-height:.94;
+    font-family:'Fraunces';font-weight:900;font-size:142px;line-height:.94;
     letter-spacing:-.03em;color:var(--ink);margin-bottom:8px;
 }
 .hook em{font-style:italic;font-weight:400;color:var(--ink-soft);}
 .sub{
     font-family:'Fraunces';font-weight:400;font-style:italic;
-    font-size:52px;line-height:1.3;color:var(--ink-soft);
-    margin-top:44px;max-width:840px;
+    font-size:50px;line-height:1.3;color:var(--ink-soft);
+    margin-top:40px;max-width:840px;
 }
+/* Contact sheet — previews the five field captures inside */
+.strip-label{
+    position:absolute;top:1300px;left:118px;
+    font-family:'Space Grotesk';font-weight:500;font-size:23px;
+    letter-spacing:.3em;text-transform:uppercase;color:var(--ink-faint);
+}
+.strip{
+    position:absolute;top:1346px;left:118px;right:118px;
+    display:flex;gap:14px;
+}
+.cap{
+    flex:1;height:212px;border-radius:10px;position:relative;overflow:hidden;
+    background-size:cover;background-position:center;
+    border:1px solid var(--line);box-shadow:inset 0 1px 0 rgba(255,255,255,.06);
+}
+.cap-fade{position:absolute;inset:0;background:linear-gradient(transparent 45%,rgba(8,6,5,.7));}
+.cap-n{position:absolute;left:12px;bottom:9px;font-family:'Space Grotesk';font-weight:700;font-size:21px;color:rgba(255,255,255,.92);letter-spacing:.05em;}
 .foot{
-    position:absolute;bottom:130px;left:118px;right:118px;
+    position:absolute;bottom:120px;left:118px;right:118px;
     display:flex;justify-content:space-between;align-items:center;
     padding-top:36px;border-top:1px solid var(--line);
 }
@@ -390,9 +407,23 @@ _SCOUT_COVER_CSS = _SCOUT_BASE + """
 class ScoutReportVariant:
     """VARIANT 1 — THE SCOUT REPORT (editorial dark dossier)."""
 
-    def cover_html(self, hook_main: str, hook_em: str, sub: str, part: int) -> str:
+    def cover_html(self, hook_main: str, hook_em: str, sub: str, part: int,
+                   arts=None) -> str:
         ff = _font_faces()
         h = _html.escape
+        arts = arts or []
+        if arts:
+            caps = "".join(
+                f'<div class="cap" style="background-image:url(\'{img_to_uri(a)}\');">'
+                f'<div class="cap-fade"></div><div class="cap-n">{i+1:02d}</div></div>'
+                for i, a in enumerate(arts[:5])
+            )
+            strip = (
+                '<div class="strip-label">This issue · five field captures</div>'
+                f'<div class="strip">{caps}</div>'
+            )
+        else:
+            strip = ""
         return f"""<!DOCTYPE html><html><head><meta charset="utf-8">
 <style>{ff}\n{_SCOUT_COVER_CSS}</style></head><body>
 <div class="frame"></div>
@@ -406,6 +437,7 @@ class ScoutReportVariant:
   <div class="hook">{h(hook_main)}<br><em>{h(hook_em)}</em></div>
   <div class="sub">{h(sub)}</div>
 </div>
+{strip}
 <div class="foot">
   <span class="foot-l">Five entries · independently played</span>
   <span class="foot-r">No. {part:02d}</span>
@@ -586,29 +618,51 @@ _TIER_CSS = _TIER_BASE + """
 """
 
 _TIER_COVER_CSS = _TIER_BASE + """
-.glow{position:absolute;top:50%;left:50%;transform:translate(-50%,-58%);width:1000px;height:1000px;
+.glow{position:absolute;top:42%;left:50%;transform:translate(-50%,-58%);width:1000px;height:1000px;
     background:radial-gradient(ellipse,rgba(201,162,75,.08) 0%,transparent 62%);pointer-events:none;}
 .issue{position:absolute;top:88px;right:96px;font-weight:500;font-size:25px;letter-spacing:.34em;text-transform:uppercase;color:rgba(244,241,234,.4);}
 .brand{position:absolute;top:88px;left:96px;font-family:'Fraunces';font-weight:900;font-size:32px;color:rgba(244,241,234,.7);}
 .brand em{font-style:italic;font-weight:400;}
-.mid{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:0 96px;}
-.label{font-family:'Space Grotesk';font-weight:700;font-size:30px;letter-spacing:.5em;text-transform:uppercase;color:#C9A24B;margin-bottom:36px;padding-left:.5em;}
+.mid{position:absolute;top:40px;left:0;right:0;height:1240px;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:0 96px;}
+.label{font-family:'Space Grotesk';font-weight:700;font-size:30px;letter-spacing:.5em;text-transform:uppercase;color:#C9A24B;margin-bottom:30px;padding-left:.5em;}
 .big{
-    font-family:'Fraunces';font-weight:900;font-size:540px;line-height:.78;
-    letter-spacing:-.05em;color:#C9A24B;margin-bottom:30px;
+    font-family:'Fraunces';font-weight:900;font-size:470px;line-height:.78;
+    letter-spacing:-.05em;color:#C9A24B;margin-bottom:26px;
 }
-.wordmark{font-family:'Bricolage Grotesque';font-weight:800;font-size:104px;letter-spacing:-.02em;color:#F4F1EA;line-height:1;margin-bottom:18px;}
-.tagline{font-family:'Fraunces';font-weight:400;font-style:italic;font-size:46px;color:rgba(244,241,234,.55);text-align:center;max-width:760px;line-height:1.3;}
-.foot{position:absolute;bottom:118px;left:0;right:0;text-align:center;font-family:'Space Grotesk';font-weight:500;font-size:26px;letter-spacing:.3em;text-transform:uppercase;color:rgba(244,241,234,.32);}
+.wordmark{font-family:'Bricolage Grotesque';font-weight:800;font-size:100px;letter-spacing:-.02em;color:#F4F1EA;line-height:1;margin-bottom:18px;}
+.tagline{font-family:'Fraunces';font-weight:400;font-style:italic;font-size:44px;color:rgba(244,241,234,.55);text-align:center;max-width:760px;line-height:1.3;}
+/* Filmstrip — the five contenders, dealt like cards */
+.film-label{position:absolute;top:1330px;left:0;right:0;text-align:center;font-family:'Space Grotesk';font-weight:700;font-size:24px;letter-spacing:.4em;text-transform:uppercase;color:rgba(244,241,234,.4);}
+.film{position:absolute;top:1390px;left:0;right:0;display:flex;justify-content:center;align-items:center;gap:8px;}
+.film-card{
+    width:158px;height:206px;border-radius:14px;background-size:cover;background-position:center;
+    border:1px solid rgba(255,255,255,.16);
+    box-shadow:0 14px 34px rgba(0,0,0,.6);position:relative;
+}
+.film-card:nth-child(1){transform:rotate(-6deg) translateY(10px);}
+.film-card:nth-child(2){transform:rotate(-3deg);}
+.film-card:nth-child(3){transform:rotate(0deg) translateY(-8px);z-index:2;}
+.film-card:nth-child(4){transform:rotate(3deg);}
+.film-card:nth-child(5){transform:rotate(6deg) translateY(10px);}
+.foot{position:absolute;bottom:96px;left:0;right:0;text-align:center;font-family:'Space Grotesk';font-weight:500;font-size:26px;letter-spacing:.3em;text-transform:uppercase;color:rgba(244,241,234,.32);}
 """
 
 
 class TierDropVariant:
     """VARIANT 2 — THE TIER DROP (flat stamped tiers, no neon)."""
 
-    def cover_html(self, tagline: str, part: int) -> str:
+    def cover_html(self, tagline: str, part: int, arts=None) -> str:
         ff = _font_faces()
         h = _html.escape
+        arts = arts or []
+        if arts:
+            cards = "".join(
+                f'<div class="film-card" style="background-image:url(\'{img_to_uri(a)}\');"></div>'
+                for a in arts[:5]
+            )
+            film = f'<div class="film-label">inside this drop</div><div class="film">{cards}</div>'
+        else:
+            film = ""
         return f"""<!DOCTYPE html><html><head><meta charset="utf-8">
 <style>{ff}\n{_TIER_COVER_CSS}</style></head><body>
 <div class="glow"></div>
@@ -620,6 +674,7 @@ class TierDropVariant:
   <div class="wordmark">ROBLOX</div>
   <div class="tagline">{h(tagline)}</div>
 </div>
+{film}
 <div class="vign"></div>
 <div class="foot">five games · ranked, not random</div>
 {_grain(0.05)}
@@ -796,23 +851,156 @@ _GRADE_COVER_CSS = _GRADE_BASE + """
     border:2px solid var(--ember);display:flex;align-items:center;justify-content:center;
 }
 .seal-mark span{font-family:'Fraunces';font-weight:900;font-size:30px;color:var(--ember);text-align:center;line-height:1.05;letter-spacing:.02em;}
-.center{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:0 110px;text-align:center;}
-.over{font-weight:500;font-size:26px;letter-spacing:.46em;text-transform:uppercase;color:var(--ink-faint);margin-bottom:30px;padding-left:.46em;}
-.l1{font-family:'Fraunces';font-weight:400;font-style:italic;font-size:64px;color:var(--ink-soft);line-height:1;margin-bottom:6px;}
-.l2{font-family:'Fraunces';font-weight:900;font-size:172px;line-height:.9;letter-spacing:-.03em;color:var(--ink);margin-bottom:10px;}
-.l3{font-family:'Fraunces';font-weight:400;font-style:italic;font-size:60px;color:var(--ember);line-height:1;}
-.rule{width:340px;height:1.5px;background:var(--ink);margin:54px 0 46px;}
-.sub{font-family:'Fraunces';font-weight:400;font-size:44px;line-height:1.36;color:var(--ink-soft);max-width:760px;}
-.foot{position:absolute;bottom:120px;left:0;right:0;text-align:center;font-weight:500;font-size:25px;letter-spacing:.34em;text-transform:uppercase;color:var(--ink-faint);}
+.center{position:absolute;top:346px;left:0;right:0;display:flex;flex-direction:column;align-items:center;padding:0 110px;text-align:center;}
+.over{font-weight:500;font-size:26px;letter-spacing:.46em;text-transform:uppercase;color:var(--ink-faint);margin-bottom:28px;padding-left:.46em;}
+.l1{font-family:'Fraunces';font-weight:400;font-style:italic;font-size:62px;color:var(--ink-soft);line-height:1;margin-bottom:6px;}
+.l2{font-family:'Fraunces';font-weight:900;font-size:168px;line-height:.9;letter-spacing:-.03em;color:var(--ink);margin-bottom:10px;}
+.l3{font-family:'Fraunces';font-weight:400;font-style:italic;font-size:58px;color:var(--ember);line-height:1;}
+.rule{width:340px;height:1.5px;background:var(--ink);margin:46px 0 40px;}
+.sub{font-family:'Fraunces';font-weight:400;font-size:43px;line-height:1.36;color:var(--ink-soft);max-width:760px;}
+/* Specimens on file — captures clipped to the certificate, each with its grade */
+.spec-label{position:absolute;top:1372px;left:0;right:0;text-align:center;font-weight:500;font-size:23px;letter-spacing:.34em;text-transform:uppercase;color:var(--ink-faint);}
+.specimens{position:absolute;top:1420px;left:96px;right:96px;display:flex;gap:14px;}
+.spec{flex:1;height:202px;border:2px solid var(--ink);border-radius:8px;position:relative;overflow:hidden;background-size:cover;background-position:center;background-color:#1a1714;}
+.spec-tag{position:absolute;bottom:0;left:0;background:var(--paper);border-top:2px solid var(--ink);border-right:2px solid var(--ink);border-radius:0 8px 0 6px;padding:3px 14px;font-family:'Fraunces';font-weight:900;font-size:30px;line-height:1.1;}
+.foot{position:absolute;bottom:110px;left:0;right:0;text-align:center;font-weight:500;font-size:25px;letter-spacing:.34em;text-transform:uppercase;color:var(--ink-faint);}
+"""
+
+# ── Newspaper front-page cover (the committed direction) ─────────────────────
+_NEWS_COVER_CSS = _GRADE_BASE + """
+.page{position:absolute;inset:0;padding:74px 92px 56px;display:flex;flex-direction:column;}
+.topline{
+    display:flex;justify-content:space-between;align-items:center;
+    font-weight:500;font-size:21px;letter-spacing:.26em;text-transform:uppercase;
+    color:var(--ink-soft);margin-bottom:14px;
+}
+.rule-d{border-top:4px solid var(--ink);border-bottom:1px solid var(--ink);height:5px;}
+.masthead{
+    text-align:center;font-family:'Fraunces';font-weight:900;
+    font-size:74px;line-height:1;letter-spacing:-1px;color:var(--ink);
+    margin:18px 0 16px;white-space:nowrap;
+}
+.dateline{
+    display:flex;justify-content:space-between;align-items:center;
+    padding:14px 4px;border-top:1px solid var(--ink);border-bottom:1px solid var(--ink);
+    font-weight:500;font-size:22px;letter-spacing:.18em;text-transform:uppercase;color:var(--ink-soft);
+}
+.dateline .stars{color:var(--ember);letter-spacing:.34em;font-size:24px;}
+.kicker{
+    text-align:center;font-weight:700;font-size:24px;letter-spacing:.4em;
+    text-transform:uppercase;color:var(--ember);margin-top:34px;
+}
+.headline{
+    text-align:center;font-family:'Fraunces';font-weight:900;
+    font-size:96px;line-height:.97;letter-spacing:-3px;color:var(--ink);
+    margin-top:16px;
+}
+.deck{
+    text-align:center;font-family:'Fraunces';font-weight:400;font-style:italic;
+    font-size:40px;line-height:1.28;color:var(--ink-soft);
+    margin:24px auto 0;max-width:840px;
+    padding-bottom:26px;border-bottom:1px solid var(--line);
+}
+/* Hero photo — fills remaining height, printed-newspaper duotone */
+.photo-shell{
+    flex:1;min-height:0;display:flex;flex-direction:column;
+    margin-top:30px;
+    border:2px solid var(--ink);padding:12px;background:#fff;
+}
+.photo-wrap{flex:1;min-height:0;position:relative;overflow:hidden;}
+.photo{
+    position:absolute;inset:0;background-size:cover;background-position:center 40%;
+    filter:grayscale(.66) contrast(1.14) sepia(.42) brightness(.98);
+}
+.halftone{
+    position:absolute;inset:0;mix-blend-mode:multiply;opacity:.22;
+    background-image:radial-gradient(circle, rgba(20,15,10,.9) 0.7px, transparent 1.4px);
+    background-size:5px 5px;
+}
+.photo-edge{position:absolute;inset:0;box-shadow:inset 0 0 0 1px rgba(20,15,10,.25);}
+.photo-cap{
+    display:flex;justify-content:space-between;align-items:baseline;
+    margin-top:12px;font-weight:500;font-size:21px;letter-spacing:.04em;
+    color:var(--ink-soft);
+}
+.photo-cap .em{font-family:'Fraunces';font-style:italic;font-weight:400;font-size:24px;color:var(--ink);}
+.teaser{
+    margin-top:26px;padding-top:22px;border-top:4px double var(--ink);
+    text-align:center;font-family:'Fraunces';font-weight:900;font-size:38px;
+    letter-spacing:.01em;color:var(--ink);
+}
+.teaser .ar{color:var(--ember);}
 """
 
 
 class GradeReportVariant:
     """VARIANT 3 — THE GRADE REPORT (cream academic certificate)."""
 
-    def cover_html(self, l1: str, l3: str, sub: str, part: int) -> str:
+    def newspaper_cover_html(
+        self, headline: str, deck: str, caption: str, part: int,
+        hero=None, masthead: str = "The Gemvault Gazette",
+        kicker: str = "The Roblox Desk · Exclusive",
+    ) -> str:
         ff = _font_faces()
         h = _html.escape
+        hero_uri = img_to_uri(hero)
+        photo_bg = f"background-image:url('{hero_uri}');" if hero_uri else ""
+        return f"""<!DOCTYPE html><html><head><meta charset="utf-8">
+<style>{ff}\n{_NEWS_COVER_CSS}</style></head><body>
+<div class="deckle"></div><div class="deckle2"></div>
+<div class="page">
+  <div class="topline">
+    <span>Vol. {part:02d}</span>
+    <span>Roblox Edition · Est. 2024</span>
+    <span>Independent &amp; Unbought</span>
+  </div>
+  <div class="rule-d"></div>
+  <div class="masthead">{h(masthead)}</div>
+  <div class="dateline">
+    <span>Friday Edition · No. {part:02d}</span>
+    <span class="stars">★★★★★</span>
+    <span>Price: one follow</span>
+  </div>
+  <div class="kicker">{h(kicker)}</div>
+  <div class="headline">{h(headline)}</div>
+  <div class="deck">{h(deck)}</div>
+  <div class="photo-shell">
+    <div class="photo-wrap">
+      <div class="photo" style="{photo_bg}"></div>
+      <div class="halftone"></div>
+      <div class="photo-edge"></div>
+    </div>
+    <div class="photo-cap">
+      <span>{h(caption)}</span>
+      <span class="em">graded inside ▸</span>
+    </div>
+  </div>
+  <div class="teaser">Full grades &amp; verdicts inside <span class="ar">▸▸</span> swipe</div>
+</div>
+{_grain(0.05)}
+</body></html>"""
+
+    def cover_html(self, l1: str, l3: str, sub: str, part: int,
+                   arts=None, tags=None) -> str:
+        ff = _font_faces()
+        h = _html.escape
+        arts = arts or []
+        tags = tags or ["S", "A+", "A", "B", "A"]
+        if arts:
+            specs = ""
+            for i, a in enumerate(arts[:5]):
+                tag = tags[i] if i < len(tags) else "A"
+                ink = _GRADE_INK.get(tag, "#1C1813")
+                specs += (
+                    f'<div class="spec" style="background-image:url(\'{img_to_uri(a)}\');">'
+                    f'<div class="spec-tag" style="color:{ink};">{h(tag)}</div></div>'
+                )
+            specimens = (
+                '<div class="spec-label">Specimens on file · grades inside</div>'
+                f'<div class="specimens">{specs}</div>'
+            )
+        else:
+            specimens = ""
         return f"""<!DOCTYPE html><html><head><meta charset="utf-8">
 <style>{ff}\n{_GRADE_COVER_CSS}</style></head><body>
 <div class="deckle"></div><div class="deckle2"></div>
@@ -825,6 +1013,7 @@ class GradeReportVariant:
   <div class="rule"></div>
   <div class="sub">{h(sub)}</div>
 </div>
+{specimens}
 <div class="foot">independently graded · part {part:02d}</div>
 {_grain(0.045)}
 </body></html>"""

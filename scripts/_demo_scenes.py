@@ -136,6 +136,55 @@ def game_scene(theme: str, seed: int = 7, w: int = 1280, h: int = 720) -> Image.
     return img
 
 
+def roblox_hero(seed: int = 7, w: int = 1280, h: int = 720) -> Image.Image:
+    """
+    A Roblox-themed front-page photo: a low-poly world with the classic blocky
+    noob character standing in the foreground. Used as the newspaper hero image.
+    """
+    img = game_scene("obby", seed=seed, w=w, h=h)
+    draw = ImageDraw.Draw(img, "RGBA")
+    cx = w // 2
+
+    YEL = (245, 197, 24)
+    YEL_D = (214, 168, 18)
+    SHIRT = (27, 154, 240)
+    PANTS = (63, 163, 77)
+    BLK = (16, 16, 20)
+
+    # ground shadow
+    sh = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+    ImageDraw.Draw(sh).ellipse([cx - 150, 678, cx + 150, 712], fill=(0, 0, 0, 130))
+    img = Image.alpha_composite(img.convert("RGBA"), sh.filter(ImageFilter.GaussianBlur(10))).convert("RGB")
+    draw = ImageDraw.Draw(img, "RGBA")
+
+    feet_y = 690
+    # legs
+    draw.rectangle([cx - 70, feet_y - 120, cx - 10, feet_y], fill=PANTS)
+    draw.rectangle([cx + 10, feet_y - 120, cx + 70, feet_y], fill=PANTS)
+    # torso
+    draw.rectangle([cx - 86, feet_y - 250, cx + 86, feet_y - 116], fill=SHIRT)
+    draw.rectangle([cx - 86, feet_y - 250, cx + 86, feet_y - 242], fill=(255, 255, 255, 70))  # collar light
+    # arms
+    draw.rectangle([cx - 132, feet_y - 248, cx - 88, feet_y - 122], fill=YEL)
+    draw.rectangle([cx + 88, feet_y - 248, cx + 132, feet_y - 122], fill=YEL)
+    # hands
+    draw.rectangle([cx - 132, feet_y - 122, cx - 88, feet_y - 92], fill=YEL_D)
+    draw.rectangle([cx + 88, feet_y - 122, cx + 132, feet_y - 92], fill=YEL_D)
+    # neck
+    draw.rectangle([cx - 30, feet_y - 262, cx + 30, feet_y - 248], fill=YEL_D)
+    # head
+    draw.rectangle([cx - 78, feet_y - 402, cx + 78, feet_y - 258], fill=YEL)
+    # eyes
+    draw.rectangle([cx - 46, feet_y - 360, cx - 20, feet_y - 326], fill=BLK)
+    draw.rectangle([cx + 20, feet_y - 360, cx + 46, feet_y - 326], fill=BLK)
+    # smile
+    draw.rectangle([cx - 40, feet_y - 306, cx + 40, feet_y - 294], fill=BLK)
+    draw.rectangle([cx - 48, feet_y - 318, cx - 40, feet_y - 300], fill=BLK)
+    draw.rectangle([cx + 40, feet_y - 318, cx + 48, feet_y - 300], fill=BLK)
+
+    return img
+
+
 def game_icon(letter: str, accent: tuple[int, int, int], seed: int = 3,
               size: int = 512) -> Image.Image:
     """A rounded Roblox-style game icon: gradient field + emblem letter."""
