@@ -581,7 +581,9 @@ class CarouselGenerator:
             icon_r = icon.resize((isz, isz), Image.LANCZOS).convert("RGBA")
             mask = Image.new("L", (isz, isz), 0)
             ImageDraw.Draw(mask).rounded_rectangle([0, 0, isz, isz], radius=34, fill=255)
-            img.paste(icon_r.convert("RGB"), (48, 80), mask)
+            # Start at y=250 — TikTok's status bar + app chrome overlay ~200px
+            # at the top of the slide; the old y=80 put the icon in the dead zone.
+            img.paste(icon_r.convert("RGB"), (48, 250), mask)
 
         name_x = 250
         f_name = load_font("bold", 62)
@@ -600,21 +602,21 @@ class CarouselGenerator:
             truncated = True
         if truncated:
             name = name.rstrip() + "…"
-        img = draw_mixed(img, (name_x, 86), name, f_use, (15, 15, 17),
+        img = draw_mixed(img, (name_x, 256), name, f_use, (15, 15, 17),
                          emoji_size=_emoji_px(f_use), anchor="la")
         # Creator + (Roblox-style) plain grey maturity line. Never fabricate the
         # creator: if it's unknown we say "By Roblox creator" rather than falsely
         # crediting Roblox itself (audit M2) — a wrong on-image fact reads as bot
         # content on a format whose whole value is authenticity.
         creator_line = (game.creator or "").strip() or "Roblox creator"
-        img = draw_mixed(img, (name_x, 166), creator_line, f_creator,
+        img = draw_mixed(img, (name_x, 336), creator_line, f_creator,
                          (120, 122, 130), emoji_size=_emoji_px(f_creator), anchor="la")
         draw = ImageDraw.Draw(img)
         mat_label, _ = _maturity(game.genre)
-        draw.text((name_x, 236), f"Maturity: {mat_label}", font=f_mat, fill=(150, 152, 160))
+        draw.text((name_x, 406), f"Maturity: {mat_label}", font=f_mat, fill=(150, 152, 160))
 
         # ── Thumbnail — THE HERO ──────────────────────────────────────
-        thumb_top = 330
+        thumb_top = 500
         thumb_h = 700
         thumb = self._fetch_thumbnail(game.thumbnail_url)
         if thumb:
@@ -697,7 +699,7 @@ class CarouselGenerator:
                                  (28, 28, 32), emoji_size=46, anchor="la")
             draw = ImageDraw.Draw(img)
             desc_y = cy + box_h + 34
-            desc_lines_max = 3   # leave room for the callout
+            desc_lines_max = 2   # leave room for the callout + footer
         else:
             desc_y = cy
 
@@ -715,7 +717,7 @@ class CarouselGenerator:
                 draw.text((48, desc_y + 80 + li * 64), line, font=f_desc, fill=(95, 97, 105))
 
         # Footer: authentic Roblox visit count + (last slide only) a follow chip.
-        foot_y = H - 130
+        foot_y = H - 100
         draw.line([(0, foot_y), (W, foot_y)], fill=(238, 239, 242), width=2)
         f_foot = load_font("medium", 40)
         draw.text((48, foot_y + 40), f"{_format_active(game.visits)} visits", font=f_foot, fill=(150, 152, 160))
