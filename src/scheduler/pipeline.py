@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import asyncio
 import functools
+import json
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
@@ -26,6 +27,7 @@ from src.analytics.feedback_loop import FeedbackLoop
 from src.capture.screenshot_engine import ScreenshotEngine
 from src.config import get_settings
 from src.content.carousel_generator import CarouselGame, CarouselGenerator
+from src.content.gazette_generator import GazetteCarouselGenerator
 from src.content.description_engine import DescriptionEngine
 from src.content.rating_engine import RatingEngine
 from src.content.thumbnail_generator import ThumbnailGenerator
@@ -49,7 +51,15 @@ class Pipeline:
         self._description = DescriptionEngine()
         self._thumbgen = ThumbnailGenerator()
         self._video = VideoAssembler()
-        self._carousel = CarouselGenerator()
+        # Choose carousel renderer based on CAROUSEL_STYLE setting.
+        # "gazette"  → newspaper cover + Gazette review columns (Direction 1+2).
+        # "classic"  → original Roblox-style photo carousel.
+        if self._settings.CAROUSEL_STYLE == "gazette":
+            self._carousel = GazetteCarouselGenerator()
+            log.info("pipeline.carousel_style", style="gazette")
+        else:
+            self._carousel = CarouselGenerator()
+            log.info("pipeline.carousel_style", style="classic")
         self._running = False
         self._carousel_part_counter = 1
         self._warming = False   # a background warm-up (discover→rate→build) is in flight
@@ -451,6 +461,11 @@ class Pipeline:
                 visits=g.visits,
                 description=g.description or "",
                 blurb=c.rating_verdict or "",
+                # Pass AI sub-scores so GazetteCarouselGenerator can derive the
+                # four Gazette letter sub-grades (Fun / Value / Original / Social).
+                # Keys: fun_factor, replayability, originality, visual_quality,
+                #       community — all 0–10 floats from RatingEngine.
+                breakdown=_safe_json_load(c.rating_breakdown),
             )
             for idx, (c, g) in enumerate(batch)
         ]
@@ -877,3 +892,14 @@ class Pipeline:
             return []
         sentences = [s.strip() for s in description.replace("\n", ". ").split(".") if len(s.strip()) > 20]
         return sentences[:count]
+
+
+def _safe_json_load(raw: str | None) -> dict:
+    """Parse a JSON string into a dict; return {} on any failure."""
+    if not raw:
+        return {}
+    try:
+        result = json.loads(raw)
+        return result if isinstance(result, dict) else {}
+    except Exception:
+        return {}

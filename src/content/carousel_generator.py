@@ -138,6 +138,11 @@ class CarouselGame:
     visits: int
     description: str = ""       # real Roblox description (fills the lower card)
     blurb: str = ""            # punchy AI "why it slaps" one-liner (highlighted callout)
+    # AI rating sub-scores (keys: fun_factor, replayability, originality,
+    # visual_quality, community — all 0–10 floats). Used by GazetteCarouselGenerator
+    # to derive the four Gazette sub-grade letters (Fun / Value / Original / Social).
+    # Empty dict = fall back to overall-score-derived grades.
+    breakdown: dict = field(default_factory=dict)
 
 
 @dataclass

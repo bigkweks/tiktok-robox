@@ -29,6 +29,12 @@ class Settings(BaseSettings):
     # like filler. 7.4 = the floor of "WORTH PLAYING" once rounded.
     MIN_CAROUSEL_RATING: float = 7.4
 
+    # ── Carousel style ──────────────────────────────────────────────────
+    # "gazette"  → GazetteCarouselGenerator: newspaper front-page cover +
+    #              Gazette review-column inner slides (Direction 1+2 combined).
+    # "classic"  → CarouselGenerator: original Roblox-style photo carousel.
+    CAROUSEL_STYLE: Literal["gazette", "classic"] = "gazette"
+
     # ── Content generation ───────────────────────────────────────────────
     THUMBNAIL_VARIANTS: int = 2
     # The carousel is the primary product; the 9:16 video is secondary and the
