@@ -117,6 +117,32 @@ def _muted_field(name: str) -> tuple[str, str]:
     return fields[h % len(fields)]
 
 
+def img_to_uri(src) -> str:
+    """
+    Turn a PIL.Image, a file path, or a raw http(s) URL into a value usable
+    directly in CSS `url(...)`.
+
+    - PIL.Image / Path / local file  → embedded base64 data URI (works offline)
+    - http(s) string                  → returned as-is (Chromium fetches it; in
+      the Codespace this is the REAL Roblox homepage thumbnail / icon)
+
+    This is the seam that lets the SAME renderer take a real Roblox screenshot in
+    production and a local raster in the sandbox.
+    """
+    if src is None:
+        return ""
+    if isinstance(src, str):
+        if src.startswith(("http://", "https://", "data:")):
+            return src
+        src = Image.open(src)
+    if isinstance(src, Image.Image):
+        buf = io.BytesIO()
+        src.convert("RGB").save(buf, format="JPEG", quality=88)
+        b64 = base64.b64encode(buf.getvalue()).decode()
+        return f"data:image/jpeg;base64,{b64}"
+    raise TypeError(f"unsupported art source: {type(src)}")
+
+
 def _render_html(html_src: str) -> Image.Image:
     from playwright.sync_api import sync_playwright
 
@@ -188,7 +214,7 @@ _SCOUT_CSS = _SCOUT_BASE + """
 .mast-title em{font-style:italic;font-weight:400;color:var(--ink-soft);}
 .mast-meta{font-size:24px;letter-spacing:.28em;color:var(--ink-faint);text-transform:uppercase;}
 
-/* Art plate — double-bezel, no glow */
+/* Art plate — real in-game capture, double-bezel, no glow */
 .plate-shell{
     position:absolute;top:150px;left:96px;right:96px;height:430px;
     padding:10px;border-radius:26px;
@@ -199,16 +225,29 @@ _SCOUT_CSS = _SCOUT_BASE + """
     width:100%;height:100%;border-radius:18px;overflow:hidden;position:relative;
     box-shadow:inset 0 1px 0 rgba(255,255,255,.06);
 }
-.plate-art{position:absolute;inset:0;}
+.plate-art{position:absolute;inset:0;background-size:cover;background-position:center;}
 .plate-fade{
     position:absolute;inset:0;
-    background:linear-gradient(180deg,transparent 30%,rgba(10,8,6,.55) 100%);
+    background:linear-gradient(180deg,rgba(10,8,6,.05) 0%,transparent 32%,rgba(10,8,6,.62) 100%);
 }
 .plate-tag{
     position:absolute;left:30px;bottom:26px;
     font-family:'Space Grotesk';font-weight:500;font-size:23px;
-    letter-spacing:.3em;text-transform:uppercase;color:rgba(255,255,255,.7);
+    letter-spacing:.3em;text-transform:uppercase;color:rgba(255,255,255,.78);
 }
+/* Real Roblox game icon, inset on the capture */
+.plate-icon{
+    position:absolute;right:26px;bottom:24px;width:104px;height:104px;
+    border-radius:22px;background-size:cover;background-position:center;
+    box-shadow:0 6px 22px rgba(0,0,0,.5),inset 0 0 0 1px rgba(255,255,255,.25);
+}
+/* Swipe-progress ticks (retention affordance) */
+.progress{
+    position:absolute;top:592px;left:96px;right:96px;
+    display:flex;gap:10px;align-items:center;
+}
+.tick{height:4px;border-radius:2px;background:rgba(243,237,226,.16);flex:1;}
+.tick.on{background:#B5512F;}
 
 /* Headline row: serif name + scored numeral */
 .head{
@@ -378,23 +417,40 @@ class ScoutReportVariant:
         self, name: str, name_em: str, creator: str, score: float, verdict: str,
         hours: int, active_label: str, like_pct: int, visits_label: str,
         note1: str, note2: str, part: int, index: int,
+        art=None, icon=None, total: int = 5,
     ) -> str:
         ff = _font_faces()
         h = _html.escape
-        d, m = _muted_field(name)
-        art = f"radial-gradient(130% 100% at 28% 18%, {m} 0%, {d} 62%)"
+        # Real in-game capture fills the plate; gradient only if art is absent.
+        art_uri = img_to_uri(art)
+        if art_uri:
+            plate_bg = f"background-image:url('{art_uri}');"
+        else:
+            d, m = _muted_field(name)
+            plate_bg = f"background:radial-gradient(130% 100% at 28% 18%, {m} 0%, {d} 62%);"
+        icon_uri = img_to_uri(icon)
+        icon_html = (
+            f'<div class="plate-icon" style="background-image:url(\'{icon_uri}\');"></div>'
+            if icon_uri else ""
+        )
+        ticks = "".join(
+            f'<div class="tick{" on" if i < index else ""}"></div>'
+            for i in range(total)
+        )
         name_html = h(name) + (f' <em>{h(name_em)}</em>' if name_em else "")
         return f"""<!DOCTYPE html><html><head><meta charset="utf-8">
 <style>{ff}\n{_SCOUT_CSS}</style></head><body>
 <div class="masthead">
   <div class="mast-title">The Gemvault <em>Scout</em></div>
-  <div class="mast-meta">No. {index:02d} / 05 · Issue {part:02d}</div>
+  <div class="mast-meta">No. {index:02d} / {total:02d} · Issue {part:02d}</div>
 </div>
 <div class="plate-shell"><div class="plate">
-  <div class="plate-art" style="background:{art};"></div>
+  <div class="plate-art" style="{plate_bg}"></div>
   <div class="plate-fade"></div>
-  <div class="plate-tag">Field plate · {index:02d}</div>
+  <div class="plate-tag">In-game capture · {index:02d}</div>
+  {icon_html}
 </div></div>
+<div class="progress">{ticks}</div>
 <div class="head">
   <div class="name-block">
     <div class="kicker">The entry</div>
@@ -455,11 +511,21 @@ body{
 
 _TIER_CSS = _TIER_BASE + """
 .art{position:absolute;inset:0;}
-.art-grad{position:absolute;inset:0;}
+.art-grad{position:absolute;inset:0;background-size:cover;background-position:center;}
+/* Veil reveals the real screenshot up top, deepens to solid for text legibility */
 .art-veil{
     position:absolute;inset:0;
-    background:linear-gradient(180deg,rgba(10,10,12,.62) 0%,rgba(10,10,12,.72) 45%,rgba(10,10,12,.9) 78%,#0A0A0C 100%);
+    background:linear-gradient(180deg,
+        rgba(10,10,12,.12) 0%,rgba(10,10,12,.22) 16%,
+        rgba(10,10,12,.58) 40%,rgba(10,10,12,.86) 68%,#0A0A0C 92%);
 }
+/* A faint brand wash so the screenshot never looks accidental */
+.art-tint{position:absolute;inset:0;mix-blend-mode:soft-light;
+    background:linear-gradient(180deg,rgba(201,162,75,.10),transparent 40%);}
+/* Swipe-progress ticks */
+.progress{position:absolute;top:148px;left:96px;right:96px;display:flex;gap:10px;}
+.tick{height:4px;border-radius:2px;background:rgba(244,241,234,.18);flex:1;}
+.tick.on{background:#C9A24B;}
 .chip{
     position:absolute;top:80px;left:96px;
     font-family:'Space Grotesk';font-weight:500;font-size:25px;
@@ -562,22 +628,34 @@ class TierDropVariant:
     def game_slide_html(
         self, name: str, creator: str, tier: str, why: str,
         visits_label: str, active_label: str, part: int, index: int,
+        art=None, total: int = 5,
     ) -> str:
         ff = _font_faces()
         h = _html.escape
         base_tier = tier.rstrip("+")
         tone, _ = _TIER_TONES.get(base_tier, _TIER_TONES["A"])
-        d, m = _muted_field(name)
-        art = f"radial-gradient(120% 90% at 30% 22%, {m} 0%, {d} 58%)"
+        # Real screenshot fills the whole frame behind the veil.
+        art_uri = img_to_uri(art)
+        if art_uri:
+            art_bg = f"background-image:url('{art_uri}');"
+        else:
+            d, m = _muted_field(name)
+            art_bg = f"background:radial-gradient(120% 90% at 30% 22%, {m} 0%, {d} 58%);"
+        ticks = "".join(
+            f'<div class="tick{" on" if i < index else ""}"></div>'
+            for i in range(total)
+        )
         plus = '<div class="stamp-plus">+</div>' if "+" in tier else ""
         return f"""<!DOCTYPE html><html><head><meta charset="utf-8">
 <style>{ff}\n{_TIER_CSS}</style></head><body>
 <div class="art">
-  <div class="art-grad" style="background:{art};"></div>
+  <div class="art-grad" style="{art_bg}"></div>
+  <div class="art-tint"></div>
   <div class="art-veil"></div>
 </div>
-<div class="chip">Pick {index:02d} / 05</div>
+<div class="chip">Pick {index:02d} / {total:02d}</div>
 <div class="chip-r">Drop {part:02d}</div>
+<div class="progress">{ticks}</div>
 <div class="stage">
   <div class="stamp" style="background:{tone};">
     <div class="stamp-letter">{h(base_tier)}</div>
@@ -645,32 +723,46 @@ _GRADE_CSS = _GRADE_BASE + """
 .game-name{font-family:'Fraunces';font-weight:900;font-size:88px;line-height:.98;letter-spacing:-.02em;color:var(--ink);}
 .creator{font-family:'Fraunces';font-weight:400;font-style:italic;font-size:38px;color:var(--ink-soft);margin-top:18px;}
 
-/* Grade medallion — engraved, double-ruled, no glow */
-.medallion{
-    position:absolute;top:524px;left:50%;transform:translateX(-50%);
-    width:560px;text-align:center;
+/* Grade + Exhibit card — the grade letter beside the real in-game capture */
+.exhibit{
+    position:absolute;top:500px;left:96px;right:96px;height:408px;
+    border:2px solid var(--ink);border-radius:14px;overflow:hidden;
+    display:flex;background:#fff;
 }
-.med-top{font-weight:500;font-size:25px;letter-spacing:.4em;text-transform:uppercase;color:var(--ink-faint);margin-bottom:6px;}
+.ex-grade{
+    width:42%;flex-shrink:0;
+    display:flex;flex-direction:column;align-items:center;justify-content:center;
+    border-right:2px solid var(--ink);padding:18px;
+}
+.med-top{font-weight:500;font-size:22px;letter-spacing:.34em;text-transform:uppercase;color:var(--ink-faint);margin-bottom:2px;text-align:center;}
 .grade{
-    font-family:'Fraunces';font-weight:900;font-size:288px;line-height:.82;
+    font-family:'Fraunces';font-weight:900;font-size:208px;line-height:.82;
     letter-spacing:-.04em;
 }
-.med-rule{width:130px;height:2px;background:var(--ink);margin:14px auto 16px;}
-.med-bottom{font-weight:700;font-size:24px;letter-spacing:.34em;text-transform:uppercase;color:var(--ink-soft);}
+.med-rule{width:96px;height:2px;background:var(--ink);margin:12px auto 12px;}
+.med-bottom{font-weight:700;font-size:21px;letter-spacing:.26em;text-transform:uppercase;color:var(--ink-soft);text-align:center;}
+.ex-photo{flex:1;position:relative;background-size:cover;background-position:center;background-color:#1a1714;}
+.ex-cap{
+    position:absolute;left:0;right:0;bottom:0;
+    background:linear-gradient(transparent,rgba(18,15,12,.82));
+    color:#F4EEE2;padding:42px 24px 20px;
+    font-family:'Space Grotesk';font-weight:500;font-size:21px;
+    letter-spacing:.22em;text-transform:uppercase;
+}
 
 /* Sub-grade ledger */
 .ledger{
-    position:absolute;top:1000px;left:96px;right:96px;
+    position:absolute;top:952px;left:96px;right:96px;
     border-top:1.5px solid var(--ink);border-bottom:1.5px solid var(--ink);
     display:flex;
 }
-.lcol{flex:1;padding:30px 0 28px;text-align:center;border-right:1px solid var(--line);}
+.lcol{flex:1;padding:28px 0 26px;text-align:center;border-right:1px solid var(--line);}
 .lcol:last-child{border-right:none;}
 .lkey{font-weight:500;font-size:23px;letter-spacing:.22em;text-transform:uppercase;color:var(--ink-faint);margin-bottom:14px;}
 .lval{font-family:'Fraunces';font-weight:900;font-size:60px;line-height:1;}
 
 /* Assessment */
-.assess{position:absolute;top:1200px;left:96px;right:96px;}
+.assess{position:absolute;top:1156px;left:96px;right:96px;}
 .assess-label{font-weight:500;font-size:24px;letter-spacing:.34em;text-transform:uppercase;color:var(--ember);margin-bottom:22px;}
 .assess-text{font-family:'Fraunces';font-weight:400;font-size:48px;line-height:1.38;color:var(--ink);}
 
@@ -740,10 +832,13 @@ class GradeReportVariant:
     def game_slide_html(
         self, name: str, creator: str, overall: str, subgrades: dict[str, str],
         assessment: str, visits_label: str, recommended: bool, part: int, index: int,
+        art=None,
     ) -> str:
         ff = _font_faces()
         h = _html.escape
         ink = _GRADE_INK.get(overall, "#A6332B")
+        art_uri = img_to_uri(art)
+        photo_bg = f"background-image:url('{art_uri}');" if art_uri else ""
 
         def sg_ink(g: str) -> str:
             return _GRADE_INK.get(g, "#1C1813")
@@ -780,11 +875,16 @@ class GradeReportVariant:
   <div class="game-name">{h(name)}</div>
   <div class="creator">developed by {h(creator)}</div>
 </div>
-<div class="medallion">
-  <div class="med-top">Overall grade</div>
-  <div class="grade" style="color:{ink};">{h(overall)}</div>
-  <div class="med-rule" style="background:{ink};"></div>
-  <div class="med-bottom">Final assessment</div>
+<div class="exhibit">
+  <div class="ex-grade">
+    <div class="med-top">Overall</div>
+    <div class="grade" style="color:{ink};">{h(overall)}</div>
+    <div class="med-rule" style="background:{ink};"></div>
+    <div class="med-bottom">Final grade</div>
+  </div>
+  <div class="ex-photo" style="{photo_bg}">
+    <div class="ex-cap">Exhibit {index:02d} · in-game capture</div>
+  </div>
 </div>
 <div class="ledger">{ledger}</div>
 <div class="assess">
