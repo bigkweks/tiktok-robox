@@ -143,6 +143,34 @@ def img_to_uri(src) -> str:
     raise TypeError(f"unsupported art source: {type(src)}")
 
 
+# Newspaper-press duotone treatments — map any photo's luminance into the cream→
+# ink range of the Gazette theme so a real Roblox screenshot reads as a printed
+# front-page photo instead of a saturated game thumbnail. (shadow, highlight)
+_DUOTONES = {
+    "newsprint": ((24, 21, 17), (244, 238, 226)),   # neutral black-ink press
+    "sepia":     ((42, 26, 15), (247, 237, 215)),   # warm vintage press
+    "ember":     ((58, 19, 16), (245, 237, 223)),   # red-ink / ember undertone
+}
+
+
+def theme_duotone(src, treatment: str = "newsprint", contrast: float = 1.16):
+    """
+    Return a duotone PIL image mapped into the Gazette palette. Accepts a
+    PIL.Image or a path. Use this on the REAL Roblox thumbnail so its colours
+    match the newspaper theme before it becomes the front-page hero.
+    """
+    from PIL import ImageEnhance
+    if isinstance(src, str):
+        src = Image.open(src)
+    g = ImageEnhance.Contrast(src.convert("L")).enhance(contrast)
+    dark, light = _DUOTONES.get(treatment, _DUOTONES["newsprint"])
+    chans = []
+    for k in range(3):
+        lut = [int(dark[k] + (light[k] - dark[k]) * i / 255) for i in range(256)]
+        chans.append(g.point(lut))
+    return Image.merge("RGB", chans)
+
+
 def _render_html(html_src: str) -> Image.Image:
     from playwright.sync_api import sync_playwright
 
@@ -909,8 +937,7 @@ _NEWS_COVER_CSS = _GRADE_BASE + """
 }
 .photo-wrap{flex:1;min-height:0;position:relative;overflow:hidden;}
 .photo{
-    position:absolute;inset:0;background-size:cover;background-position:center 40%;
-    filter:grayscale(.66) contrast(1.14) sepia(.42) brightness(.98);
+    position:absolute;inset:0;background-size:cover;background-position:38% 42%;
 }
 .halftone{
     position:absolute;inset:0;mix-blend-mode:multiply;opacity:.22;
@@ -940,11 +967,17 @@ class GradeReportVariant:
         self, headline: str, deck: str, caption: str, part: int,
         hero=None, masthead: str = "The Gemvault Gazette",
         kicker: str = "The Roblox Desk · Exclusive",
+        photo_filter: str = "grayscale(.66) contrast(1.14) sepia(.42) brightness(.98)",
     ) -> str:
         ff = _font_faces()
         h = _html.escape
         hero_uri = img_to_uri(hero)
-        photo_bg = f"background-image:url('{hero_uri}');" if hero_uri else ""
+        # When `hero` is already a theme_duotone image, pass photo_filter="none"
+        # so the baked treatment isn't double-processed by the CSS filter.
+        photo_bg = (
+            f"background-image:url('{hero_uri}');filter:{photo_filter};"
+            if hero_uri else ""
+        )
         return f"""<!DOCTYPE html><html><head><meta charset="utf-8">
 <style>{ff}\n{_NEWS_COVER_CSS}</style></head><body>
 <div class="deckle"></div><div class="deckle2"></div>
