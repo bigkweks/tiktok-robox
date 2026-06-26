@@ -510,21 +510,22 @@ class CarouselGenerator:
                    + gap_rob_gm + games_h + gap_gm_ed + edition_h)
 
         # Centre the FULL composition (both stickers + text) as one unit.
-        sticker_sz = 420
+        top_sz = 500
+        bot_sz = 380
         gap_sticker_text = 28
 
-        total_h = sticker_sz + gap_sticker_text + block_h + gap_sticker_text + sticker_sz
+        total_h = top_sz + gap_sticker_text + block_h + gap_sticker_text + bot_sz
         comp_top = (H - total_h) // 2
 
-        top_center_y = comp_top + sticker_sz // 2
-        text_top = comp_top + sticker_sz + gap_sticker_text
+        top_center_y = comp_top + top_sz // 2
+        text_top = comp_top + top_sz + gap_sticker_text
         edition_bottom = text_top + block_h
-        bot_center_y = edition_bottom + gap_sticker_text + sticker_sz // 2
+        bot_center_y = edition_bottom + gap_sticker_text + bot_sz // 2
 
         # Top sticker: nudged right; bottom sticker: nudged left.
-        sticker_offset = 150
+        sticker_offset = 210
         # ── Sticker: top ─────────────────────────────────────────────────
-        _paste_sticker(img, top_sticker, cx + sticker_offset, top_center_y, sticker_sz)
+        _paste_sticker(img, top_sticker, cx + sticker_offset, top_center_y, top_sz)
         draw = ImageDraw.Draw(img)
 
         # ── Text block ───────────────────────────────────────────────────
@@ -550,7 +551,7 @@ class CarouselGenerator:
         draw = ImageDraw.Draw(img)
 
         # ── Sticker: bottom ──────────────────────────────────────────────
-        _paste_sticker(img, bot_sticker, cx - sticker_offset, bot_center_y, sticker_sz)
+        _paste_sticker(img, bot_sticker, cx - sticker_offset, bot_center_y, bot_sz)
 
         return img
 
