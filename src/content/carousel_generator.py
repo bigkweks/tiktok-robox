@@ -522,7 +522,7 @@ class CarouselGenerator:
         bot_center_y = edition_bottom + gap_sticker_text + sticker_sz // 2
 
         # Top sticker: nudged right; bottom sticker: nudged left.
-        sticker_offset = 90
+        sticker_offset = 150
         # ── Sticker: top ─────────────────────────────────────────────────
         _paste_sticker(img, top_sticker, cx + sticker_offset, top_center_y, sticker_sz)
         draw = ImageDraw.Draw(img)
