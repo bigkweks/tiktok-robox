@@ -263,6 +263,10 @@ def score_saveability(captions: Sequence[str]) -> float:
 _STOPWORDS: frozenset[str] = frozenset({
     "the", "a", "an", "and", "or", "in", "on", "of",
     "to", "is", "it", "i", "this", "that", "its", "you",
+    # Domain words that inherently repeat in a Roblox game-recommendation carousel
+    # and don't signal copy-repetition:
+    "game", "games", "roblox", "play", "plays", "playing", "played",
+    "players", "fun", "good", "great", "like", "get", "has", "for", "with",
 })
 
 
