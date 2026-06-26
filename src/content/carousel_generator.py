@@ -474,13 +474,20 @@ class CarouselGenerator:
         block_h = (actually_h + gap_ac_rob + roblox_h
                    + gap_rob_gm + games_h + gap_gm_ed + edition_h)
 
-        # Centre the text block at ~48% of canvas height.
-        text_top = int(H * 0.48) - block_h // 2
+        # Centre the FULL composition (both emojis + text) as one unit so
+        # the top and bottom margins are equal — not just the text block.
+        emoji_sz = 290
+        gap_emoji_text = 32   # tight gap between emoji edge and text block
+
+        total_h = emoji_sz + gap_emoji_text + block_h + gap_emoji_text + emoji_sz
+        comp_top = (H - total_h) // 2
+
+        top_center_y = comp_top + emoji_sz // 2
+        text_top = comp_top + emoji_sz + gap_emoji_text
+        edition_bottom = text_top + block_h
+        bot_center_y = edition_bottom + gap_emoji_text + emoji_sz // 2
 
         # ── Big emoji: top ──────────────────────────────────────────────
-        emoji_sz = 290
-        top_center_y = text_top - emoji_sz // 2 - 60
-        top_center_y = max(emoji_sz // 2 + 60, top_center_y)
         img = paste_emoji(img, top_emoji, cx, top_center_y, emoji_sz)
         # paste_emoji returns a NEW image — must recreate draw or text draws on stale canvas
         draw = ImageDraw.Draw(img)
@@ -510,11 +517,8 @@ class CarouselGenerator:
         img = draw_mixed(img, (cx - ew // 2, y), edition_line,
                          f_edition, ink, emoji_size=em_px, anchor="la")
         draw = ImageDraw.Draw(img)  # draw_mixed also returns a new image
-        edition_bottom = y + edition_h
 
         # ── Big emoji: bottom ───────────────────────────────────────────
-        bot_center_y = edition_bottom + emoji_sz // 2 + 60
-        bot_center_y = min(H - emoji_sz // 2 - 60, bot_center_y)
         img = paste_emoji(img, bottom_emoji, cx, bot_center_y, emoji_sz)
 
         return img
