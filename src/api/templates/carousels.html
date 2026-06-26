@@ -161,6 +161,159 @@
       <button class="btn btn-sm btn-outline-secondary mt-2" onclick="copyCaption('caption-{{ post.id }}', this)">Copy again</button>
     </details>
     {% endif %}
+
+    {# ── Analytics section ──────────────────────────────────────────────
+       Shown for approved + posted carousels. If metrics have already been
+       logged they display as a compact summary; the form is always a click
+       away so the creator can update numbers as the post ages.
+    ── #}
+    {% if post.status in ('approved', 'posted') %}
+    <div class="carousel-analytics pt-3 mt-3" style="border-top:1px solid var(--border)">
+
+      {# ── Metrics summary (visible when analytics have been saved) ── #}
+      {% if post.tiktok_views is not none %}
+      <div id="am-{{ post.id }}">
+        <div class="d-flex align-items-center justify-content-between mb-2">
+          <span style="font-size:0.72rem;font-weight:600;text-transform:uppercase;letter-spacing:0.07em;color:var(--text-dim)">Performance</span>
+          <button class="btn btn-link py-0 px-0 text-muted" style="font-size:0.72rem"
+                  onclick="showAnalyticsEdit({{ post.id }})">
+            <i class="bi bi-pencil me-1"></i>Edit
+          </button>
+        </div>
+
+        {# Primary stat: views #}
+        <div class="d-flex align-items-baseline gap-1 mb-2">
+          <span style="font-size:1.75rem;font-weight:700;line-height:1;color:var(--text)">
+            {{ '{:,}'.format(post.tiktok_views) }}
+          </span>
+          <span style="font-size:0.75rem;color:var(--text-dim)">views</span>
+          {% if post.hours_since_post %}
+          <span class="ms-2" style="font-size:0.75rem;color:var(--text-dim)">· {{ post.hours_since_post }}h ago</span>
+          {% endif %}
+        </div>
+
+        {# Secondary metrics row #}
+        <div class="d-flex flex-wrap gap-3 mb-2">
+          <div class="kv">
+            <span class="kv-label">Likes</span>
+            <span class="kv-value">{{ '{:,}'.format(post.tiktok_likes or 0) }}</span>
+          </div>
+          <div class="kv">
+            <span class="kv-label">Comments</span>
+            <span class="kv-value">{{ '{:,}'.format(post.tiktok_comments or 0) }}</span>
+          </div>
+          <div class="kv">
+            <span class="kv-label">Shares</span>
+            <span class="kv-value">{{ '{:,}'.format(post.tiktok_shares or 0) }}</span>
+          </div>
+          <div class="kv">
+            <span class="kv-label">Saves</span>
+            <span class="kv-value fw-semibold">{{ '{:,}'.format(post.tiktok_saves or 0) }}</span>
+          </div>
+          <div class="kv">
+            <span class="kv-label">Follows</span>
+            <span class="kv-value fw-bold" style="color:var(--success)">+{{ '{:,}'.format(post.tiktok_follows or 0) }}</span>
+          </div>
+        </div>
+
+        {# Derived rates — the signals the learning system optimises for #}
+        {% if post.tiktok_views > 0 %}
+        {% set save_pct  = (post.tiktok_saves  or 0) / post.tiktok_views * 100 %}
+        {% set follow_pct = (post.tiktok_follows or 0) / post.tiktok_views * 100 %}
+        {% set eng_pct   = ((post.tiktok_likes or 0) + (post.tiktok_comments or 0) + (post.tiktok_shares or 0) + (post.tiktok_saves or 0)) / post.tiktok_views * 100 %}
+        <div class="d-flex flex-wrap gap-3">
+          <span style="font-size:0.78rem;color:var(--text-dim)">
+            Save rate
+            <strong style="color:{% if save_pct >= 1.0 %}var(--success){% elif save_pct >= 0.3 %}var(--text){% else %}var(--text-dim){% endif %}">
+              {{ '%.2f' | format(save_pct) }}%
+            </strong>
+          </span>
+          <span style="font-size:0.78rem;color:var(--text-dim)">
+            Follow rate
+            <strong style="color:{% if follow_pct >= 0.2 %}var(--success){% elif follow_pct >= 0.05 %}var(--text){% else %}var(--text-dim){% endif %}">
+              {{ '%.3f' | format(follow_pct) }}%
+            </strong>
+          </span>
+          <span style="font-size:0.78rem;color:var(--text-dim)">
+            Engagement
+            <strong style="color:var(--text)">{{ '%.2f' | format(eng_pct) }}%</strong>
+          </span>
+        </div>
+        {% endif %}
+      </div>
+      {% endif %}
+
+      {# ── Log / edit form ── #}
+      <div id="af-{{ post.id }}"{% if post.tiktok_views is not none %} style="display:none"{% endif %}>
+
+        {% if post.tiktok_views is none %}
+        <div class="d-flex align-items-center justify-content-between mb-2">
+          <span style="font-size:0.72rem;font-weight:600;text-transform:uppercase;letter-spacing:0.07em;color:var(--text-dim)">
+            {% if post.status == 'posted' %}Log performance{% else %}Log performance (once posted){% endif %}
+          </span>
+        </div>
+        {% else %}
+        <div class="d-flex align-items-center justify-content-between mb-2">
+          <span style="font-size:0.72rem;font-weight:600;text-transform:uppercase;letter-spacing:0.07em;color:var(--text-dim)">Update performance</span>
+          <button class="btn btn-link py-0 px-0 text-muted" style="font-size:0.72rem"
+                  onclick="hideAnalyticsEdit({{ post.id }})">Cancel</button>
+        </div>
+        {% endif %}
+
+        <div class="row g-2 mb-2">
+          <div class="col-6 col-sm-4 col-xl-2">
+            <label class="form-label mb-1" style="font-size:0.73rem">Views</label>
+            <input type="number" id="av-{{ post.id }}" class="form-control form-control-sm"
+                   value="{{ post.tiktok_views if post.tiktok_views is not none else 0 }}" min="0">
+          </div>
+          <div class="col-6 col-sm-4 col-xl-2">
+            <label class="form-label mb-1" style="font-size:0.73rem">Likes</label>
+            <input type="number" id="al-{{ post.id }}" class="form-control form-control-sm"
+                   value="{{ post.tiktok_likes or 0 }}" min="0">
+          </div>
+          <div class="col-6 col-sm-4 col-xl-2">
+            <label class="form-label mb-1" style="font-size:0.73rem">Comments</label>
+            <input type="number" id="acom-{{ post.id }}" class="form-control form-control-sm"
+                   value="{{ post.tiktok_comments or 0 }}" min="0">
+          </div>
+          <div class="col-6 col-sm-4 col-xl-2">
+            <label class="form-label mb-1" style="font-size:0.73rem">Shares</label>
+            <input type="number" id="ash-{{ post.id }}" class="form-control form-control-sm"
+                   value="{{ post.tiktok_shares or 0 }}" min="0">
+          </div>
+          <div class="col-6 col-sm-4 col-xl-2">
+            <label class="form-label mb-1" style="font-size:0.73rem">Saves</label>
+            <input type="number" id="asv-{{ post.id }}" class="form-control form-control-sm"
+                   value="{{ post.tiktok_saves or 0 }}" min="0">
+          </div>
+          <div class="col-6 col-sm-4 col-xl-2">
+            <label class="form-label mb-1" style="font-size:0.73rem">Follows</label>
+            <input type="number" id="afo-{{ post.id }}" class="form-control form-control-sm"
+                   value="{{ post.tiktok_follows or 0 }}" min="0">
+          </div>
+          <div class="col-6 col-sm-4 col-xl-2">
+            <label class="form-label mb-1" style="font-size:0.73rem">
+              Hours since posted
+              <span class="text-muted" style="font-weight:400">· for context</span>
+            </label>
+            <input type="number" id="aho-{{ post.id }}" class="form-control form-control-sm"
+                   value="{{ post.hours_since_post or 24 }}" min="0"
+                   {% if post.posted_at_iso %}data-posted-at="{{ post.posted_at_iso }}"{% endif %}>
+          </div>
+        </div>
+
+        <div class="d-flex align-items-center gap-2 flex-wrap">
+          <button class="btn btn-sm btn-primary"
+                  onclick="logCarouselAnalytics({{ post.id }}, this)">
+            <i class="bi bi-bar-chart-line me-1"></i>{% if post.tiktok_views is not none %}Update{% else %}Save metrics{% endif %}
+          </button>
+          <span id="ar-{{ post.id }}" style="font-size:0.8rem"></span>
+        </div>
+      </div>
+
+    </div>
+    {% endif %}
+
   </div>
 </div>
 {% endfor %}
@@ -292,6 +445,76 @@ function copyCaption(elId, btn) {
       btn.classList.add('btn-outline-secondary');
     }, 2000);
   });
+}
+
+// ── Carousel analytics ──────────────────────────────────────────────────────
+
+// When the page loads, auto-fill "hours since post" from the posted_at
+// timestamp on any analytics input that hasn't been manually set yet.
+document.addEventListener('DOMContentLoaded', () => {
+  document.querySelectorAll('[data-posted-at]').forEach(input => {
+    const val = parseInt(input.value) || 0;
+    // Only auto-fill when it's the 24h placeholder default (not a saved value)
+    if (val === 24) {
+      try {
+        const posted = new Date(input.dataset.postedAt + (input.dataset.postedAt.includes('T') ? 'Z' : ''));
+        const hours = Math.round((Date.now() - posted.getTime()) / 3_600_000);
+        if (hours > 0) input.value = hours;
+      } catch (_) {}
+    }
+  });
+});
+
+function showAnalyticsEdit(id) {
+  const summary = document.getElementById('am-' + id);
+  const form    = document.getElementById('af-' + id);
+  if (summary) summary.style.display = 'none';
+  if (form)    form.style.display    = '';
+}
+
+function hideAnalyticsEdit(id) {
+  const summary = document.getElementById('am-' + id);
+  const form    = document.getElementById('af-' + id);
+  if (summary) summary.style.display = '';
+  if (form)    form.style.display    = 'none';
+}
+
+async function logCarouselAnalytics(id, btn) {
+  const v = k => parseInt(document.getElementById(k + id)?.value) || 0;
+  const payload = {
+    views:           v('av-'),
+    likes:           v('al-'),
+    comments:        v('acom-'),
+    shares:          v('ash-'),
+    saves:           v('asv-'),
+    follows:         v('afo-'),
+    hours_since_post: v('aho-'),
+  };
+  const resultEl = document.getElementById('ar-' + id);
+  const original = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Saving…';
+
+  try {
+    const r = await fetch(`/carousel/${id}/log-analytics`, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(payload),
+    });
+    const data = await r.json();
+    if (r.ok) {
+      resultEl.innerHTML = '<span class="text-success"><i class="bi bi-check-circle me-1"></i>Saved</span>';
+      setTimeout(() => location.reload(), 700);
+    } else {
+      resultEl.innerHTML = `<span class="text-danger"><i class="bi bi-x-circle me-1"></i>${data.detail || 'Error saving'}</span>`;
+      btn.disabled = false;
+      btn.innerHTML = original;
+    }
+  } catch (e) {
+    resultEl.innerHTML = '<span class="text-danger">Network error</span>';
+    btn.disabled = false;
+    btn.innerHTML = original;
+  }
 }
 </script>
 {% endblock %}

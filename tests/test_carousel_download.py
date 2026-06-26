@@ -49,10 +49,15 @@ def test_carousels_page_renders_share_button():
     post = {
         "id": 7, "part_number": 3, "edition": "Anime edition", "status": "approved",
         "caption": "cap", "created_at": __import__("datetime").datetime(2026, 6, 24, 12, 0),
+        "posted_at": None, "posted_at_iso": None,
         "slide_paths_list": ["output/carousels/part003/slide_00.png"],
         "slide_urls": ["/output/carousels/part003/slide_00.png",
                        "/output/carousels/part003/slide_01.png"],
         "hashtags_str": "#a #b",
+        "review_score": None, "review": None,
+        "tiktok_views": None, "tiktok_likes": None, "tiktok_comments": None,
+        "tiktok_shares": None, "tiktok_saves": None, "tiktok_follows": None,
+        "hours_since_post": None, "analytics_recorded_at": None, "generation_id": None,
     }
     html = env.get_template("carousels.html").render(
         request=_Req("/carousels"),

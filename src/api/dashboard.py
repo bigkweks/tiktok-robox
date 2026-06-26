@@ -309,6 +309,13 @@ async def carousels_page(request: Request):
                 review = json.loads(p.review_summary)
             except Exception:
                 review = None
+        posted_at = getattr(p, "posted_at", None)
+        hours_since_post_val = getattr(p, "hours_since_post", None)
+        # Auto-compute default hours since post from posted_at when not yet saved.
+        if hours_since_post_val is None and posted_at:
+            delta = datetime.utcnow() - posted_at.replace(tzinfo=None) if posted_at.tzinfo else datetime.utcnow() - posted_at
+            hours_since_post_val = max(0, int(delta.total_seconds() / 3600))
+
         enriched.append({
             "id": p.id,
             "edition": p.edition,
@@ -316,11 +323,23 @@ async def carousels_page(request: Request):
             "status": p.status,
             "caption": p.caption,
             "created_at": p.created_at,
+            "posted_at": posted_at,
+            "posted_at_iso": posted_at.isoformat() if posted_at else None,
             "slide_paths_list": slide_paths_list,
             "slide_urls": slide_urls,
             "hashtags_str": " ".join(hashtags_list),
             "review_score": getattr(p, "review_score", None),
             "review": review,
+            # TikTok analytics logged by the creator after posting
+            "tiktok_views": getattr(p, "tiktok_views", None),
+            "tiktok_likes": getattr(p, "tiktok_likes", None),
+            "tiktok_comments": getattr(p, "tiktok_comments", None),
+            "tiktok_shares": getattr(p, "tiktok_shares", None),
+            "tiktok_saves": getattr(p, "tiktok_saves", None),
+            "tiktok_follows": getattr(p, "tiktok_follows", None),
+            "hours_since_post": hours_since_post_val,
+            "analytics_recorded_at": getattr(p, "analytics_recorded_at", None),
+            "generation_id": getattr(p, "generation_id", None),
         })
 
     return templates.TemplateResponse(request, "carousels.html", {
@@ -571,6 +590,77 @@ class AnalyticsPayload(BaseModel):
     avg_watch_time_s: float = 0.0
     video_duration_s: float = 21.5
     thumbnail_variant: str = "A"
+
+
+class CarouselAnalyticsPayload(BaseModel):
+    views: int
+    likes: int = 0
+    comments: int = 0
+    shares: int = 0
+    saves: int = 0
+    follows: int = 0
+    hours_since_post: int = 0
+
+
+@app.post("/carousel/{carousel_id}/log-analytics")
+async def log_carousel_analytics(carousel_id: int, payload: CarouselAnalyticsPayload):
+    """Record TikTok analytics for a carousel directly from the carousels page.
+
+    Stores the metrics on the CarouselPost itself (carousel-level, not per-game)
+    and feeds the realised performance back into the learning system via
+    PerformanceStore.update_outcome so future generation can learn from it.
+    """
+    from datetime import timezone
+    generation_id = None
+    async with get_session() as session:
+        post = await session.get(CarouselPost, carousel_id)
+        if not post:
+            raise HTTPException(404, "Carousel not found")
+        post.tiktok_views = payload.views
+        post.tiktok_likes = payload.likes
+        post.tiktok_comments = payload.comments
+        post.tiktok_shares = payload.shares
+        post.tiktok_saves = payload.saves
+        post.tiktok_follows = payload.follows
+        post.hours_since_post = payload.hours_since_post
+        post.analytics_recorded_at = datetime.now(timezone.utc)
+        generation_id = getattr(post, "generation_id", None)
+
+    log.info(
+        "carousel.analytics.recorded",
+        carousel_id=carousel_id,
+        views=payload.views,
+        follows=payload.follows,
+        saves=payload.saves,
+    )
+
+    # Feed realised performance back into the learning corpus so the system
+    # gradually learns which cover archetypes / hook families actually drive views
+    # and follows, not just proxy quality scores.
+    if generation_id and payload.views > 0:
+        try:
+            from src.learning import PerformanceStore  # noqa: PLC0415
+            # performance_index in [0, 1]: weighted composite of the signals
+            # the creator actually cares about — follows are the goal, saves the
+            # leading indicator, engagement the baseline.
+            save_rate = payload.saves / payload.views
+            follow_rate = payload.follows / payload.views
+            eng_rate = (payload.likes + payload.comments + payload.shares) / payload.views
+            performance_index = min(1.0, save_rate * 50 + follow_rate * 200 + eng_rate * 5)
+            PerformanceStore().update_outcome(generation_id, {
+                "performance_index": performance_index,
+                "samples": payload.views,
+                "saves": payload.saves,
+                "follows": payload.follows,
+            })
+            log.info("carousel.analytics.learning_updated",
+                     carousel_id=carousel_id,
+                     generation_id=generation_id,
+                     performance_index=round(performance_index, 4))
+        except Exception as exc:
+            log.warning("carousel.analytics.learning_update_failed", error=str(exc))
+
+    return {"status": "recorded", "carousel_id": carousel_id}
 
 
 @app.post("/analytics/ingest")

@@ -262,6 +262,17 @@ class CarouselPost(Base):
     # ── Lifecycle flags (carousel-centric analytics) ───────────────────
     exported_at: Mapped[Optional[datetime]] = mapped_column(DateTime)
 
+    # ── TikTok analytics (logged by the creator after posting) ─────────
+    # Stored at the carousel level (the whole 6-slide post), not per-game.
+    tiktok_views: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    tiktok_likes: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    tiktok_comments: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    tiktok_shares: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    tiktok_saves: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    tiktok_follows: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    hours_since_post: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    analytics_recorded_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+
     created_at: Mapped[datetime] = mapped_column(DateTime, default=func.now())
 
 

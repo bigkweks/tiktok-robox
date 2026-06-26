@@ -75,6 +75,15 @@ async def init_db() -> None:
             await _sqlite_add_column_if_missing(conn, "carousel_posts", "exported_at", "DATETIME")
             await _sqlite_add_column_if_missing(conn, "games", "times_carouseled", "INTEGER DEFAULT 0")
             await _sqlite_add_column_if_missing(conn, "games", "last_carouseled_at", "DATETIME")
+            # Carousel-level TikTok analytics (logged by creator after posting)
+            await _sqlite_add_column_if_missing(conn, "carousel_posts", "tiktok_views", "INTEGER")
+            await _sqlite_add_column_if_missing(conn, "carousel_posts", "tiktok_likes", "INTEGER")
+            await _sqlite_add_column_if_missing(conn, "carousel_posts", "tiktok_comments", "INTEGER")
+            await _sqlite_add_column_if_missing(conn, "carousel_posts", "tiktok_shares", "INTEGER")
+            await _sqlite_add_column_if_missing(conn, "carousel_posts", "tiktok_saves", "INTEGER")
+            await _sqlite_add_column_if_missing(conn, "carousel_posts", "tiktok_follows", "INTEGER")
+            await _sqlite_add_column_if_missing(conn, "carousel_posts", "hours_since_post", "INTEGER")
+            await _sqlite_add_column_if_missing(conn, "carousel_posts", "analytics_recorded_at", "DATETIME")
     log.info("database.initialized")
 
 

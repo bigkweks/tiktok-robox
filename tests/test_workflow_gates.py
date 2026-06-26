@@ -33,11 +33,15 @@ def _post(status: str) -> dict:
     return {
         "id": 1, "part_number": 3, "edition": "Hidden Gems", "status": status,
         "caption": "actually good roblox games to play", "created_at": datetime(2026, 6, 25, 12, 0),
+        "posted_at": None, "posted_at_iso": None,
         "slide_paths_list": ["output/carousels/p/slide_00.png"],
         "slide_urls": ["/output/carousels/p/slide_00.png"],
         "hashtags_str": "#roblox #robloxgames",
         "review_score": 84.0,
         "review": {"reviewers": [{"name": "Growth Strategist", "score": 80}]},
+        "tiktok_views": None, "tiktok_likes": None, "tiktok_comments": None,
+        "tiktok_shares": None, "tiktok_saves": None, "tiktok_follows": None,
+        "hours_since_post": None, "analytics_recorded_at": None, "generation_id": None,
     }
 
 
