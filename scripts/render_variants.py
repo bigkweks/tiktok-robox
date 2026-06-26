@@ -1,11 +1,10 @@
 #!/usr/bin/env python3
 """
-Render demo slides for all three carousel variants.
+Render demo slides for all three carousel variants (editorial v2).
 
 Usage:  python scripts/render_variants.py
 
-Outputs slides to output/variant_demos/  — one folder per variant.
-Each variant gets: cover + 1 demo game slide.
+Outputs to output/variant_demos/ — one folder per variant.
 """
 from __future__ import annotations
 
@@ -21,158 +20,128 @@ from src.content.carousel_variants import (
     _render_html,
 )
 
-
-# ── Demo game data ────────────────────────────────────────────────────────────
-
-DEMO_GAME_1 = {
-    "name": "Tower of Misery",
-    "creator": "xXBuilderXx",
-    "score": 9.2,
-    "verdict": "the most mechanically satisfying obby on the platform right now",
-    "hours_tested": 23,
-    "active": 14,
-    "like_pct": 94,
-    "visits_m": 3.7,
-    "why1": "checkpoints feel earned, not handed out — real tension",
-    "why2": "surprisingly polished level design for a solo dev",
-    "tier": "S",
-    "why_tier": "3 hours in and i genuinely could not log off",
-    "overall_grade": "S",
-    "subgrades": {"Fun": "S", "Value": "A+", "Unique": "A+", "Social": "B"},
-    "assessment": "Mechanically sound in ways most funded studios miss. Tower design alone earns the S.",
-    "recommended": True,
-}
-
-DEMO_GAME_2 = {
-    "name": "Nocturnia: Shadow Realms",
-    "creator": "DarkCraft Studios",
-    "score": 8.6,
-    "verdict": "horror that actually scared me — twice",
-    "hours_tested": 17,
-    "active": 8,
-    "like_pct": 89,
-    "visits_m": 1.2,
-    "why1": "atmosphere is genuinely unsettling — uses sound design most Roblox horror ignores",
-    "why2": "each area tells its own story without a single text block",
-    "tier": "A+",
-    "why_tier": "best horror atmosphere since the early Doors days",
-    "overall_grade": "A+",
-    "subgrades": {"Fun": "A+", "Value": "S", "Unique": "S", "Social": "C"},
-    "assessment": "Exceeds expectations in atmosphere and worldbuilding. Solo play is where this shines.",
-    "recommended": True,
-}
-
 OUT = Path("output/variant_demos")
 
 
-def render_variant1():
+def render_scout():
     v = ScoutReportVariant()
     folder = OUT / "1_scout_report"
     folder.mkdir(parents=True, exist_ok=True)
 
-    print("  ▸ Scout Report — cover …")
-    cover = v.cover_html(
-        hook="games i spent 23+ hours testing so you don't have to",
-        value="actually good roblox games to play",
+    print("  ▸ cover …")
+    _render_html(v.cover_html(
+        hook_main="The games",
+        hook_em="worth your night",
+        sub="five Roblox titles I actually sat down and played — "
+            "logged, scored, and written up.",
         part=12,
-    )
-    _render_html(cover).save(str(folder / "slide_00_cover.png"))
+    )).save(str(folder / "slide_00_cover.png"))
 
-    print("  ▸ Scout Report — game slide …")
-    g = DEMO_GAME_1
-    slide = v.game_slide_html(
-        name=g["name"], creator=g["creator"], score=g["score"],
-        verdict=g["verdict"], hours_tested=g["hours_tested"],
-        active=g["active"], like_pct=g["like_pct"],
-        visits_m=g["visits_m"], why1=g["why1"], why2=g["why2"],
+    print("  ▸ game slide …")
+    _render_html(v.game_slide_html(
+        name="Tower of",
+        name_em="Misery",
+        creator="xXBuilderXx",
+        score=9.2,
+        verdict="the most mechanically honest obby on the platform right now — "
+                "every checkpoint is earned",
+        hours=23,
+        active_label="14K",
+        like_pct=94,
+        visits_label="3.7M",
+        note1="checkpoints feel earned, never handed out — real tension on every jump",
+        note2="level design is sharper than most studio-funded obbies",
         part=12, index=1,
-    )
-    _render_html(slide).save(str(folder / "slide_01_game.png"))
-    print(f"  ✓ Scout Report → {folder}")
+    )).save(str(folder / "slide_01_game.png"))
+    print(f"  ✓ {folder}")
 
 
-def render_variant2():
+def render_tier():
     v = TierDropVariant()
     folder = OUT / "2_tier_drop"
     folder.mkdir(parents=True, exist_ok=True)
 
-    print("  ▸ Tier Drop — cover …")
-    cover = v.cover_html(
-        hook="you're sleeping on every single one of these",
+    print("  ▸ cover …")
+    _render_html(v.cover_html(
+        tagline="you have been sleeping on every single one of these",
         part=12,
-    )
-    _render_html(cover).save(str(folder / "slide_00_cover.png"))
+    )).save(str(folder / "slide_00_cover.png"))
 
-    print("  ▸ Tier Drop — S-tier game slide …")
-    g = DEMO_GAME_1
-    slide_s = v.game_slide_html(
-        name=g["name"], creator=g["creator"],
-        tier="S", why=g["why_tier"],
-        visits_m=g["visits_m"], active=g["active"],
+    print("  ▸ S-tier slide …")
+    _render_html(v.game_slide_html(
+        name="Tower of Misery",
+        creator="xXBuilderXx",
+        tier="S",
+        why="three hours in and I genuinely could not bring myself to log off",
+        visits_label="3.7M",
+        active_label="14K",
         part=12, index=1,
-    )
-    _render_html(slide_s).save(str(folder / "slide_01_s_tier.png"))
+    )).save(str(folder / "slide_01_s_tier.png"))
 
-    print("  ▸ Tier Drop — A+ game slide …")
-    g2 = DEMO_GAME_2
-    slide_a = v.game_slide_html(
-        name=g2["name"], creator=g2["creator"],
-        tier="A+", why=g2["why_tier"],
-        visits_m=g2["visits_m"], active=g2["active"],
+    print("  ▸ A-tier slide …")
+    _render_html(v.game_slide_html(
+        name="Nocturnia: Shadow Realms",
+        creator="DarkCraft Studios",
+        tier="A+",
+        why="the best horror atmosphere on Roblox since the early Doors days",
+        visits_label="1.2M",
+        active_label="8K",
         part=12, index=2,
-    )
-    _render_html(slide_a).save(str(folder / "slide_02_a_tier.png"))
-    print(f"  ✓ Tier Drop → {folder}")
+    )).save(str(folder / "slide_02_a_tier.png"))
+    print(f"  ✓ {folder}")
 
 
-def render_variant3():
+def render_grade():
     v = GradeReportVariant()
     folder = OUT / "3_grade_report"
     folder.mkdir(parents=True, exist_ok=True)
 
-    print("  ▸ Grade Report — cover …")
-    cover = v.cover_html(
-        hook="nobody asked but i graded these anyway",
+    print("  ▸ cover …")
+    _render_html(v.cover_html(
+        l1="the official",
+        l3="game grades",
+        sub="nobody asked for a grading scale. I built one anyway, "
+            "and these five earned their marks.",
         part=12,
-    )
-    _render_html(cover).save(str(folder / "slide_00_cover.png"))
+    )).save(str(folder / "slide_00_cover.png"))
 
-    print("  ▸ Grade Report — S grade game slide …")
-    g = DEMO_GAME_1
-    slide_s = v.game_slide_html(
-        name=g["name"], creator=g["creator"],
-        overall_grade=g["overall_grade"], subgrades=g["subgrades"],
-        assessment=g["assessment"], visits_m=g["visits_m"],
-        recommended=g["recommended"], part=12, index=1,
-    )
-    _render_html(slide_s).save(str(folder / "slide_01_s_grade.png"))
+    print("  ▸ S grade slide …")
+    _render_html(v.game_slide_html(
+        name="Tower of Misery",
+        creator="xXBuilderXx",
+        overall="S",
+        subgrades={"Fun": "S", "Value": "A+", "Original": "A+", "Social": "B"},
+        assessment="Mechanically sound in ways most funded studios miss. "
+                   "The tower design alone earns the S.",
+        visits_label="3.7M",
+        recommended=True,
+        part=12, index=1,
+    )).save(str(folder / "slide_01_s_grade.png"))
 
-    print("  ▸ Grade Report — A+ grade game slide …")
-    g2 = DEMO_GAME_2
-    slide_a = v.game_slide_html(
-        name=g2["name"], creator=g2["creator"],
-        overall_grade=g2["overall_grade"], subgrades=g2["subgrades"],
-        assessment=g2["assessment"], visits_m=g2["visits_m"],
-        recommended=g2["recommended"], part=12, index=2,
-    )
-    _render_html(slide_a).save(str(folder / "slide_02_a_grade.png"))
-    print(f"  ✓ Grade Report → {folder}")
+    print("  ▸ A+ grade slide …")
+    _render_html(v.game_slide_html(
+        name="Nocturnia: Shadow Realms",
+        creator="DarkCraft Studios",
+        overall="A+",
+        subgrades={"Fun": "A+", "Value": "S", "Original": "S", "Social": "C"},
+        assessment="Exceeds expectation in atmosphere and worldbuilding. "
+                   "Solo play is where this one truly shines.",
+        visits_label="1.2M",
+        recommended=True,
+        part=12, index=2,
+    )).save(str(folder / "slide_02_a_grade.png"))
+    print(f"  ✓ {folder}")
 
 
 def main():
-    print("\n🎨  Rendering 3 carousel variants …\n")
-
-    print("① SCOUT REPORT (dark · reviewer-authority)")
-    render_variant1()
-
-    print("\n② TIER DROP (dramatic · competitive ranking)")
-    render_variant2()
-
-    print("\n③ GRADE REPORT (white · academic authority)")
-    render_variant3()
-
-    print("\n✅  All 8 slides saved to output/variant_demos/")
-    print("   Open them with any image viewer.\n")
+    print("\n🎨  Rendering 3 editorial carousel variants …\n")
+    print("① SCOUT REPORT (dark dossier · Fraunces + Space Grotesk)")
+    render_scout()
+    print("\n② TIER DROP (black stage · flat stamped tiers)")
+    render_tier()
+    print("\n③ GRADE REPORT (cream certificate · Fraunces serif)")
+    render_grade()
+    print("\n✅  8 slides → output/variant_demos/\n")
 
 
 if __name__ == "__main__":
