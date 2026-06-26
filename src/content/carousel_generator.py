@@ -52,18 +52,28 @@ W, H = 1080, 1920  # TikTok portrait
 ROBLOX_RED = (226, 35, 26)
 SAFE = 90  # safe margin from every edge (no text or accent crosses it)
 
-# (edition label, theme emoji, [sticker emoji — used as scattered face stickers])
-# More stickers per edition = a denser, more expressive title slide. The title
-# renderer scatters up to 4 of these around the type to stop the scroll.
+# Custom blue-blob sticker images — used as the two big face stickers on the
+# cover slide (one above the text, one below). They rotate per carousel post
+# so every drop looks distinct. Paths are relative to ASSETS_DIR/stickers/.
+STICKER_FILES = [
+    "blob_cute.jpeg",
+    "blob_heart.jpeg",
+    "blob_lashes.jpeg",
+    "blob_rose.jpeg",
+    "blob_smug.jpeg",
+]
+
+# (edition label, theme emoji) — sticker lists removed; cover stickers are now
+# the custom blue-blob images in STICKER_FILES rather than unicode emoji.
 EDITIONS: list[tuple[str, str, list[str]]] = [
-    ("Friends edition", "🤿", ["🥹", "😭", "🫶", "😂"]),
-    ("Hidden Gems", "💎", ["😳", "🤩", "👀", "🤯"]),
-    ("Horror edition", "😱", ["😨", "💀", "🫣", "😰"]),
-    ("Solo edition", "🎮", ["🥹", "🔥", "😮‍💨", "🫡"]),
-    ("Anime edition", "⚔️", ["😮", "🔥", "🥶", "⚡"]),
-    ("PvP edition", "🔪", ["😈", "😤", "💢", "🥵"]),
-    ("Underrated edition", "🤫", ["🤨", "🤩", "👀", "🧐"]),
-    ("Brainrot edition", "🤡", ["😭", "💀", "💀", "😵‍💫"]),
+    ("Friends edition", "🤿", []),
+    ("Hidden Gems", "💎", []),
+    ("Horror edition", "😱", []),
+    ("Solo edition", "🎮", []),
+    ("Anime edition", "⚔️", []),
+    ("PvP edition", "🔪", []),
+    ("Underrated edition", "🤫", []),
+    ("Brainrot edition", "🤡", []),
 ]
 
 # Rotating scroll-stopper kickers shown above the title — these read like a real
@@ -230,6 +240,25 @@ def _fetch_image(url: str, retries: int = 2) -> Optional[Image.Image]:
                 log.warning("carousel.image_fetch_failed", url=url, error=str(exc))
             continue
     return None
+
+
+def _paste_sticker(canvas: Image.Image, sticker_path: str, cx: int, cy: int, size: int) -> Image.Image:
+    """Paste a custom sticker centered at (cx, cy), compositing any alpha onto white."""
+    try:
+        raw = Image.open(sticker_path)
+        if raw.mode in ("RGBA", "LA") or (raw.mode == "P" and "transparency" in raw.info):
+            rgba = raw.convert("RGBA")
+            bg = Image.new("RGB", raw.size, (255, 255, 255))
+            bg.paste(rgba, mask=rgba.split()[3])
+            sticker = bg
+        else:
+            sticker = raw.convert("RGB")
+        sticker.thumbnail((size, size), Image.LANCZOS)
+        sw, sh = sticker.size
+        canvas.paste(sticker, (cx - sw // 2, cy - sh // 2))
+    except Exception as exc:
+        log.warning("carousel.sticker_paste_failed", path=sticker_path, error=str(exc))
+    return canvas
 
 
 def _cover_fill(img: Image.Image, w: int, h: int) -> Image.Image:
@@ -442,13 +471,13 @@ class CarouselGenerator:
         draw = ImageDraw.Draw(img)
 
         ink = (17, 17, 20)
-        cx = W // 2  # center x
+        cx = W // 2
 
-        # Rotate emoji pairs so every carousel post looks distinct.
-        n = max(len(stickers), 1)
-        top_emoji = stickers[part_number % n]
-        # Pick bottom emoji offset by half the list so top ≠ bottom.
-        bottom_emoji = stickers[(part_number + max(n // 2, 1)) % n]
+        # Pick two different blue-blob stickers that rotate per carousel post.
+        sticker_dir = Path(self._settings.ASSETS_DIR, "stickers")
+        n = len(STICKER_FILES)
+        top_sticker = str(sticker_dir / STICKER_FILES[part_number % n])
+        bot_sticker = str(sticker_dir / STICKER_FILES[(part_number + n // 2) % n])
 
         # ── Fonts ───────────────────────────────────────────────────────
         f_actually = load_font("bold", 76)
@@ -467,59 +496,53 @@ class CarouselGenerator:
         games_h = _h("games to play", f_games)
         edition_h = _h(edition, f_edition)
 
-        gap_ac_rob = 14    # actually good → ROBLOX
-        gap_rob_gm = 6     # ROBLOX → games to play
-        gap_gm_ed = 38     # games to play → edition line
+        gap_ac_rob = 14
+        gap_rob_gm = 6
+        gap_gm_ed = 38
 
         block_h = (actually_h + gap_ac_rob + roblox_h
                    + gap_rob_gm + games_h + gap_gm_ed + edition_h)
 
-        # Centre the FULL composition (both emojis + text) as one unit so
-        # the top and bottom margins are equal — not just the text block.
-        emoji_sz = 290
-        gap_emoji_text = 32   # tight gap between emoji edge and text block
+        # Centre the FULL composition (both stickers + text) as one unit.
+        sticker_sz = 300
+        gap_sticker_text = 28
 
-        total_h = emoji_sz + gap_emoji_text + block_h + gap_emoji_text + emoji_sz
+        total_h = sticker_sz + gap_sticker_text + block_h + gap_sticker_text + sticker_sz
         comp_top = (H - total_h) // 2
 
-        top_center_y = comp_top + emoji_sz // 2
-        text_top = comp_top + emoji_sz + gap_emoji_text
+        top_center_y = comp_top + sticker_sz // 2
+        text_top = comp_top + sticker_sz + gap_sticker_text
         edition_bottom = text_top + block_h
-        bot_center_y = edition_bottom + gap_emoji_text + emoji_sz // 2
+        bot_center_y = edition_bottom + gap_sticker_text + sticker_sz // 2
 
-        # ── Big emoji: top ──────────────────────────────────────────────
-        img = paste_emoji(img, top_emoji, cx, top_center_y, emoji_sz)
-        # paste_emoji returns a NEW image — must recreate draw or text draws on stale canvas
+        # ── Sticker: top ─────────────────────────────────────────────────
+        _paste_sticker(img, top_sticker, cx, top_center_y, sticker_sz)
         draw = ImageDraw.Draw(img)
 
-        # ── Text block ──────────────────────────────────────────────────
+        # ── Text block ───────────────────────────────────────────────────
         y = text_top
 
-        # "actually good"
         aw = _text_w(draw, "actually good", f_actually)
         draw.text((cx - aw // 2, y), "actually good", font=f_actually, fill=ink)
         y += actually_h + gap_ac_rob
 
-        # "ROBLOX" — large black, matching the viral reference
         rw = _text_w(draw, "ROBLOX", f_rob)
         draw.text((cx - rw // 2, y - rob_t), "ROBLOX", font=f_rob, fill=ink)
         y += roblox_h + gap_rob_gm
 
-        # "games to play"
         gw = _text_w(draw, "games to play", f_games)
         draw.text((cx - gw // 2, y), "games to play", font=f_games, fill=ink)
         y += games_h + gap_gm_ed
 
-        # "[Edition] [theme emoji]" — draw_mixed handles the inline emoji
         edition_line = f"{edition} {theme_emoji}"
         em_px = _emoji_px(f_edition)
         ew = measure_mixed(draw, edition_line, f_edition, em_px)
         img = draw_mixed(img, (cx - ew // 2, y), edition_line,
                          f_edition, ink, emoji_size=em_px, anchor="la")
-        draw = ImageDraw.Draw(img)  # draw_mixed also returns a new image
+        draw = ImageDraw.Draw(img)
 
-        # ── Big emoji: bottom ───────────────────────────────────────────
-        img = paste_emoji(img, bottom_emoji, cx, bot_center_y, emoji_sz)
+        # ── Sticker: bottom ──────────────────────────────────────────────
+        _paste_sticker(img, bot_sticker, cx, bot_center_y, sticker_sz)
 
         return img
 
