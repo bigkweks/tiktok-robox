@@ -286,7 +286,18 @@ src/api/templates/   Premium dark theme (no template tells). base.html holds the
 - **Dashboard is always reachable** — deployed on Render free tier (`render.yaml`). Bootstrap Icons and CSS are self-hosted so the UI renders correctly without CDN.
 - Games are excluded from carousels for 50 unique-other-game turns after their last use. Content gen runs ~5× faster via concurrent Claude calls (Semaphore 5).
 
-## Session changelog — Cover redesign, custom stickers, and mobile save buttons (latest)
+## Session changelog — Header safe-zone fix and engagement-bait captions (latest)
+Brief: two user requests in one session — (1) the game slide header (icon/name/creator) was clipped by TikTok's status bar overlay; (2) add "engagement bait" slightly-wrong game comparisons to captions to invite comment corrections and drive discussion. Also added inline analytics logging to the carousels tab.
+
+- **Game slide header shifted below TikTok safe zone (`src/content/carousel_generator.py`, `_make_game_slide`).** The icon started at y=80 and the creator/maturity lines sat fully inside TikTok's top ~200px UI overlay (status bar + app chrome), making them invisible in-feed. Shifted the entire header down 170px: icon to `(48, 250)`, game name to y=256, creator to y=336, maturity to y=406. Moved `thumb_top` 330→500 to clear the header. Adjusted footer up to `H - 100` (was `H - 130`) and reduced `desc_lines_max` 3→2 when a blurb is present to prevent description from overflowing the footer. Two tests that hardcoded the old y=330 coordinates were updated in the same session: `export_validator._looks_like_placeholder_hero` hero-band crop updated from y=330→500; `test_game_slide_keeps_name_emoji_but_cleans_description` crop coords updated from `(0, 70, 1080, 170)` → `(0, 240, 1080, 340)` and `(0, 1230, 1080, 1560)` → `(0, 1380, 1080, 1650)`.
+
+- **Engagement-bait comparison angle in rating prompt (`src/content/rating_engine.py`, `RATING_PROMPT`).** Added a new "ENGAGEMENT BAIT comparison" caption angle to the `carousel_caption` instruction: roughly 1 in 3 times, Claude should make a game comparison that is slightly wrong but defensible (e.g. "basically GTA" when it's more like Payday — same crime theme but heist-not-open-world) so viewers feel compelled to correct it in comments, generating discussion. Four canonical format examples provided with explicit instruction to study the PATTERN and not copy verbatim. The same "~1 in 3 times" bait rule was also added to the `verdict` field description. This is a proven comment-driver mechanic that fits naturally in the authentic teenage-player caption voice already required by the prompt.
+
+- **Inline analytics logging on carousels tab (`src/api/templates/carousels.html`).** Added inline analytics logging so carousels can be logged without navigating to a separate page.
+
+- **Test suite: 232 passing, 4 stale-failing** (same 4 pre-existing stale tests; 2 tests broken by the header shift were fixed and committed in the same session before push).
+
+## Session changelog — Cover redesign, custom stickers, and mobile save buttons (prior)
 Brief: five user-facing issues fixed in one session — (1) "A draft didn't pass review" blocking carousel creation; (2) emoji showing as boxes on Render; (3) cover slide missing three of its four text lines; (4) cover composition not centered / stickers not offset; (5) replace unicode emoji stickers with custom blue blob images + add per-slide mobile save buttons.
 
 - **All automated rejection gates removed (`src/scheduler/pipeline.py`).** Every gate that could return `rejected: True` before the carousel reached the DB was removed: the below_rating_floor gate, fallback_content gate, placeholder_thumbnails gate, export_invalid gate, and the entire retry block in `run_create_carousel`. Carousels now ALWAYS persist to `status=pending_review`; the human creator is the sole gatekeeper. This was the root cause of "A draft didn't pass review — tap again in a moment". Also removed all Roblox crawl fallback sources from `trend_detector.py` — Claude discovery is now the only source.
@@ -1153,7 +1164,13 @@ Netlify/Cloudflare/`docs/` static site + TikTok domain-verification files (these
 existed only to get the posting app audited).
 
 ## Likely next steps (not yet done — pick up here)
-> ✅ **Resolved this session:** "A draft didn't pass review" blocking carousel creation
+> ✅ **Resolved this session:** game slide header clipped by TikTok status bar overlay
+> (icon/name/creator shifted to y=250, thumb_top to 500); engagement-bait comparison
+> angle added to RATING_PROMPT captions and verdicts (~1 in 3 times, slightly wrong
+> game comparison to drive comment corrections); export validator hero band y-coord
+> fixed from 330→500; inline analytics logging added to carousels tab.
+>
+> ✅ **Resolved in the prior session:** "A draft didn't pass review" blocking carousel creation
 > (all automated rejection gates removed); emoji boxes on Render (NotoColorEmoji.ttf
 > bundled in `assets/fonts/`); cover slide missing text (stale `draw` object bug fixed);
 > composition centering (full sticker+text+sticker unit centered); unicode emoji stickers
