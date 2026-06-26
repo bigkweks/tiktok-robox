@@ -91,37 +91,8 @@ EDITION_VALUE: dict[str, str] = {
     "Brainrot edition": "brainrot games to play",
 }
 
-# Small credibility line under the value phrase — the trust signal the old cover
-# lacked. It pairs the proven "part N" series marker (forces follows, signals a
-# consistent creator) with a curation proof so the picks read vetted, not random.
-# Rotated by part so the series never repeats the same line.
-CREDIBILITY_LINES: list[str] = [
-    "part {n}  ·  ranked, not random",
-    "part {n}  ·  i actually play these",
-    "part {n}  ·  vetted, not just viral",
-    "part {n}  ·  tested so you don't have to",
-    "part {n}  ·  hand-picked every drop",
-]
-
-# Cover CTAs — natural saves, never the generic "swipe to save". Rotated by part.
-COVER_CTAS: list[str] = [
-    "save these for later",
-    "you'll want this list later",
-    "keep this somewhere",
-    "save before you forget",
-]
-
-
 def _value_phrase(edition: str) -> str:
     return EDITION_VALUE.get(edition, "games to play")
-
-
-def _credibility_line(part: int) -> str:
-    return CREDIBILITY_LINES[part % len(CREDIBILITY_LINES)].format(n=part)
-
-
-def _cover_cta(part: int) -> str:
-    return COVER_CTAS[part % len(COVER_CTAS)]
 
 
 @dataclass
@@ -459,125 +430,89 @@ class CarouselGenerator:
         cover_hook: Optional[str] = None,
     ) -> Image.Image:
         """
-        Performance-first cover. Designed against the brief's levers: a
-        niche-specific curiosity hook, a single dominant ROBLOX keyword, a value
-        line that doubles as the proven search phrase, and a credibility line —
-        all LEFT-ALIGNED off a Roblox-red rail so the composition is deliberately
-        asymmetric (kills the "AI-template" dead-centred symmetry, adds energy,
-        and the eye travels top→down through the hierarchy). White canvas, black
-        text, red as the only accent.
+        Centered cover matching the viral reference design:
+          - white background
+          - large emoji sticker at top center (rotates per carousel)
+          - "actually good" / "ROBLOX" (red) / "games to play" / "[edition] [emoji]"
+          - large emoji sticker at bottom center (rotates per carousel)
+          - no part number
         """
-        edition, _theme_emoji, _stickers = ed_meta
-        # Clean white canvas — premium, minimal, pattern-interrupts the dark feed.
-        img = Image.new("RGB", (W, H), (252, 252, 253))
+        edition, theme_emoji, stickers = ed_meta
+        img = Image.new("RGB", (W, H), (255, 255, 255))
         draw = ImageDraw.Draw(img)
 
         ink = (17, 17, 20)
-        grey = (132, 134, 142)
+        cx = W // 2  # center x
 
-        # Left-aligned, asymmetric composition anchored by a Roblox-red rail.
-        rail_x = 100
-        rail_w = 16
-        text_x = rail_x + rail_w + 38          # text starts just right of the rail
-        right = W - SAFE
-        avail = right - text_x                 # working width for every line
+        # Rotate emoji pairs so every carousel post looks distinct.
+        n = max(len(stickers), 1)
+        top_emoji = stickers[part_number % n]
+        # Pick bottom emoji offset by half the list so top ≠ bottom.
+        bottom_emoji = stickers[(part_number + max(n // 2, 1)) % n]
 
-        # ── 1. Niche curiosity hook (small, bold, dark) ────────────────────
-        # The quality layer supplies a vetted, niche-specific hook; this is the
-        # curiosity driver, so it's strong dark type — not the faint grey the old
-        # cover used (faint = low energy + reads templated).
-        hook = (cover_hook or "").strip().lower() or TITLE_KICKERS[part_number % len(TITLE_KICKERS)]
-        h_size = 62
-        f_hook = load_font("semibold", h_size)
-        hook_lines = _wrap_to_width(draw, hook, f_hook, avail, max_lines=2)
-        while len(hook_lines) > 1 and h_size > 44:   # prefer one tight line
-            h_size -= 3
-            f_hook = load_font("semibold", h_size)
-            hook_lines = _wrap_to_width(draw, hook, f_hook, avail, max_lines=2)
+        # ── Fonts ───────────────────────────────────────────────────────
+        f_actually = load_font("bold", 76)
+        f_rob = load_font("black", 236)
+        f_games = load_font("extrabold", 88)
+        f_edition = load_font("semibold", 64)
 
-        # ── 2. Dominant ROBLOX wordmark (the one red accent, auto-fit) ─────
-        rob_size = 250
-        f_rob = load_font("black", rob_size)
-        while _text_w(draw, "ROBLOX", f_rob) > avail and rob_size > 150:
-            rob_size -= 6
-            f_rob = load_font("black", rob_size)
+        # ── Measure text heights (use tight bbox, not line-height) ──────
+        def _h(text: str, font) -> int:
+            _, t, _, b = draw.textbbox((0, 0), text, font=font)
+            return b - t
 
-        # ── 3. Value / search line (edition-aware, black, can wrap) ────────
-        value = _value_phrase(edition)
-        v_size = 96
-        f_val = load_font("extrabold", v_size)
-        val_lines = _wrap_to_width(draw, value, f_val, avail, max_lines=2)
-        while len(val_lines) > 2 and v_size > 70:
-            v_size -= 6
-            f_val = load_font("extrabold", v_size)
-            val_lines = _wrap_to_width(draw, value, f_val, avail, max_lines=2)
+        actually_h = _h("actually good", f_actually)
+        _, rob_t, _, rob_b = draw.textbbox((0, 0), "ROBLOX", font=f_rob)
+        roblox_h = rob_b - rob_t
+        games_h = _h("games to play", f_games)
+        edition_h = _h(edition, f_edition)
 
-        # ── 4. Credibility line (small grey — the trust signal) ────────────
-        cred = _credibility_line(part_number)
-        f_cred = load_font("semibold", 46)
+        gap_ac_rob = 14    # actually good → ROBLOX
+        gap_rob_gm = 6     # ROBLOX → games to play
+        gap_gm_ed = 38     # games to play → edition line
 
-        # ── 5. CTA (natural save line + red arrow) — folded INTO the block,
-        # not pinned to the canvas bottom. In-feed, TikTok overlays the caption/
-        # username/action rail across the lower ~25% of the image, so a bottom
-        # CTA would be occluded; keeping it in the upper-middle clear zone is the
-        # performance-correct placement (and removes the dead lower gap). ──────
-        cta_text = _cover_cta(part_number)
-        f_cta = load_font("bold", 52)
-        cta_h = 60
+        block_h = (actually_h + gap_ac_rob + roblox_h
+                   + gap_rob_gm + games_h + gap_gm_ed + edition_h)
 
-        # ── Vertical layout: stack hook→CTA as ONE unit and seat it in the
-        # clear upper-middle zone. Real ink heights keep the gaps optical. ─────
-        hook_lh = int(h_size * 1.18)
-        val_lh = int(v_size * 1.04)
-        _, rt, _, rb = draw.textbbox((0, 0), "ROBLOX", font=f_rob)
-        rob_h = rb - rt
+        # Centre the text block at ~48% of canvas height.
+        text_top = int(H * 0.48) - block_h // 2
 
-        gap_hook_rob = 34
-        gap_rob_val = 26
-        gap_val_cred = 54
-        gap_cred_cta = 96
-        cred_h = 56
+        # ── Big emoji: top ──────────────────────────────────────────────
+        emoji_sz = 290
+        top_center_y = text_top - emoji_sz // 2 - 60
+        top_center_y = max(emoji_sz // 2 + 60, top_center_y)
+        img = paste_emoji(img, top_emoji, cx, top_center_y, emoji_sz)
 
-        block_h = (
-            len(hook_lines) * hook_lh
-            + gap_hook_rob + rob_h
-            + gap_rob_val + len(val_lines) * val_lh
-            + gap_val_cred + cred_h
-            + gap_cred_cta + cta_h
-        )
-        # Centre the unit on ~46% of the height — dominant, upper-weighted, and
-        # entirely above TikTok's bottom UI overlay.
-        top = max(220, int(H * 0.46) - block_h // 2)
+        # ── Text block ──────────────────────────────────────────────────
+        y = text_top
 
-        y = top
-        for line in hook_lines:
-            draw.text((text_x, y), line, font=f_hook, fill=(28, 28, 32))
-            y += hook_lh
-        y += gap_hook_rob
-        rob_top = y
-        draw.text((text_x, y - rt), "ROBLOX", font=f_rob, fill=ROBLOX_RED)
-        y += rob_h + gap_rob_val
-        for line in val_lines:
-            draw.text((text_x, y), line, font=f_val, fill=ink)
-            y += val_lh
-        y += gap_val_cred
-        draw.text((text_x, y), cred, font=f_cred, fill=grey)
-        cred_bottom = y + cred_h
+        # "actually good"
+        aw = _text_w(draw, "actually good", f_actually)
+        draw.text((cx - aw // 2, y), "actually good", font=f_actually, fill=ink)
+        y += actually_h + gap_ac_rob
 
-        # ── Red rail — spans the keyword block (ROBLOX → credibility), off-
-        # centre. The structural use of brand red (not decoration) is what gives
-        # the cover its energy and creator-made asymmetry. ─────────────────────
-        draw.rounded_rectangle(
-            [rail_x, rob_top - 6, rail_x + rail_w, cred_bottom],
-            radius=rail_w // 2, fill=ROBLOX_RED,
-        )
+        # "ROBLOX" in brand red — the single colour accent
+        rw = _text_w(draw, "ROBLOX", f_rob)
+        draw.text((cx - rw // 2, y - rob_t), "ROBLOX", font=f_rob, fill=ROBLOX_RED)
+        y += roblox_h + gap_rob_gm
 
-        # CTA, just below the block.
-        cy = cred_bottom + gap_cred_cta - 10
-        draw.text((text_x, cy), cta_text, font=f_cta, fill=(108, 110, 118), anchor="lm")
-        tw = _text_w(draw, cta_text, f_cta)
-        ax = text_x + tw + 26
-        draw.polygon([(ax, cy - 18), (ax, cy + 18), (ax + 34, cy)], fill=ROBLOX_RED)
+        # "games to play"
+        gw = _text_w(draw, "games to play", f_games)
+        draw.text((cx - gw // 2, y), "games to play", font=f_games, fill=ink)
+        y += games_h + gap_gm_ed
+
+        # "[Edition] [theme emoji]" — draw_mixed handles the inline emoji
+        edition_line = f"{edition} {theme_emoji}"
+        em_px = _emoji_px(f_edition)
+        ew = measure_mixed(draw, edition_line, f_edition, em_px)
+        img = draw_mixed(img, (cx - ew // 2, y), edition_line,
+                         f_edition, ink, emoji_size=em_px, anchor="la")
+        edition_bottom = y + edition_h
+
+        # ── Big emoji: bottom ───────────────────────────────────────────
+        bot_center_y = edition_bottom + emoji_sz // 2 + 60
+        bot_center_y = min(H - emoji_sz // 2 - 60, bot_center_y)
+        img = paste_emoji(img, bottom_emoji, cx, bot_center_y, emoji_sz)
 
         return img
 
