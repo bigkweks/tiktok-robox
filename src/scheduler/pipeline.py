@@ -395,42 +395,12 @@ class Pipeline:
                      purposes=[s.purpose for s in plan.slides],
                      dead_slides=plan.dead_slides)
 
-        # ── The gate: if it didn't survive review, it does NOT ship. ──
-        if not approval.approved:
-            log.warning("pipeline.carousel_factory.rejected", part=part,
-                        final_score=approval.final_score,
-                        cycles=approval.cycles,
-                        hard_failures=approval.panel.hard_failures,
-                        reviewers={r.name: r.score for r in approval.panel.reviewers})
-            # Roll back the part counter so the rejected part number is reused by
-            # the next attempt — we don't burn a "Part N" on content nobody sees.
-            self._carousel_part_counter -= 1
-            return {"carousels": 0, "rejected": True, "part": part,
-                    "final_score": approval.final_score,
-                    "hard_failures": approval.panel.hard_failures}
-
-        # ── NEAR-DUPLICATE GATE (vs shipped history) ──────────────────
-        # The panel guarantees intra-carousel variety; this guards across posts.
-        # If the approved cover hook or any caption is a near-duplicate of a
-        # recently shipped one, reject so the retry produces something fresh.
-        from src.content.dedup import is_near_duplicate  # noqa: PLC0415
-        dup_reason = None
-        if is_near_duplicate(approval.cover_hook, used_hooks_hist):
-            dup_reason = f"cover hook too similar to a recent post: '{approval.cover_hook}'"
-        else:
-            for cap in approval.captions:
-                if is_near_duplicate(cap, used_caps_hist):
-                    dup_reason = f"caption too similar to a recent post: '{cap}'"
-                    break
-        if dup_reason:
-            log.warning("pipeline.carousel_factory.near_duplicate", part=part,
-                        reason=dup_reason)
-            self._carousel_part_counter -= 1
-            return {"carousels": 0, "rejected": True, "part": part,
-                    "reason": "near_duplicate", "message": dup_reason}
-
-        log.info("pipeline.carousel_factory.approved", part=part,
-                 final_score=approval.final_score, cycles=approval.cycles,
+        # Log the automated review result for visibility; the human creator
+        # decides approve/reject/regenerate — not this gate.
+        log.info("pipeline.carousel_factory.review_result", part=part,
+                 approved=approval.approved,
+                 final_score=approval.final_score,
+                 hard_failures=approval.panel.hard_failures,
                  reviewers={r.name: r.score for r in approval.panel.reviewers})
 
         deduped_captions = approval.captions
