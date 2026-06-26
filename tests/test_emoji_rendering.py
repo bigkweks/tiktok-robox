@@ -217,9 +217,10 @@ def test_game_slide_keeps_name_emoji_but_cleans_description():
     )
     slide = gen._make_game_slide(game)
     # Header band still carries the name's color emoji (👍).
-    assert _emoji_band_is_colorful(slide.crop((0, 70, 1080, 170)))
+    # Icon/name now start at y=250 (shifted down from y=80 to clear TikTok's top UI).
+    assert _emoji_band_is_colorful(slide.crop((0, 240, 1080, 340)))
     # Description band is now clean text — the decorative emoji were stripped.
-    assert not _emoji_band_is_colorful(slide.crop((0, 1230, 1080, 1560)))
+    assert not _emoji_band_is_colorful(slide.crop((0, 1380, 1080, 1650)))
 
 
 def _has_purple(slide) -> bool:

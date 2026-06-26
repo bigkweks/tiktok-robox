@@ -57,7 +57,7 @@ def _looks_like_placeholder_hero(img: Image.Image) -> bool:
     the real Roblox thumbnail didn't load. (Title slide is white, so this only
     trips on game slides.)"""
     rgb = img.convert("RGB")
-    band = rgb.crop((0, 330, EXPORT_W, 330 + 700)).resize((20, 20))
+    band = rgb.crop((0, 500, EXPORT_W, 500 + 700)).resize((20, 20))
     raw = band.tobytes()                    # R,G,B,R,G,B… (avoids deprecated getdata)
     px = [(raw[i], raw[i + 1], raw[i + 2]) for i in range(0, len(raw) - 2, 3)]
     close = sum(1 for r, g, b in px
