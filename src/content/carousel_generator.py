@@ -243,7 +243,7 @@ def _fetch_image(url: str, retries: int = 2) -> Optional[Image.Image]:
 
 
 def _paste_sticker(canvas: Image.Image, sticker_path: str, cx: int, cy: int, size: int) -> Image.Image:
-    """Paste a custom sticker centered at (cx, cy), compositing any alpha onto white."""
+    """Paste a custom sticker centered at (cx, cy), removing baked-in checkerboard background."""
     try:
         raw = Image.open(sticker_path)
         if raw.mode in ("RGBA", "LA") or (raw.mode == "P" and "transparency" in raw.info):
@@ -253,9 +253,15 @@ def _paste_sticker(canvas: Image.Image, sticker_path: str, cx: int, cy: int, siz
             sticker = bg
         else:
             sticker = raw.convert("RGB")
+            # Flood-fill from all 4 corners to replace checkerboard (grey ~204 and
+            # white ~255 alternating squares) with solid white. thresh=90 catches
+            # both square colors (max per-channel diff ≈51) without touching blue.
+            sw, sh = sticker.size
+            for xy in [(0, 0), (sw - 1, 0), (0, sh - 1), (sw - 1, sh - 1)]:
+                ImageDraw.floodfill(sticker, xy, (255, 255, 255), thresh=90)
         sticker.thumbnail((size, size), Image.LANCZOS)
-        sw, sh = sticker.size
-        canvas.paste(sticker, (cx - sw // 2, cy - sh // 2))
+        sw2, sh2 = sticker.size
+        canvas.paste(sticker, (cx - sw2 // 2, cy - sh2 // 2))
     except Exception as exc:
         log.warning("carousel.sticker_paste_failed", path=sticker_path, error=str(exc))
     return canvas
@@ -504,7 +510,7 @@ class CarouselGenerator:
                    + gap_rob_gm + games_h + gap_gm_ed + edition_h)
 
         # Centre the FULL composition (both stickers + text) as one unit.
-        sticker_sz = 300
+        sticker_sz = 420
         gap_sticker_text = 28
 
         total_h = sticker_sz + gap_sticker_text + block_h + gap_sticker_text + sticker_sz
