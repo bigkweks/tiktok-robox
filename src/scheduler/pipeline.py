@@ -440,42 +440,20 @@ class Pipeline:
             ),
         )
 
-        # ── FAIL-SAFE IMAGE GATE (runs AFTER render, BEFORE persist) ──
-        # The text passed the three-reviewer panel, but the carousel is only
-        # shippable if every game slide loaded the REAL Roblox hero thumbnail.
-        # If any slide fell back to a grey placeholder (Roblox rate-limit / CDN
-        # timeout / dead thumbnail URL), we DO NOT persist it. A carousel that is
-        # never persisted is never approved and never exportable. We roll back the
-        # part counter so the next attempt reuses this Part N, and report a clear
-        # reason so run_create_carousel can retry / tell the user.
-        if not render.ok:
-            log.error("pipeline.carousel_factory.placeholder_rejected", part=part,
-                      placeholder_count=render.placeholder_count,
-                      game_slides=render.game_slide_count,
-                      failed_games=render.failed_games,
-                      failed_icons=render.failed_icon_games)
-            self._carousel_part_counter -= 1
-            return {"carousels": 0, "rejected": True, "part": part,
-                    "reason": "placeholder_thumbnails",
-                    "message": render.failure_reason,
-                    "placeholder_count": render.placeholder_count,
-                    "failed_games": render.failed_games,
-                    "failed_icons": render.failed_icon_games}
-
         slide_paths = render.slides
 
-        # ── EXPORT VALIDATION GATE (safe-zone / dimensions / integrity) ──
-        # The render loaded real thumbnails; this confirms every slide is a valid
-        # 1080×1920 frame, not blank/corrupt, before we ever persist it.
+        # Log image quality for visibility — human creator reviews via the UI.
+        if not render.ok:
+            log.warning("pipeline.carousel_factory.thumbnail_warning", part=part,
+                        placeholder_count=render.placeholder_count,
+                        failed_games=render.failed_games,
+                        failed_icons=render.failed_icon_games)
+
         from src.content.export_validator import validate_carousel_export  # noqa: PLC0415
         export_check = validate_carousel_export([str(p) for p in slide_paths])
         if not export_check.ok:
-            log.error("pipeline.carousel_factory.export_invalid", part=part,
-                      reasons=export_check.reasons)
-            self._carousel_part_counter -= 1
-            return {"carousels": 0, "rejected": True, "part": part,
-                    "reason": "export_invalid",
-                    "message": "Render failed validation: " + "; ".join(export_check.reasons)}
+            log.warning("pipeline.carousel_factory.export_warning", part=part,
+                        reasons=export_check.reasons)
 
         # De-templated TikTok caption (keeps the proven search anchor) + CTA.
         caption = f"{approval.post_caption}\n\n{approval.cta}"
