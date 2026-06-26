@@ -90,9 +90,11 @@
     {# Slide strip #}
     <div class="d-flex gap-2 overflow-auto pb-2 mb-3" style="scrollbar-width:thin">
       {% for path in post.slide_paths_list %}
+      {% set slide_url = '/output/' + path | replace(settings.OUTPUT_DIR + '/', '') if path else '' %}
+      {% set slide_label = 'Title' if loop.index == 1 else 'Game ' + (loop.index - 1) | string %}
       <div class="flex-shrink-0 text-center">
         {% if path %}
-          <img src="/output/{{ path | replace(settings.OUTPUT_DIR + '/', '') }}"
+          <img src="{{ slide_url }}"
                class="rounded"
                style="height:200px;width:auto;cursor:pointer;border:2px solid var(--border-hi);border-radius:8px;transition:border-color 0.15s"
                onclick="expandSlide(this.src)"
@@ -105,8 +107,15 @@
           </div>
         {% endif %}
         <div class="text-muted mt-1" style="font-size:0.7rem;font-weight:600;text-transform:uppercase;letter-spacing:0.05em">
-          {% if loop.index == 1 %}Title{% else %}Game {{ loop.index - 1 }}{% endif %}
+          {{ slide_label }}
         </div>
+        {% if path %}
+        <button class="btn btn-sm btn-outline-secondary mt-1 px-2 py-0"
+                style="font-size:0.7rem"
+                onclick="saveSlide('{{ slide_url }}', 'slide_{{ loop.index }}.png')">
+          <i class="bi bi-download"></i>
+        </button>
+        {% endif %}
       </div>
       {% endfor %}
     </div>
@@ -161,7 +170,12 @@
   <div class="modal-dialog modal-dialog-centered" style="max-width:420px">
     <div class="modal-content border-0" style="background:var(--surface-2);border-radius:12px">
       <div class="modal-body p-2 text-center">
-        <img id="modalImg" src="" class="img-fluid rounded" style="max-height:85vh">
+        <img id="modalImg" src="" class="img-fluid rounded" style="max-height:75vh">
+        <div class="mt-2">
+          <button class="btn btn-primary btn-sm" onclick="saveSlide(document.getElementById('modalImg').src, 'slide.png')">
+            <i class="bi bi-download me-1"></i>Save to Photos
+          </button>
+        </div>
       </div>
     </div>
   </div>
@@ -248,6 +262,23 @@ async function markPosted(id, btn) {
 function expandSlide(src) {
   document.getElementById('modalImg').src = src;
   new bootstrap.Modal(document.getElementById('slideModal')).show();
+}
+async function saveSlide(url, filename) {
+  try {
+    const resp = await fetch(url);
+    const blob = await resp.blob();
+    const file = new File([blob], filename, {type: blob.type || 'image/png'});
+    if (navigator.canShare && navigator.canShare({files: [file]})) {
+      await navigator.share({files: [file]});
+    } else {
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = filename;
+      a.click();
+    }
+  } catch(e) {
+    if (e.name !== 'AbortError') alert('Could not save — try long-pressing the image instead.');
+  }
 }
 function copyCaption(elId, btn) {
   const el = document.getElementById(elId);
