@@ -105,6 +105,38 @@ def _value_phrase(edition: str) -> str:
     return EDITION_VALUE.get(edition, "games to play")
 
 
+# Rotating credibility lines — shown on the cover as the trust signal. Each
+# carries the part number so the series stays legible in a feed.
+_CREDIBILITY_LINES: list[str] = [
+    "part {p} · tested by an actual player",
+    "part {p} · the honest ranking",
+    "part {p} · i actually play these",
+    "part {p} · player-found, not trending",
+    "part {p} · rated after 3 days of play",
+]
+
+# Rotating CTAs — one per carousel. Must never be the generic "swipe to save"
+# that every creator uses; each line should feel specific and natural.
+_COVER_CTAS: list[str] = [
+    "follow for the next drop",
+    "save these for later",
+    "which one are you trying first",
+    "tap ♥ if you found a new fave",
+    "more drops on the way",
+]
+
+
+def _credibility_line(part: int) -> str:
+    """Return a rotating trust signal that carries the part number."""
+    tmpl = _CREDIBILITY_LINES[part % len(_CREDIBILITY_LINES)]
+    return tmpl.format(p=part)
+
+
+def _cover_cta(part: int) -> str:
+    """Return a rotating save/follow nudge (never 'swipe to save')."""
+    return _COVER_CTAS[part % len(_COVER_CTAS)]
+
+
 @dataclass
 class CarouselGame:
     name: str
@@ -468,7 +500,7 @@ class CarouselGenerator:
         Centered cover matching the viral reference design:
           - white background
           - large emoji sticker at top center (rotates per carousel)
-          - "actually good" / "ROBLOX" (red) / "games to play" / "[edition] [emoji]"
+          - hook / "ROBLOX" / value phrase / "[edition] [emoji]"
           - large emoji sticker at bottom center (rotates per carousel)
           - no part number
         """
@@ -486,7 +518,6 @@ class CarouselGenerator:
         bot_sticker = str(sticker_dir / STICKER_FILES[(part_number + n // 2) % n])
 
         # ── Fonts ───────────────────────────────────────────────────────
-        f_actually = load_font("bold", 76)
         f_rob = load_font("black", 236)
         f_games = load_font("extrabold", 88)
         f_edition = load_font("semibold", 64)
@@ -496,17 +527,31 @@ class CarouselGenerator:
             _, t, _, b = draw.textbbox((0, 0), text, font=font)
             return b - t
 
-        actually_h = _h("actually good", f_actually)
+        # ── Adaptive hook font — shrink until the hook fits on one line,
+        #    then wrap to two lines if even the smallest size is too wide.
+        hook_text = cover_hook or "actually good"
+        hook_max_w = W - 2 * SAFE
+        f_hook = load_font("bold", 76)
+        for sz in (76, 68, 60, 52):
+            f_hook = load_font("bold", sz)
+            if _text_w(draw, hook_text, f_hook) <= hook_max_w:
+                break
+        hook_lines = _wrap_to_width(draw, hook_text, f_hook, hook_max_w, max_lines=2)
+        hook_line_h = _h(hook_lines[0] if hook_lines else hook_text, f_hook)
+        hook_line_gap = 8
+        hook_h = hook_line_h * len(hook_lines) + hook_line_gap * max(0, len(hook_lines) - 1)
+
         _, rob_t, _, rob_b = draw.textbbox((0, 0), "ROBLOX", font=f_rob)
         roblox_h = rob_b - rob_t
-        games_h = _h("games to play", f_games)
+        value_text = _value_phrase(edition)
+        games_h = _h(value_text, f_games)
         edition_h = _h(edition, f_edition)
 
         gap_ac_rob = 14
         gap_rob_gm = 6
         gap_gm_ed = 38
 
-        block_h = (actually_h + gap_ac_rob + roblox_h
+        block_h = (hook_h + gap_ac_rob + roblox_h
                    + gap_rob_gm + games_h + gap_gm_ed + edition_h)
 
         # Centre the FULL composition (both stickers + text) as one unit.
@@ -531,16 +576,18 @@ class CarouselGenerator:
         # ── Text block ───────────────────────────────────────────────────
         y = text_top
 
-        aw = _text_w(draw, "actually good", f_actually)
-        draw.text((cx - aw // 2, y), "actually good", font=f_actually, fill=ink)
-        y += actually_h + gap_ac_rob
+        for li, line in enumerate(hook_lines):
+            lw = _text_w(draw, line, f_hook)
+            draw.text((cx - lw // 2, y + li * (hook_line_h + hook_line_gap)),
+                      line, font=f_hook, fill=ink)
+        y += hook_h + gap_ac_rob
 
         rw = _text_w(draw, "ROBLOX", f_rob)
         draw.text((cx - rw // 2, y - rob_t), "ROBLOX", font=f_rob, fill=ink)
         y += roblox_h + gap_rob_gm
 
-        gw = _text_w(draw, "games to play", f_games)
-        draw.text((cx - gw // 2, y), "games to play", font=f_games, fill=ink)
+        gw = _text_w(draw, value_text, f_games)
+        draw.text((cx - gw // 2, y), value_text, font=f_games, fill=ink)
         y += games_h + gap_gm_ed
 
         edition_line = f"{edition} {theme_emoji}"
