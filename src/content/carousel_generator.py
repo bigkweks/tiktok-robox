@@ -570,11 +570,17 @@ class CarouselGenerator:
                 break
         games_h = _h(value_text, f_games)
 
+        f_part = load_font("bold", 52)
+        part_text = f"part {part_number}"
+        part_h = _h(part_text, f_part)
+        gap_gm_part = 10
+        gap_part_ed = 10
+
         edition_h = _h(edition, f_edition)
 
         gap_ac_rob = 14
         gap_rob_gm = 6
-        gap_gm_ed = 38
+        gap_gm_ed = gap_gm_part + part_h + gap_part_ed
 
         block_h = (hook_h + gap_ac_rob + roblox_h
                    + gap_rob_gm + games_h + gap_gm_ed + edition_h)
@@ -582,22 +588,23 @@ class CarouselGenerator:
         # Centre the FULL composition (both stickers + text) as one unit.
         # Equal sizes so both blobs appear the same visual size (the blob bounding
         # box is now the scale target, not the full image, so sizes match exactly).
-        top_sz = 420
-        bot_sz = 420
+        sticker_sz = 420
         gap_sticker_text = 28
 
-        total_h = top_sz + gap_sticker_text + block_h + gap_sticker_text + bot_sz
+        total_h = sticker_sz + gap_sticker_text + block_h + gap_sticker_text + sticker_sz
         comp_top = (H - total_h) // 2
 
-        top_center_y = comp_top + top_sz // 2
-        text_top = comp_top + top_sz + gap_sticker_text
+        top_center_y = comp_top + sticker_sz // 2
+        text_top = comp_top + sticker_sz + gap_sticker_text
         edition_bottom = text_top + block_h
-        bot_center_y = edition_bottom + gap_sticker_text + bot_sz // 2
+        bot_center_y = edition_bottom + gap_sticker_text + sticker_sz // 2
 
-        # Top sticker: nudged right; bottom sticker: nudged left.
-        sticker_offset = 210
+        # Top sticker: pushed to upper-right; bottom sticker: pushed to lower-left,
+        # nearly off the left edge of the canvas — matching the reference layout.
+        top_offset = 300
+        bot_offset = 340
         # ── Sticker: top ─────────────────────────────────────────────────
-        _paste_sticker(img, top_sticker, cx + sticker_offset, top_center_y, top_sz)
+        _paste_sticker(img, top_sticker, cx + top_offset, top_center_y, sticker_sz)
         draw = ImageDraw.Draw(img)
 
         # ── Text block ───────────────────────────────────────────────────
@@ -615,7 +622,12 @@ class CarouselGenerator:
 
         gw = _text_w(draw, value_text, f_games)
         draw.text((cx - gw // 2, y), value_text, font=f_games, fill=ink)
-        y += games_h + gap_gm_ed
+        y += games_h + gap_gm_part
+
+        # Small "part N" label — right-of-centre, between value phrase and edition.
+        pw = _text_w(draw, part_text, f_part)
+        draw.text((cx - pw // 2 + 120, y), part_text, font=f_part, fill=ink)
+        y += part_h + gap_part_ed
 
         edition_line = f"{edition} {theme_emoji}"
         em_px = _emoji_px(f_edition)
@@ -625,7 +637,7 @@ class CarouselGenerator:
         draw = ImageDraw.Draw(img)
 
         # ── Sticker: bottom ──────────────────────────────────────────────
-        _paste_sticker(img, bot_sticker, cx - sticker_offset, bot_center_y, bot_sz)
+        _paste_sticker(img, bot_sticker, cx - bot_offset, bot_center_y, sticker_sz)
 
         return img
 
