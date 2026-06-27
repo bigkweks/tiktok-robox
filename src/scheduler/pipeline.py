@@ -28,6 +28,7 @@ from src.capture.screenshot_engine import ScreenshotEngine
 from src.config import get_settings
 from src.content.carousel_generator import CarouselGame, CarouselGenerator
 from src.content.gazette_generator import GazetteCarouselGenerator
+from src.integrations.buffer_client import BufferClient, BufferError
 from src.content.description_engine import DescriptionEngine
 from src.content.rating_engine import RatingEngine
 from src.content.thumbnail_generator import ThumbnailGenerator
@@ -106,6 +107,26 @@ class Pipeline:
             name="Carousel Batch Generator",
             misfire_grace_time=300,
         )
+
+        # Daily Gazette post: generates a carousel and queues it in Buffer.
+        # Fires at MORNING_RUN_UTC_HOUR every day (default 7am UTC) so it's
+        # ready before your Buffer posting schedule slot (default: 12pm local).
+        # Only active when BUFFER_ACCESS_TOKEN and BUFFER_TIKTOK_PROFILE_ID are set.
+        if self._settings.BUFFER_ACCESS_TOKEN and self._settings.BUFFER_TIKTOK_PROFILE_ID:
+            self._scheduler.add_job(
+                self.run_morning_gazette,
+                "cron",
+                hour=self._settings.MORNING_RUN_UTC_HOUR,
+                minute=0,
+                id="morning_gazette",
+                name="Daily Gazette Post (Buffer)",
+                misfire_grace_time=600,
+            )
+            log.info("pipeline.morning_gazette_scheduled",
+                     utc_hour=self._settings.MORNING_RUN_UTC_HOUR)
+        else:
+            log.info("pipeline.morning_gazette_disabled",
+                     reason="BUFFER_ACCESS_TOKEN or BUFFER_TIKTOK_PROFILE_ID not set")
 
         self._scheduler.start()
         self._running = True
@@ -571,6 +592,124 @@ class Pipeline:
                 "generation_id": generation_id,
                 "final_score": approval.final_score, "approved": False,
                 "status": "pending_review", "cycles": approval.cycles}
+
+    async def run_morning_gazette(self) -> dict:
+        """
+        Daily scheduled job: generate a carousel and queue it in Buffer.
+
+        Runs at MORNING_RUN_UTC_HOUR (default 7am UTC). On success the carousel
+        is added to the Buffer queue and Buffer will post it at the next scheduled
+        slot in your posting schedule (set at buffer.com → Settings → Schedule).
+
+        Returns a summary dict with keys: status, part, slides, buffer_queued.
+        """
+        log.info("pipeline.morning_gazette.start")
+
+        # 1. Generate + approve a carousel (same gate as run_carousel_factory).
+        factory_result = await self.run_carousel_factory()
+
+        if not factory_result.get("carousels"):
+            # Retry once — a first-pass rejection is often just a stale hook.
+            log.info("pipeline.morning_gazette.retry")
+            factory_result = await self.run_carousel_factory()
+
+        if not factory_result.get("carousels"):
+            reason = factory_result.get("reason", "unknown")
+            log.warning("pipeline.morning_gazette.generation_failed", reason=reason)
+            return {"status": "failed", "reason": reason, **factory_result}
+
+        # 2. Retrieve the slide paths from the CarouselPost DB record.
+        part = factory_result.get("part")
+        gen_id = factory_result.get("generation_id", "")
+
+        async with get_session() as session:
+            from sqlalchemy import select as _sel  # noqa: PLC0415
+            post_row = await session.scalar(
+                _sel(CarouselPost)
+                .where(CarouselPost.generation_id == gen_id)
+                .limit(1)
+            )
+            if post_row is None:
+                log.error("pipeline.morning_gazette.post_not_found", gen_id=gen_id)
+                return {"status": "failed", "reason": "post_record_not_found"}
+
+            slide_paths_raw = _safe_json_load(post_row.slide_paths) if isinstance(
+                post_row.slide_paths, str
+            ) else (post_row.slide_paths or [])
+            if isinstance(slide_paths_raw, list):
+                slide_paths = [Path(p) for p in slide_paths_raw]
+            else:
+                slide_paths = []
+
+            caption = post_row.caption or ""
+            hashtags_raw = post_row.hashtags or "[]"
+            hashtags = json.loads(hashtags_raw) if isinstance(hashtags_raw, str) else hashtags_raw
+
+        if not slide_paths:
+            log.error("pipeline.morning_gazette.no_slides", gen_id=gen_id)
+            return {"status": "failed", "reason": "no_slide_paths"}
+
+        # 3. Upload to Buffer.
+        buffer_result = await asyncio.get_event_loop().run_in_executor(
+            None,
+            functools.partial(
+                self._upload_to_buffer,
+                slide_paths=slide_paths,
+                caption=caption,
+                hashtags=hashtags if isinstance(hashtags, list) else [],
+            ),
+        )
+
+        overall = {
+            "status": "success" if buffer_result.get("queued") else "partial",
+            "part": part,
+            "slides": len(slide_paths),
+            "generation_id": gen_id,
+            "final_score": factory_result.get("final_score"),
+            **buffer_result,
+        }
+        log.info("pipeline.morning_gazette.complete", **overall)
+        return overall
+
+    def _upload_to_buffer(
+        self,
+        slide_paths: list[Path],
+        caption: str,
+        hashtags: list[str],
+    ) -> dict:
+        """
+        Sync helper: queue the carousel in Buffer via the API.
+
+        Called in an executor so the async pipeline loop is never blocked.
+        Returns {"queued": bool, "buffer_updates": int, "error": str|None}.
+        """
+        token = self._settings.BUFFER_ACCESS_TOKEN
+        profile_id = self._settings.BUFFER_TIKTOK_PROFILE_ID
+
+        if not token or not profile_id:
+            log.warning("pipeline.buffer_upload_skipped",
+                        reason="credentials not configured")
+            return {"queued": False, "buffer_updates": 0,
+                    "error": "Buffer credentials not configured"}
+
+        try:
+            client = BufferClient(token)
+            result = client.queue_gazette_carousel(
+                profile_id=profile_id,
+                slide_paths=slide_paths,
+                caption=caption,
+                hashtags=hashtags,
+            )
+            n = len(result.get("updates", []))
+            log.info("pipeline.buffer_upload_ok", updates=n, profile_id=profile_id)
+            return {"queued": True, "buffer_updates": n, "error": None}
+
+        except BufferError as exc:
+            log.error("pipeline.buffer_upload_failed", error=str(exc))
+            return {"queued": False, "buffer_updates": 0, "error": str(exc)}
+        except Exception as exc:
+            log.error("pipeline.buffer_upload_unexpected", error=str(exc))
+            return {"queued": False, "buffer_updates": 0, "error": str(exc)}
 
     async def run_create_carousel(self) -> dict:
         """

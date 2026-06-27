@@ -29,6 +29,18 @@ class Settings(BaseSettings):
     # like filler. 7.4 = the floor of "WORTH PLAYING" once rounded.
     MIN_CAROUSEL_RATING: float = 7.4
 
+    # ── Buffer (social scheduling) ────────────────────────────────────────
+    # Get your token: python -m src.integrations.buffer_client (follow the guide
+    # at the top of that file).  Leave blank to disable Buffer upload.
+    BUFFER_ACCESS_TOKEN: str = ""
+    # Your TikTok profile id in Buffer — run the CLI helper above to print it.
+    BUFFER_TIKTOK_PROFILE_ID: str = ""
+    # Hour (UTC) at which the daily Gazette pipeline job fires.  The job generates
+    # a carousel and adds it to your Buffer queue; Buffer posts it at whatever
+    # time you've set in the Buffer posting schedule (buffer.com → Settings).
+    # Default: 7am UTC — adjust so the job runs ~1–2h before your desired post time.
+    MORNING_RUN_UTC_HOUR: int = 7
+
     # ── Carousel style ──────────────────────────────────────────────────
     # "gazette"  → GazetteCarouselGenerator: newspaper front-page cover +
     #              Gazette review-column inner slides (Direction 1+2 combined).
