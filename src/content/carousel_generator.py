@@ -275,7 +275,11 @@ def _fetch_image(url: str, retries: int = 2) -> Optional[Image.Image]:
 
 
 def _paste_sticker(canvas: Image.Image, sticker_path: str, cx: int, cy: int, size: int) -> Image.Image:
-    """Paste a custom sticker centered at (cx, cy), removing baked-in checkerboard background."""
+    """Paste a sticker centered at (cx, cy) scaled so the BLOB ITSELF is `size` pixels.
+
+    Crops out white padding before scaling so both stickers appear the same visual
+    size regardless of how much whitespace surrounds the blob in the source image.
+    """
     try:
         raw = Image.open(sticker_path)
         if raw.mode in ("RGBA", "LA") or (raw.mode == "P" and "transparency" in raw.info):
@@ -291,6 +295,17 @@ def _paste_sticker(canvas: Image.Image, sticker_path: str, cx: int, cy: int, siz
             sw, sh = sticker.size
             for xy in [(0, 0), (sw - 1, 0), (0, sh - 1), (sw - 1, sh - 1)]:
                 ImageDraw.floodfill(sticker, xy, (255, 255, 255), thresh=90)
+
+        # Crop to the tight bounding box of the blob itself. `size` then controls
+        # the actual blob dimensions — not including surrounding white padding —
+        # so both top and bottom stickers render at the same visual size.
+        from PIL import ImageOps
+        dist_from_white = ImageOps.invert(sticker.convert("L"))
+        blob_mask = dist_from_white.point(lambda v: 255 if v > 25 else 0)
+        bbox = blob_mask.getbbox()
+        if bbox and (bbox[2] - bbox[0]) > 20 and (bbox[3] - bbox[1]) > 20:
+            sticker = sticker.crop(bbox)
+
         sticker.thumbnail((size, size), Image.LANCZOS)
         sw2, sh2 = sticker.size
         canvas.paste(sticker, (cx - sw2 // 2, cy - sh2 // 2))
@@ -519,7 +534,7 @@ class CarouselGenerator:
 
         # ── Fonts ───────────────────────────────────────────────────────
         f_rob = load_font("black", 236)
-        f_games = load_font("extrabold", 88)
+        f_games = load_font("extrabold", 88)  # may be shrunk below for long value phrases
         f_edition = load_font("semibold", 64)
 
         # ── Measure text heights (use tight bbox, not line-height) ──────
@@ -543,8 +558,18 @@ class CarouselGenerator:
 
         _, rob_t, _, rob_b = draw.textbbox((0, 0), "ROBLOX", font=f_rob)
         roblox_h = rob_b - rob_t
+
+        # Adaptive value phrase: start at 88px extrabold and shrink until the
+        # phrase fits within the canvas. "games to play with friends" at 88px is
+        # 1209px — wider than the 1080px canvas — so it must scale down.
         value_text = _value_phrase(edition)
+        f_games = load_font("extrabold", 88)
+        for _gsz in (88, 78, 68, 58, 48):
+            f_games = load_font("extrabold", _gsz)
+            if _text_w(draw, value_text, f_games) <= W:
+                break
         games_h = _h(value_text, f_games)
+
         edition_h = _h(edition, f_edition)
 
         gap_ac_rob = 14
@@ -555,8 +580,10 @@ class CarouselGenerator:
                    + gap_rob_gm + games_h + gap_gm_ed + edition_h)
 
         # Centre the FULL composition (both stickers + text) as one unit.
-        top_sz = 500
-        bot_sz = 380
+        # Equal sizes so both blobs appear the same visual size (the blob bounding
+        # box is now the scale target, not the full image, so sizes match exactly).
+        top_sz = 420
+        bot_sz = 420
         gap_sticker_text = 28
 
         total_h = top_sz + gap_sticker_text + block_h + gap_sticker_text + bot_sz
