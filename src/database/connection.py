@@ -75,6 +75,8 @@ async def init_db() -> None:
             await _sqlite_add_column_if_missing(conn, "carousel_posts", "exported_at", "DATETIME")
             await _sqlite_add_column_if_missing(conn, "games", "times_carouseled", "INTEGER DEFAULT 0")
             await _sqlite_add_column_if_missing(conn, "games", "last_carouseled_at", "DATETIME")
+            # Multi-account support: account_id on carousel_posts
+            await _sqlite_add_column_if_missing(conn, "carousel_posts", "account_id", "INTEGER REFERENCES accounts(id)")
     log.info("database.initialized")
 
 

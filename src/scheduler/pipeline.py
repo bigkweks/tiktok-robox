@@ -34,7 +34,7 @@ from src.content.rating_engine import RatingEngine
 from src.content.thumbnail_generator import ThumbnailGenerator
 from src.content.video_assembler import VideoAssembler
 from src.database.connection import get_session, init_db
-from src.database.models import CarouselPost, Content, Game
+from src.database.models import Account, CarouselPost, Content, Game
 from src.discovery.trend_detector import TrendDetector
 from src.queue.content_queue import ContentQueue
 
@@ -108,25 +108,11 @@ class Pipeline:
             misfire_grace_time=300,
         )
 
-        # Daily Gazette post: generates a carousel and queues it in Buffer.
-        # Fires at MORNING_RUN_UTC_HOUR every day (default 7am UTC) so it's
-        # ready before your Buffer posting schedule slot (default: 12pm local).
-        # Only active when BUFFER_ACCESS_TOKEN and BUFFER_TIKTOK_PROFILE_ID are set.
-        if self._settings.BUFFER_ACCESS_TOKEN and self._settings.BUFFER_TIKTOK_PROFILE_ID:
-            self._scheduler.add_job(
-                self.run_morning_gazette,
-                "cron",
-                hour=self._settings.MORNING_RUN_UTC_HOUR,
-                minute=0,
-                id="morning_gazette",
-                name="Daily Gazette Post (Buffer)",
-                misfire_grace_time=600,
-            )
-            log.info("pipeline.morning_gazette_scheduled",
-                     utc_hour=self._settings.MORNING_RUN_UTC_HOUR)
-        else:
-            log.info("pipeline.morning_gazette_disabled",
-                     reason="BUFFER_ACCESS_TOKEN or BUFFER_TIKTOK_PROFILE_ID not set")
+        # Multi-account posting: register 3 daily cron jobs per active account.
+        # Each account posts to a different Buffer/TikTok profile. Accounts are
+        # managed via the /accounts dashboard page.
+        await self._seed_default_account_if_needed()
+        await self._register_all_account_jobs()
 
         self._scheduler.start()
         self._running = True
@@ -199,25 +185,238 @@ class Pipeline:
         else:
             log.info("pipeline.analytics_update.no_update")
 
-    async def run_carousel_factory(self) -> dict:
+    # ── Multi-account helpers ─────────────────────────────────────────
+
+    async def _seed_default_account_if_needed(self) -> None:
+        """
+        On first startup, if no accounts exist and .env has a Buffer profile ID,
+        create a default Account from the legacy env-var settings so existing
+        single-account users get zero-downtime migration.
+        """
+        if not self._settings.BUFFER_ACCESS_TOKEN:
+            return
+        if not self._settings.BUFFER_TIKTOK_PROFILE_ID:
+            return
+        async with get_session() as session:
+            from sqlalchemy import func as _func  # noqa: PLC0415
+            count = await session.scalar(select(_func.count(Account.id))) or 0
+            if count > 0:
+                return
+            account = Account(
+                slug="default",
+                display_name=self._settings.CHANNEL_NAME or "Default",
+                channel_name=self._settings.CHANNEL_NAME,
+                channel_handle=self._settings.CHANNEL_HANDLE,
+                brand_primary_color=self._settings.BRAND_PRIMARY_COLOR,
+                brand_secondary_color=self._settings.BRAND_SECONDARY_COLOR,
+                brand_accent_color=self._settings.BRAND_ACCENT_COLOR,
+                carousel_style=self._settings.CAROUSEL_STYLE,
+                buffer_tiktok_profile_id=self._settings.BUFFER_TIKTOK_PROFILE_ID,
+                post_hour_1_utc=self._settings.MORNING_RUN_UTC_HOUR,
+                post_hour_2_utc=self._settings.DEFAULT_POST_HOUR_2_UTC,
+                post_hour_3_utc=self._settings.DEFAULT_POST_HOUR_3_UTC,
+                is_active=True,
+            )
+            session.add(account)
+        log.info("pipeline.default_account_seeded",
+                 profile_id=self._settings.BUFFER_TIKTOK_PROFILE_ID)
+
+    async def _register_all_account_jobs(self) -> None:
+        """Register posting cron jobs for every active account with Buffer credentials."""
+        if not self._settings.BUFFER_ACCESS_TOKEN:
+            log.info("pipeline.accounts_disabled", reason="BUFFER_ACCESS_TOKEN not set")
+            return
+        async with get_session() as session:
+            rows = await session.execute(
+                select(Account).where(Account.is_active == True)  # noqa: E712
+            )
+            accounts = list(rows.scalars().all())
+        n = 0
+        for account in accounts:
+            if account.buffer_tiktok_profile_id:
+                self._register_account_jobs(account)
+                n += 1
+        log.info("pipeline.account_jobs_registered", accounts=n)
+
+    def _register_account_jobs(self, account: Account) -> None:
+        """Register 3 daily cron jobs for a single account (replace_existing=True)."""
+        for slot, hour in enumerate([
+            account.post_hour_1_utc,
+            account.post_hour_2_utc,
+            account.post_hour_3_utc,
+        ], 1):
+            self._scheduler.add_job(
+                functools.partial(self.run_account_post, account.id),
+                "cron",
+                hour=hour,
+                minute=0,
+                id=f"account_{account.id}_slot_{slot}",
+                name=f"{account.slug} slot {slot} ({hour:02d}:00 UTC)",
+                misfire_grace_time=600,
+                replace_existing=True,
+            )
+        log.info("pipeline.account_registered", slug=account.slug,
+                 hours=[account.post_hour_1_utc, account.post_hour_2_utc,
+                        account.post_hour_3_utc])
+
+    def _deregister_account_jobs(self, account_id: int) -> None:
+        """Remove all 3 posting cron jobs for a deactivated account."""
+        for slot in (1, 2, 3):
+            job_id = f"account_{account_id}_slot_{slot}"
+            if self._scheduler.get_job(job_id):
+                self._scheduler.remove_job(job_id)
+        log.info("pipeline.account_deregistered", account_id=account_id)
+
+    async def run_account_post(self, account_id: int) -> dict:
+        """
+        Scheduled job: generate one carousel for `account_id` and queue it in Buffer.
+
+        Fired 3× per day per account (at each of the account's posting hours).
+        The carousel generation, approval, and image gates are identical to the
+        manual create-carousel flow — only the Buffer profile ID differs.
+        """
+        log.info("pipeline.account_post.start", account_id=account_id)
+
+        async with get_session() as session:
+            account = await session.get(Account, account_id)
+            if not account or not account.is_active:
+                log.warning("pipeline.account_post.skipped",
+                            account_id=account_id, reason="inactive or not found")
+                return {"status": "skipped", "account_id": account_id}
+            # Detach from session so we can use the account object outside
+            session.expunge(account)
+
+        # 1. Generate + approve a carousel scoped to this account.
+        factory_result = await self.run_carousel_factory(account=account)
+
+        if not factory_result.get("carousels"):
+            reason = factory_result.get("reason", "unknown")
+            log.warning("pipeline.account_post.generation_failed",
+                        account_id=account_id, reason=reason)
+            # One retry — a first-pass rejection is often just a stale hook
+            factory_result = await self.run_carousel_factory(account=account)
+
+        if not factory_result.get("carousels"):
+            reason = factory_result.get("reason", "unknown")
+            log.warning("pipeline.account_post.failed_after_retry",
+                        account_id=account_id, reason=reason)
+            return {"status": "failed", "account_id": account_id,
+                    "reason": reason, **factory_result}
+
+        # 2. Retrieve the slide paths from the persisted CarouselPost row.
+        gen_id = factory_result.get("generation_id", "")
+        async with get_session() as session:
+            from sqlalchemy import select as _sel  # noqa: PLC0415
+            post_row = await session.scalar(
+                _sel(CarouselPost)
+                .where(CarouselPost.generation_id == gen_id)
+                .limit(1)
+            )
+            if post_row is None:
+                log.error("pipeline.account_post.post_not_found", gen_id=gen_id)
+                return {"status": "failed", "reason": "post_record_not_found"}
+            slide_paths_raw = _safe_json_load(post_row.slide_paths) if isinstance(
+                post_row.slide_paths, str
+            ) else (post_row.slide_paths or [])
+            slide_paths = [Path(p) for p in slide_paths_raw] if isinstance(
+                slide_paths_raw, list
+            ) else []
+            caption = post_row.caption or ""
+            hashtags_raw = post_row.hashtags or "[]"
+            hashtags = json.loads(hashtags_raw) if isinstance(hashtags_raw, str) else hashtags_raw
+
+        if not slide_paths:
+            log.error("pipeline.account_post.no_slides", gen_id=gen_id)
+            return {"status": "failed", "reason": "no_slide_paths"}
+
+        # 3. Upload to Buffer using this account's TikTok profile.
+        buffer_result = await asyncio.get_event_loop().run_in_executor(
+            None,
+            functools.partial(
+                self._upload_to_buffer,
+                account=account,
+                slide_paths=slide_paths,
+                caption=caption,
+                hashtags=hashtags if isinstance(hashtags, list) else [],
+            ),
+        )
+
+        overall = {
+            "status": "success" if buffer_result.get("queued") else "partial",
+            "account_id": account_id,
+            "account_slug": account.slug,
+            "part": factory_result.get("part"),
+            "slides": len(slide_paths),
+            "generation_id": gen_id,
+            "final_score": factory_result.get("final_score"),
+            **buffer_result,
+        }
+        log.info("pipeline.account_post.complete", **overall)
+        return overall
+
+    def _upload_to_buffer(
+        self,
+        account: Account,
+        slide_paths: list[Path],
+        caption: str,
+        hashtags: list[str],
+    ) -> dict:
+        """
+        Sync helper: queue a carousel in Buffer under the given account's TikTok profile.
+        Called in an executor so the async event loop is never blocked.
+        """
+        token = self._settings.BUFFER_ACCESS_TOKEN
+        profile_id = account.buffer_tiktok_profile_id
+
+        if not token or not profile_id:
+            log.warning("pipeline.buffer_upload_skipped",
+                        account=account.slug, reason="credentials not configured")
+            return {"queued": False, "buffer_updates": 0,
+                    "error": "Buffer credentials not configured"}
+        try:
+            client = BufferClient(token)
+            result = client.queue_gazette_carousel(
+                profile_id=profile_id,
+                slide_paths=slide_paths,
+                caption=caption,
+                hashtags=hashtags,
+            )
+            n = len(result.get("updates", []))
+            log.info("pipeline.buffer_upload_ok",
+                     account=account.slug, updates=n, profile_id=profile_id)
+            return {"queued": True, "buffer_updates": n, "error": None}
+        except BufferError as exc:
+            log.error("pipeline.buffer_upload_failed",
+                      account=account.slug, error=str(exc))
+            return {"queued": False, "buffer_updates": 0, "error": str(exc)}
+        except Exception as exc:
+            log.error("pipeline.buffer_upload_unexpected",
+                      account=account.slug, error=str(exc))
+            return {"queued": False, "buffer_updates": 0, "error": str(exc)}
+
+    async def run_carousel_factory(self, account: Optional[Account] = None) -> dict:
         """
         Batch 5 rated games into one photo carousel — the proven viral format.
         Picks games that already have ratings (content_generated=True) and
         haven't been included in a carousel yet, then generates all 6 slides.
         """
         import json as _json
-        log.info("pipeline.carousel_factory.start")
+        account_id = account.id if account else None
+        log.info("pipeline.carousel_factory.start", account_id=account_id)
 
         # Pull 5 approved/rated content items not yet in a carousel
         async with get_session() as session:
             # Build a cooldown set: exclude games that appeared in a carousel
             # fewer than 50 unique other games ago (so no game repeats within
             # the next 50 unique featured games after its last use).
+            # Scoped to this account so cross-account repeats don't count.
             from sqlalchemy import select as sa_select  # noqa: PLC0415
-            hist_result = await session.execute(
-                sa_select(CarouselPost.game_ids)
-                .order_by(CarouselPost.created_at.asc())
+            cooldown_q = sa_select(CarouselPost.game_ids).order_by(
+                CarouselPost.created_at.asc()
             )
+            if account_id is not None:
+                cooldown_q = cooldown_q.where(CarouselPost.account_id == account_id)
+            hist_result = await session.execute(cooldown_q)
             ordered_appearances: list[int] = []
             for (row,) in hist_result:
                 try:
@@ -338,7 +537,11 @@ class Pipeline:
             edition_for_games, validate_edition_match,
         )
         batch_genres = [g.genre for c, g in batch]
-        part = self._carousel_part_counter
+        # Part counter: per-account (from Account.part_counter) or global fallback
+        if account is not None:
+            part = account.part_counter
+        else:
+            part = self._carousel_part_counter
         edition = edition_for_games(batch_genres, part)
         ed_ok, ed_reason = validate_edition_match(edition, batch_genres)
         if not ed_ok:
@@ -346,12 +549,14 @@ class Pipeline:
             # but if it ever does, fall back to a safe neutral edition.
             log.warning("pipeline.carousel_factory.edition_mismatch", reason=ed_reason)
             edition = "Hidden Gems"
-        self._carousel_part_counter += 1
+        if account is None:
+            self._carousel_part_counter += 1
 
-        # HISTORICAL DEDUP: load the cover hooks + captions of recently shipped
-        # carousels so the approval gate never reuses a hook/caption the same
-        # followers already saw (the #1 "this is a bot" tell).
-        used_hooks_hist, used_caps_hist = await self._recent_text_history(limit=25)
+        # HISTORICAL DEDUP: load per-account cover hooks + captions so each
+        # channel's followers never see repeated hooks. Scoped to account_id.
+        used_hooks_hist, used_caps_hist = await self._recent_text_history(
+            limit=25, account_id=account_id
+        )
 
         # ── MANDATORY approval gate (runs BEFORE we render or persist) ──
         # A carousel is not complete until it survives the three-reviewer panel.
@@ -433,17 +638,14 @@ class Pipeline:
                         cycles=approval.cycles,
                         hard_failures=approval.panel.hard_failures,
                         reviewers={r.name: r.score for r in approval.panel.reviewers})
-            # Roll back the part counter so the rejected part number is reused by
-            # the next attempt — we don't burn a "Part N" on content nobody sees.
-            self._carousel_part_counter -= 1
+            # Roll back the part counter (no part burned on rejected content).
+            if account is None:
+                self._carousel_part_counter -= 1
             return {"carousels": 0, "rejected": True, "part": part,
                     "final_score": approval.final_score,
                     "hard_failures": approval.panel.hard_failures}
 
         # ── NEAR-DUPLICATE GATE (vs shipped history) ──────────────────
-        # The panel guarantees intra-carousel variety; this guards across posts.
-        # If the approved cover hook or any caption is a near-duplicate of a
-        # recently shipped one, reject so the retry produces something fresh.
         from src.content.dedup import is_near_duplicate  # noqa: PLC0415
         dup_reason = None
         if is_near_duplicate(approval.cover_hook, used_hooks_hist):
@@ -456,7 +658,8 @@ class Pipeline:
         if dup_reason:
             log.warning("pipeline.carousel_factory.near_duplicate", part=part,
                         reason=dup_reason)
-            self._carousel_part_counter -= 1
+            if account is None:
+                self._carousel_part_counter -= 1
             return {"carousels": 0, "rejected": True, "part": part,
                     "reason": "near_duplicate", "message": dup_reason}
 
@@ -520,7 +723,8 @@ class Pipeline:
                       game_slides=render.game_slide_count,
                       failed_games=render.failed_games,
                       failed_icons=render.failed_icon_games)
-            self._carousel_part_counter -= 1
+            if account is None:
+                self._carousel_part_counter -= 1
             return {"carousels": 0, "rejected": True, "part": part,
                     "reason": "placeholder_thumbnails",
                     "message": render.failure_reason,
@@ -531,14 +735,13 @@ class Pipeline:
         slide_paths = render.slides
 
         # ── EXPORT VALIDATION GATE (safe-zone / dimensions / integrity) ──
-        # The render loaded real thumbnails; this confirms every slide is a valid
-        # 1080×1920 frame, not blank/corrupt, before we ever persist it.
         from src.content.export_validator import validate_carousel_export  # noqa: PLC0415
         export_check = validate_carousel_export([str(p) for p in slide_paths])
         if not export_check.ok:
             log.error("pipeline.carousel_factory.export_invalid", part=part,
                       reasons=export_check.reasons)
-            self._carousel_part_counter -= 1
+            if account is None:
+                self._carousel_part_counter -= 1
             return {"carousels": 0, "rejected": True, "part": part,
                     "reason": "export_invalid",
                     "message": "Render failed validation: " + "; ".join(export_check.reasons)}
@@ -573,6 +776,7 @@ class Pipeline:
                 slide_captions=_json.dumps(list(deduped_captions)),
                 generation_id=generation_id,
                 min_game_rating=min(batch_scores) if batch_scores else None,
+                account_id=account_id,
             )
             session.add(post)
             # Track carousel usage on each featured game so the 50-game cooldown
@@ -583,6 +787,11 @@ class Pipeline:
                 if game_row:
                     game_row.times_carouseled = (game_row.times_carouseled or 0) + 1
                     game_row.last_carouseled_at = now_utc
+            # Increment per-account part counter atomically in DB
+            if account_id is not None:
+                acc_row = await session.get(Account, account_id)
+                if acc_row:
+                    acc_row.part_counter = part + 1
 
         log.info("pipeline.carousel_factory.complete", part=part, edition=edition,
                  slides=len(slide_paths), final_score=approval.final_score,
@@ -593,123 +802,6 @@ class Pipeline:
                 "final_score": approval.final_score, "approved": False,
                 "status": "pending_review", "cycles": approval.cycles}
 
-    async def run_morning_gazette(self) -> dict:
-        """
-        Daily scheduled job: generate a carousel and queue it in Buffer.
-
-        Runs at MORNING_RUN_UTC_HOUR (default 7am UTC). On success the carousel
-        is added to the Buffer queue and Buffer will post it at the next scheduled
-        slot in your posting schedule (set at buffer.com → Settings → Schedule).
-
-        Returns a summary dict with keys: status, part, slides, buffer_queued.
-        """
-        log.info("pipeline.morning_gazette.start")
-
-        # 1. Generate + approve a carousel (same gate as run_carousel_factory).
-        factory_result = await self.run_carousel_factory()
-
-        if not factory_result.get("carousels"):
-            # Retry once — a first-pass rejection is often just a stale hook.
-            log.info("pipeline.morning_gazette.retry")
-            factory_result = await self.run_carousel_factory()
-
-        if not factory_result.get("carousels"):
-            reason = factory_result.get("reason", "unknown")
-            log.warning("pipeline.morning_gazette.generation_failed", reason=reason)
-            return {"status": "failed", "reason": reason, **factory_result}
-
-        # 2. Retrieve the slide paths from the CarouselPost DB record.
-        part = factory_result.get("part")
-        gen_id = factory_result.get("generation_id", "")
-
-        async with get_session() as session:
-            from sqlalchemy import select as _sel  # noqa: PLC0415
-            post_row = await session.scalar(
-                _sel(CarouselPost)
-                .where(CarouselPost.generation_id == gen_id)
-                .limit(1)
-            )
-            if post_row is None:
-                log.error("pipeline.morning_gazette.post_not_found", gen_id=gen_id)
-                return {"status": "failed", "reason": "post_record_not_found"}
-
-            slide_paths_raw = _safe_json_load(post_row.slide_paths) if isinstance(
-                post_row.slide_paths, str
-            ) else (post_row.slide_paths or [])
-            if isinstance(slide_paths_raw, list):
-                slide_paths = [Path(p) for p in slide_paths_raw]
-            else:
-                slide_paths = []
-
-            caption = post_row.caption or ""
-            hashtags_raw = post_row.hashtags or "[]"
-            hashtags = json.loads(hashtags_raw) if isinstance(hashtags_raw, str) else hashtags_raw
-
-        if not slide_paths:
-            log.error("pipeline.morning_gazette.no_slides", gen_id=gen_id)
-            return {"status": "failed", "reason": "no_slide_paths"}
-
-        # 3. Upload to Buffer.
-        buffer_result = await asyncio.get_event_loop().run_in_executor(
-            None,
-            functools.partial(
-                self._upload_to_buffer,
-                slide_paths=slide_paths,
-                caption=caption,
-                hashtags=hashtags if isinstance(hashtags, list) else [],
-            ),
-        )
-
-        overall = {
-            "status": "success" if buffer_result.get("queued") else "partial",
-            "part": part,
-            "slides": len(slide_paths),
-            "generation_id": gen_id,
-            "final_score": factory_result.get("final_score"),
-            **buffer_result,
-        }
-        log.info("pipeline.morning_gazette.complete", **overall)
-        return overall
-
-    def _upload_to_buffer(
-        self,
-        slide_paths: list[Path],
-        caption: str,
-        hashtags: list[str],
-    ) -> dict:
-        """
-        Sync helper: queue the carousel in Buffer via the API.
-
-        Called in an executor so the async pipeline loop is never blocked.
-        Returns {"queued": bool, "buffer_updates": int, "error": str|None}.
-        """
-        token = self._settings.BUFFER_ACCESS_TOKEN
-        profile_id = self._settings.BUFFER_TIKTOK_PROFILE_ID
-
-        if not token or not profile_id:
-            log.warning("pipeline.buffer_upload_skipped",
-                        reason="credentials not configured")
-            return {"queued": False, "buffer_updates": 0,
-                    "error": "Buffer credentials not configured"}
-
-        try:
-            client = BufferClient(token)
-            result = client.queue_gazette_carousel(
-                profile_id=profile_id,
-                slide_paths=slide_paths,
-                caption=caption,
-                hashtags=hashtags,
-            )
-            n = len(result.get("updates", []))
-            log.info("pipeline.buffer_upload_ok", updates=n, profile_id=profile_id)
-            return {"queued": True, "buffer_updates": n, "error": None}
-
-        except BufferError as exc:
-            log.error("pipeline.buffer_upload_failed", error=str(exc))
-            return {"queued": False, "buffer_updates": 0, "error": str(exc)}
-        except Exception as exc:
-            log.error("pipeline.buffer_upload_unexpected", error=str(exc))
-            return {"queued": False, "buffer_updates": 0, "error": str(exc)}
 
     async def run_create_carousel(self) -> dict:
         """
@@ -776,20 +868,24 @@ class Pipeline:
         finally:
             self._warming = False
 
-    async def _recent_text_history(self, limit: int = 25) -> tuple[list[str], list[str]]:
-        """Load the cover hooks and slide captions of recently created carousels
-        for cross-post duplicate detection. Returns (hooks, captions)."""
+    async def _recent_text_history(
+        self, limit: int = 25, account_id: Optional[int] = None
+    ) -> tuple[list[str], list[str]]:
+        """Load per-account cover hooks and slide captions for dedup detection."""
         import json as _json  # noqa: PLC0415
         from sqlalchemy import select as sa_select  # noqa: PLC0415
         hooks: list[str] = []
         caps: list[str] = []
         try:
             async with get_session() as session:
-                rows = await session.execute(
+                q = (
                     sa_select(CarouselPost.cover_hook, CarouselPost.slide_captions)
                     .order_by(CarouselPost.created_at.desc())
                     .limit(limit)
                 )
+                if account_id is not None:
+                    q = q.where(CarouselPost.account_id == account_id)
+                rows = await session.execute(q)
                 for hook, slide_caps in rows:
                     if hook:
                         hooks.append(hook)

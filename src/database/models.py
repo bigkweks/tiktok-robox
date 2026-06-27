@@ -14,6 +14,56 @@ class Base(DeclarativeBase):
     pass
 
 
+class Account(Base):
+    """
+    A TikTok posting account (one Buffer profile = one account).
+
+    All accounts share the same discovered game pool and use the same Buffer
+    access token from .env. Only `buffer_tiktok_profile_id` differs, routing
+    each account's carousels to a different TikTok channel.
+
+    Three APScheduler cron jobs are registered per active account (one per
+    posting slot). Part numbering is tracked per-account so each channel has
+    its own "Part 1 / Part 2 …" series.
+    """
+    __tablename__ = "accounts"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    slug: Mapped[str] = mapped_column(String(64), unique=True, index=True, nullable=False)
+    display_name: Mapped[str] = mapped_column(String(256), nullable=False)
+
+    # Branding (for thumbnails / videos — not burned into carousel slides)
+    channel_name: Mapped[str] = mapped_column(String(256), default="RobloxGems")
+    channel_handle: Mapped[str] = mapped_column(String(128), default="@robloxgems")
+    brand_primary_color: Mapped[str] = mapped_column(String(7), default="#6C63FF")
+    brand_secondary_color: Mapped[str] = mapped_column(String(7), default="#FF6584")
+    brand_accent_color: Mapped[str] = mapped_column(String(7), default="#FFD700")
+    carousel_style: Mapped[str] = mapped_column(String(16), default="gazette")
+
+    # Buffer/TikTok — one shared token in .env; profile_id is what differs
+    buffer_tiktok_profile_id: Mapped[str] = mapped_column(String(256), default="")
+
+    # Three UTC posting hours per day; APScheduler fires one job at each slot
+    post_hour_1_utc: Mapped[int] = mapped_column(Integer, default=7)
+    post_hour_2_utc: Mapped[int] = mapped_column(Integer, default=12)
+    post_hour_3_utc: Mapped[int] = mapped_column(Integer, default=17)
+
+    # Per-account part counter: each account runs its own "Part N" series
+    part_counter: Mapped[int] = mapped_column(Integer, default=1)
+
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=func.now(), onupdate=func.now())
+
+    # Relationship: carousels posted under this account
+    carousel_posts: Mapped[list[CarouselPost]] = relationship(  # type: ignore[name-defined]
+        "CarouselPost", back_populates="account", cascade="save-update, merge"
+    )
+
+    def __repr__(self) -> str:
+        return f"<Account {self.slug!r} profile={self.buffer_tiktok_profile_id!r}>"
+
+
 class Game(Base):
     """A discovered Roblox game with all its metadata and scoring."""
     __tablename__ = "games"
@@ -259,10 +309,24 @@ class CarouselPost(Base):
     generation_id: Mapped[Optional[str]] = mapped_column(String(40), index=True)
     min_game_rating: Mapped[Optional[float]] = mapped_column(Float)  # lowest score in the batch
 
+    # ── Per-account scoping ───────────────────────────────────────────
+    # Nullable so pre-migration rows are unaffected. New rows always carry
+    # account_id so cooldown / dedup history can be scoped per account.
+    account_id: Mapped[Optional[int]] = mapped_column(
+        Integer, ForeignKey("accounts.id"), nullable=True, index=True
+    )
+    account: Mapped[Optional[Account]] = relationship(  # type: ignore[name-defined]
+        "Account", back_populates="carousel_posts"
+    )
+
     # ── Lifecycle flags (carousel-centric analytics) ───────────────────
     exported_at: Mapped[Optional[datetime]] = mapped_column(DateTime)
 
     created_at: Mapped[datetime] = mapped_column(DateTime, default=func.now())
+
+    __table_args__ = (
+        Index("ix_carousel_account_created", "account_id", "created_at"),
+    )
 
 
 class ModelWeights(Base):

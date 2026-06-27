@@ -33,7 +33,7 @@ from sqlalchemy import desc, select
 from src.analytics.feedback_loop import FeedbackLoop
 from src.config import get_settings
 from src.database.connection import get_session, init_db
-from src.database.models import CarouselPost, Content, CrawlLog, Game, PostAnalytics
+from src.database.models import Account, CarouselPost, Content, CrawlLog, Game, PostAnalytics
 from src.queue.content_queue import ContentQueue
 from src.scheduler.pipeline import Pipeline
 
@@ -720,3 +720,184 @@ async def clear_all_games():
         await session.execute(text("DELETE FROM games"))
     log.info("dashboard.all_games_cleared", count=game_count)
     return {"status": "cleared", "deleted": game_count}
+
+
+# ── Account management ─────────────────────────────────────────────────────────
+
+class AccountCreateRequest(BaseModel):
+    slug: str
+    display_name: str
+    channel_name: str = "RobloxGems"
+    channel_handle: str = "@robloxgems"
+    brand_primary_color: str = "#6C63FF"
+    brand_secondary_color: str = "#FF6584"
+    brand_accent_color: str = "#FFD700"
+    carousel_style: str = "gazette"
+    buffer_tiktok_profile_id: str = ""
+    post_hour_1_utc: int = 7
+    post_hour_2_utc: int = 12
+    post_hour_3_utc: int = 17
+
+
+@app.get("/accounts", response_class=HTMLResponse)
+async def accounts_page(request: Request):
+    async with get_session() as session:
+        from sqlalchemy import func as _func, select as _sel
+        rows = await session.execute(
+            _sel(Account).order_by(Account.created_at.asc())
+        )
+        accounts = list(rows.scalars().all())
+
+        # Post counts per account
+        counts_q = await session.execute(
+            _sel(CarouselPost.account_id, _func.count(CarouselPost.id))
+            .group_by(CarouselPost.account_id)
+        )
+        post_counts = {row[0]: row[1] for row in counts_q}
+
+    return templates.TemplateResponse(request, "accounts.html", {
+        "accounts": accounts,
+        "post_counts": post_counts,
+        "default_hours": [
+            _settings.DEFAULT_POST_HOUR_1_UTC,
+            _settings.DEFAULT_POST_HOUR_2_UTC,
+            _settings.DEFAULT_POST_HOUR_3_UTC,
+        ],
+        "buffer_configured": bool(_settings.BUFFER_ACCESS_TOKEN),
+    })
+
+
+@app.post("/accounts")
+async def create_account(req: AccountCreateRequest):
+    """Create a new account and register its posting jobs."""
+    slug = req.slug.strip().lower().replace(" ", "-")
+    async with get_session() as session:
+        from sqlalchemy import select as _sel
+        existing = await session.scalar(
+            _sel(Account).where(Account.slug == slug).limit(1)
+        )
+        if existing:
+            raise HTTPException(400, f"Account slug '{slug}' already exists")
+        account = Account(
+            slug=slug,
+            display_name=req.display_name.strip(),
+            channel_name=req.channel_name.strip(),
+            channel_handle=req.channel_handle.strip(),
+            brand_primary_color=req.brand_primary_color,
+            brand_secondary_color=req.brand_secondary_color,
+            brand_accent_color=req.brand_accent_color,
+            carousel_style=req.carousel_style,
+            buffer_tiktok_profile_id=req.buffer_tiktok_profile_id.strip(),
+            post_hour_1_utc=req.post_hour_1_utc,
+            post_hour_2_utc=req.post_hour_2_utc,
+            post_hour_3_utc=req.post_hour_3_utc,
+        )
+        session.add(account)
+        await session.flush()
+        account_id = account.id
+        # Detach before session closes so we can pass it to the pipeline
+        import copy as _copy
+        account_copy = _copy.copy(account)
+        session.expunge(account)
+
+    if _pipeline and req.buffer_tiktok_profile_id:
+        _pipeline._register_account_jobs(account_copy)
+
+    log.info("dashboard.account_created", slug=slug, account_id=account_id)
+    return {"status": "created", "account_id": account_id, "slug": slug}
+
+
+@app.post("/accounts/{account_id}/deactivate")
+async def deactivate_account(account_id: int):
+    """Deactivate an account and remove its scheduled posting jobs."""
+    async with get_session() as session:
+        account = await session.get(Account, account_id)
+        if not account:
+            raise HTTPException(404, "Account not found")
+        account.is_active = False
+        slug = account.slug
+
+    if _pipeline:
+        _pipeline._deregister_account_jobs(account_id)
+
+    log.info("dashboard.account_deactivated", account_id=account_id, slug=slug)
+    return {"status": "deactivated", "account_id": account_id}
+
+
+@app.post("/accounts/{account_id}/activate")
+async def activate_account(account_id: int):
+    """Re-activate a deactivated account and re-register its posting jobs."""
+    async with get_session() as session:
+        account = await session.get(Account, account_id)
+        if not account:
+            raise HTTPException(404, "Account not found")
+        account.is_active = True
+        import copy as _copy
+        account_copy = _copy.copy(account)
+        session.expunge(account)
+
+    if _pipeline and account_copy.buffer_tiktok_profile_id:
+        _pipeline._register_account_jobs(account_copy)
+
+    log.info("dashboard.account_activated", account_id=account_id)
+    return {"status": "activated", "account_id": account_id}
+
+
+@app.post("/accounts/{account_id}/update")
+async def update_account(account_id: int, req: AccountCreateRequest):
+    """Update account settings and re-register posting jobs with new hours."""
+    async with get_session() as session:
+        account = await session.get(Account, account_id)
+        if not account:
+            raise HTTPException(404, "Account not found")
+        account.display_name = req.display_name.strip()
+        account.channel_name = req.channel_name.strip()
+        account.channel_handle = req.channel_handle.strip()
+        account.brand_primary_color = req.brand_primary_color
+        account.brand_secondary_color = req.brand_secondary_color
+        account.brand_accent_color = req.brand_accent_color
+        account.carousel_style = req.carousel_style
+        account.buffer_tiktok_profile_id = req.buffer_tiktok_profile_id.strip()
+        account.post_hour_1_utc = req.post_hour_1_utc
+        account.post_hour_2_utc = req.post_hour_2_utc
+        account.post_hour_3_utc = req.post_hour_3_utc
+        import copy as _copy
+        account_copy = _copy.copy(account)
+        session.expunge(account)
+
+    # Re-register jobs with updated hours
+    if _pipeline and account_copy.is_active and account_copy.buffer_tiktok_profile_id:
+        _pipeline._register_account_jobs(account_copy)
+
+    log.info("dashboard.account_updated", account_id=account_id)
+    return {"status": "updated", "account_id": account_id}
+
+
+@app.post("/accounts/{account_id}/test-buffer")
+async def test_buffer_account(account_id: int):
+    """Verify that Buffer credentials for this account are valid."""
+    if not _settings.BUFFER_ACCESS_TOKEN:
+        return {"ok": False, "error": "BUFFER_ACCESS_TOKEN not set in .env"}
+    async with get_session() as session:
+        account = await session.get(Account, account_id)
+        if not account:
+            raise HTTPException(404, "Account not found")
+        profile_id = account.buffer_tiktok_profile_id
+
+    if not profile_id:
+        return {"ok": False, "error": "No Buffer profile ID set for this account"}
+
+    import asyncio as _asyncio
+    from src.integrations.buffer_client import BufferClient, BufferError
+    def _check():
+        try:
+            client = BufferClient(_settings.BUFFER_ACCESS_TOKEN)
+            profiles = client.get_profiles()
+            match = next((p for p in profiles if p["id"] == profile_id), None)
+            if match:
+                return {"ok": True, "service": match.get("service"),
+                        "username": match.get("formatted_username")}
+            return {"ok": False, "error": f"Profile ID '{profile_id}' not found in Buffer account"}
+        except BufferError as e:
+            return {"ok": False, "error": str(e)}
+    return await _asyncio.get_event_loop().run_in_executor(None, _check)

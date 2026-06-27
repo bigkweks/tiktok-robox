@@ -33,13 +33,16 @@ class Settings(BaseSettings):
     # Get your token: python -m src.integrations.buffer_client (follow the guide
     # at the top of that file).  Leave blank to disable Buffer upload.
     BUFFER_ACCESS_TOKEN: str = ""
-    # Your TikTok profile id in Buffer — run the CLI helper above to print it.
+    # Legacy single-account settings — used only to seed the default Account row
+    # on first startup.  Manage accounts via the /accounts dashboard page instead.
     BUFFER_TIKTOK_PROFILE_ID: str = ""
-    # Hour (UTC) at which the daily Gazette pipeline job fires.  The job generates
-    # a carousel and adds it to your Buffer queue; Buffer posts it at whatever
-    # time you've set in the Buffer posting schedule (buffer.com → Settings).
-    # Default: 7am UTC — adjust so the job runs ~1–2h before your desired post time.
     MORNING_RUN_UTC_HOUR: int = 7
+
+    # Default posting hours (UTC) for newly created accounts.
+    # Three slots = three carousels queued in Buffer per account per day.
+    DEFAULT_POST_HOUR_1_UTC: int = 7
+    DEFAULT_POST_HOUR_2_UTC: int = 12
+    DEFAULT_POST_HOUR_3_UTC: int = 17
 
     # ── Carousel style ──────────────────────────────────────────────────
     # "gazette"  → GazetteCarouselGenerator: newspaper front-page cover +
