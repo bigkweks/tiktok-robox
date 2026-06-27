@@ -29,6 +29,27 @@ class Settings(BaseSettings):
     # like filler. 7.4 = the floor of "WORTH PLAYING" once rounded.
     MIN_CAROUSEL_RATING: float = 7.4
 
+    # ── Buffer (social scheduling) ────────────────────────────────────────
+    # Get your token: python -m src.integrations.buffer_client (follow the guide
+    # at the top of that file).  Leave blank to disable Buffer upload.
+    BUFFER_ACCESS_TOKEN: str = ""
+    # Legacy single-account settings — used only to seed the default Account row
+    # on first startup.  Manage accounts via the /accounts dashboard page instead.
+    BUFFER_TIKTOK_PROFILE_ID: str = ""
+    MORNING_RUN_UTC_HOUR: int = 7
+
+    # Default posting hours (UTC) for newly created accounts.
+    # Three slots = three carousels queued in Buffer per account per day.
+    DEFAULT_POST_HOUR_1_UTC: int = 7
+    DEFAULT_POST_HOUR_2_UTC: int = 12
+    DEFAULT_POST_HOUR_3_UTC: int = 17
+
+    # ── Carousel style ──────────────────────────────────────────────────
+    # "gazette"  → GazetteCarouselGenerator: newspaper front-page cover +
+    #              Gazette review-column inner slides (Direction 1+2 combined).
+    # "classic"  → CarouselGenerator: original Roblox-style photo carousel.
+    CAROUSEL_STYLE: Literal["gazette", "classic"] = "gazette"
+
     # ── Content generation ───────────────────────────────────────────────
     THUMBNAIL_VARIANTS: int = 2
     # The carousel is the primary product; the 9:16 video is secondary and the

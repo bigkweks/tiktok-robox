@@ -84,6 +84,8 @@ async def init_db() -> None:
             await _sqlite_add_column_if_missing(conn, "carousel_posts", "tiktok_follows", "INTEGER")
             await _sqlite_add_column_if_missing(conn, "carousel_posts", "hours_since_post", "INTEGER")
             await _sqlite_add_column_if_missing(conn, "carousel_posts", "analytics_recorded_at", "DATETIME")
+            # Multi-account support: account_id on carousel_posts
+            await _sqlite_add_column_if_missing(conn, "carousel_posts", "account_id", "INTEGER REFERENCES accounts(id)")
     log.info("database.initialized")
 
 

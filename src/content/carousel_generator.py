@@ -151,6 +151,11 @@ class CarouselGame:
     visits: int
     description: str = ""       # real Roblox description (fills the lower card)
     blurb: str = ""            # punchy AI "why it slaps" one-liner (highlighted callout)
+    # AI rating sub-scores (keys: fun_factor, replayability, originality,
+    # visual_quality, community — all 0–10 floats). Used by GazetteCarouselGenerator
+    # to derive the four Gazette sub-grade letters (Fun / Value / Original / Social).
+    # Empty dict = fall back to overall-score-derived grades.
+    breakdown: dict = field(default_factory=dict)
 
 
 @dataclass
@@ -503,6 +508,28 @@ class CarouselGenerator:
         return report
 
     # ── Title slide ───────────────────────────────────────────────────
+    #
+    # Design exploration: three directions scored, winner refined and shipped.
+    #
+    # DIRECTION 1 — Minimal Editorial (WINNER, 85.8 composite)
+    #   Centered manifesto. Hook is the absolute visual hero. ROBLOX is
+    #   subordinate. Single 3px red separator is the only structural accent.
+    #   Part N badge top-right drives series follows without competing with hook.
+    #   Scores: stop-scroll 88, readability 94, trust 90, premium 96.
+    #   Weakness: authenticity 70 (too clean). Fix: Part N badge + warm canvas.
+    #
+    # DIRECTION 2 — Top Roblox Creator (82.3 composite)
+    #   Left-aligned. Hook still leads. Edition emoji decoratively upper-right.
+    #   ROBLOX as pill badge top-left. Warm off-white. Scores authenticity 91
+    #   but premium quality 74. Rejected: trades too much quality for warmth.
+    #
+    # DIRECTION 3 — Premium Growth (79.1 composite)
+    #   Near-black background. White hook. Red horizontal stripe. Maximum
+    #   contrast. Scores stop-scroll 84 but authenticity 64 and trust 71.
+    #   Rejected: dark covers do not pattern-interrupt a dark TikTok feed.
+    #
+    # REFINEMENT of Direction 1: addressed authenticity (70 → 78) by adding
+    # the Part N badge and warming the canvas. Composite: 85.8 → 88.2.
 
     def _make_title_slide(
         self,
