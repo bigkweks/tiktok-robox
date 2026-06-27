@@ -533,9 +533,9 @@ class CarouselGenerator:
         bot_sticker = str(sticker_dir / STICKER_FILES[(part_number + n // 2) % n])
 
         # ── Fonts ───────────────────────────────────────────────────────
-        f_rob = load_font("black", 236)
-        f_games = load_font("extrabold", 88)  # may be shrunk below for long value phrases
-        f_edition = load_font("semibold", 64)
+        f_rob = load_font("black", 196)
+        f_games = load_font("extrabold", 74)  # may be shrunk below for long value phrases
+        f_edition = load_font("semibold", 54)
 
         # ── Measure text heights (use tight bbox, not line-height) ──────
         def _h(text: str, font) -> int:
@@ -546,8 +546,8 @@ class CarouselGenerator:
         #    then wrap to two lines if even the smallest size is too wide.
         hook_text = cover_hook or "actually good"
         hook_max_w = W - 2 * SAFE
-        f_hook = load_font("bold", 76)
-        for sz in (76, 68, 60, 52):
+        f_hook = load_font("bold", 62)
+        for sz in (62, 54, 46, 40):
             f_hook = load_font("bold", sz)
             if _text_w(draw, hook_text, f_hook) <= hook_max_w:
                 break
@@ -563,14 +563,14 @@ class CarouselGenerator:
         # phrase fits within the canvas. "games to play with friends" at 88px is
         # 1209px — wider than the 1080px canvas — so it must scale down.
         value_text = _value_phrase(edition)
-        f_games = load_font("extrabold", 88)
-        for _gsz in (88, 78, 68, 58, 48):
+        f_games = load_font("extrabold", 74)
+        for _gsz in (74, 64, 54, 46):
             f_games = load_font("extrabold", _gsz)
             if _text_w(draw, value_text, f_games) <= W:
                 break
         games_h = _h(value_text, f_games)
 
-        f_part = load_font("bold", 52)
+        f_part = load_font("bold", 44)
         part_text = f"part {part_number}"
         part_h = _h(part_text, f_part)
         gap_gm_part = 10
@@ -624,9 +624,9 @@ class CarouselGenerator:
         draw.text((cx - gw // 2, y), value_text, font=f_games, fill=ink)
         y += games_h + gap_gm_part
 
-        # Small "part N" label — right-of-centre, between value phrase and edition.
+        # Small "part N" label — right-aligned to the safe margin.
         pw = _text_w(draw, part_text, f_part)
-        draw.text((cx - pw // 2 + 120, y), part_text, font=f_part, fill=ink)
+        draw.text((W - SAFE - pw, y), part_text, font=f_part, fill=ink)
         y += part_h + gap_part_ed
 
         edition_line = f"{edition} {theme_emoji}"
