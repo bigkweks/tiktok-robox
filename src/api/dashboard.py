@@ -265,13 +265,28 @@ async def trigger_carousel(background_tasks: BackgroundTasks):
     return {"status": "error", "message": "Pipeline not initialized"}
 
 
+class CreateCarouselRequest(BaseModel):
+    account_id: Optional[int] = None
+
+
 @app.post("/pipeline/create-carousel")
-async def create_carousel():
+async def create_carousel(req: CreateCarouselRequest = CreateCarouselRequest()):
     """One action → a carousel. Builds now if possible, otherwise warms up the
     discover→rate→build chain in the background. The single primary CTA."""
-    if _pipeline:
-        return await _pipeline.run_create_carousel()
-    return {"status": "error", "message": "Pipeline not initialized"}
+    if not _pipeline:
+        return {"status": "error", "message": "Pipeline not initialized"}
+    if req.account_id is not None:
+        async with get_session() as session:
+            account = await session.get(Account, req.account_id)
+            if account:
+                from sqlalchemy.orm import make_transient  # noqa: PLC0415
+                session.expunge(account)
+                result = await _pipeline.run_carousel_factory(account=account)
+                if result.get("carousels"):
+                    return {**result, "status": "created", "review_required": True,
+                            "carousel_status": "pending_review"}
+                return result
+    return await _pipeline.run_create_carousel()
 
 
 # ── Carousel pages ────────────────────────────────────────────────────
@@ -280,9 +295,14 @@ async def create_carousel():
 async def carousels_page(request: Request):
     async with get_session() as session:
         result = await session.execute(
-            select(CarouselPost).order_by(CarouselPost.created_at.desc()).limit(20)
+            select(CarouselPost).order_by(CarouselPost.created_at.desc()).limit(50)
         )
         posts = result.scalars().all()
+        acc_rows = await session.execute(
+            select(Account).order_by(Account.created_at.asc())
+        )
+        accounts = list(acc_rows.scalars().all())
+    account_map = {a.id: a.display_name for a in accounts}
 
     # Attach helper properties for template
     enriched = []
@@ -340,10 +360,13 @@ async def carousels_page(request: Request):
             "hours_since_post": hours_since_post_val,
             "analytics_recorded_at": getattr(p, "analytics_recorded_at", None),
             "generation_id": getattr(p, "generation_id", None),
+            "account_id": getattr(p, "account_id", None),
+            "account_name": account_map.get(getattr(p, "account_id", None), ""),
         })
 
     return templates.TemplateResponse(request, "carousels.html", {
         "carousels": enriched,
+        "accounts": accounts,
         "settings": _settings,
     })
 
@@ -961,6 +984,25 @@ async def update_account(account_id: int, req: AccountCreateRequest):
 
     log.info("dashboard.account_updated", account_id=account_id)
     return {"status": "updated", "account_id": account_id}
+
+
+class RenameAccountRequest(BaseModel):
+    display_name: str
+
+
+@app.post("/accounts/{account_id}/rename")
+async def rename_account(account_id: int, req: RenameAccountRequest):
+    """Quick inline rename — updates only display_name."""
+    name = req.display_name.strip()
+    if not name:
+        raise HTTPException(400, "Display name cannot be empty")
+    async with get_session() as session:
+        account = await session.get(Account, account_id)
+        if not account:
+            raise HTTPException(404, "Account not found")
+        account.display_name = name
+    log.info("dashboard.account_renamed", account_id=account_id, name=name)
+    return {"status": "ok", "display_name": name}
 
 
 @app.post("/accounts/{account_id}/test-buffer")
