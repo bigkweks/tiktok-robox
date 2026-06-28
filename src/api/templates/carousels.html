@@ -2,9 +2,29 @@
 {% block title %}Carousels{% endblock %}
 {% block content %}
 
+{# ── Account tabs ─────────────────────────────────────────────────────── #}
+{% if accounts %}
+<div class="account-tabs mb-4" id="accountTabs">
+  <div class="account-tabs-scroll">
+    <button class="account-tab active" data-account-id="all" onclick="switchTab(this, 'all')">
+      All
+    </button>
+    {% for acc in accounts %}
+    <button class="account-tab" data-account-id="{{ acc.id }}" onclick="switchTab(this, {{ acc.id }})">
+      <span class="tab-name" id="tab-name-{{ acc.id }}">{{ acc.display_name }}</span>
+      <span class="tab-rename-btn" onclick="startRename(event, {{ acc.id }})" title="Rename">
+        <i class="bi bi-pencil"></i>
+      </span>
+    </button>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
+{# ── Page header (adapts to active tab) ─────────────────────────────── #}
 <div class="page-header">
   <div>
-    <h1 class="page-title">Carousels</h1>
+    <h1 class="page-title" id="pageTitle">Carousels</h1>
     <p class="page-subtitle">6 slides · 5 games per drop · passes an automated 3-reviewer panel, then waits for <em>your</em> approval before export.</p>
     <p class="page-subtitle text-accent" id="createNote" style="min-height:1px"></p>
   </div>
@@ -17,6 +37,18 @@
   <span><b>3</b> Save all 6 slides + caption</span>
   <span><b>4</b> Post to TikTok as a photo</span>
   <span><b>5</b> Mark as posted</span>
+</div>
+
+{# ── Empty state (shown when filtered list is empty) ─────────────────── #}
+<div id="emptyState" class="card" style="display:none">
+  <div class="card-body text-center py-5">
+    <i class="bi bi-images" style="font-size:2.5rem;color:var(--text-dim);display:block;margin-bottom:1rem"></i>
+    <div class="fw-semibold mb-1">Nothing built yet</div>
+    <p class="text-muted mb-3" style="font-size:0.875rem">
+      One tap does everything — find games, rate them, build and review a carousel.
+    </p>
+    <button class="btn btn-primary btn-lg px-4" onclick="createCarousel(this)">Create a carousel</button>
+  </div>
 </div>
 
 {% if not carousels %}
@@ -33,11 +65,17 @@
 {% endif %}
 
 {% for post in carousels %}
-<div class="card mb-3">
+<div class="card mb-3 carousel-item-card"
+     data-account-id="{{ post.account_id if post.account_id else 'none' }}">
   <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
     <div class="d-flex align-items-center gap-2 flex-wrap">
       <span class="fw-bold" style="font-size:0.95rem">Part {{ post.part_number }} — {{ post.edition }}</span>
       <span class="id-chip" title="Carousel ID">Carousel #{{ post.id }}</span>
+      {% if post.account_name %}
+      <span class="badge" style="background:var(--surface-3);color:var(--text-dim);border:1px solid var(--border);font-weight:500">
+        {{ post.account_name }}
+      </span>
+      {% endif %}
       <span class="badge
         {% if post.status == 'pending_review' %}bg-warning text-dark
         {% elif post.status == 'approved' %}bg-success
@@ -48,8 +86,6 @@
       <small class="text-muted">{{ post.created_at.strftime('%b %d · %H:%M') }}</small>
     </div>
     <div class="d-flex gap-2">
-      {# Explicit review actions. No auto-approval: a draft only ships when the
-         human approves it here. #}
       {% if post.status == 'pending_review' %}
         <button class="btn btn-sm btn-success" onclick="approveCarousel({{ post.id }})">
           <i class="bi bi-check-lg me-1"></i>Approve
@@ -67,7 +103,6 @@
   </div>
 
   <div class="card-body">
-    {# Approval panel: this carousel exists because it passed review — show how. #}
     {% if post.review %}
     <div class="review-panel mb-3">
       <div class="review-head">
@@ -87,7 +122,6 @@
     </div>
     {% endif %}
 
-    {# Slide strip #}
     <div class="d-flex gap-2 overflow-auto pb-2 mb-3" style="scrollbar-width:thin">
       {% for path in post.slide_paths_list %}
       {% set slide_url = '/output/' + path | replace(settings.OUTPUT_DIR + '/', '') if path else '' %}
@@ -120,16 +154,12 @@
       {% endfor %}
     </div>
 
-    {# EXPORT IS GATED ON APPROVAL: a draft awaiting review cannot be saved or
-       posted until the creator approves it. #}
     {% if post.status == 'pending_review' %}
     <div class="alert mb-3" style="background:var(--surface-3);border:1px solid var(--border-hi);border-radius:8px;padding:0.75rem 1rem;font-size:0.85rem">
       <i class="bi bi-eye me-1"></i>Review this draft, then <strong>Approve</strong> to unlock saving &amp; posting — or <strong>Regenerate</strong> for a fresh one.
     </div>
     {% endif %}
 
-    {# Export in ONE tap: copy the caption to the clipboard AND open the iPad
-       share sheet to save every slide. Zip is the desktop fallback. #}
     {% if post.slide_urls and post.status in ('approved', 'posted') %}
     <div class="d-flex align-items-center gap-2 flex-wrap mb-3">
       <button class="btn btn-primary"
@@ -151,7 +181,6 @@
     </div>
     {% endif %}
 
-    {# Caption (kept visible so it can be verified / re-copied) #}
     {% if post.caption %}
     <details>
       <summary class="mb-2">Caption (already copied with the slides)</summary>
@@ -162,15 +191,9 @@
     </details>
     {% endif %}
 
-    {# ── Analytics section ──────────────────────────────────────────────
-       Shown for approved + posted carousels. If metrics have already been
-       logged they display as a compact summary; the form is always a click
-       away so the creator can update numbers as the post ages.
-    ── #}
     {% if post.status in ('approved', 'posted') %}
     <div class="carousel-analytics pt-3 mt-3" style="border-top:1px solid var(--border)">
 
-      {# ── Metrics summary (visible when analytics have been saved) ── #}
       {% if post.tiktok_views is not none %}
       <div id="am-{{ post.id }}">
         <div class="d-flex align-items-center justify-content-between mb-2">
@@ -180,8 +203,6 @@
             <i class="bi bi-pencil me-1"></i>Edit
           </button>
         </div>
-
-        {# Primary stat: views #}
         <div class="d-flex align-items-baseline gap-1 mb-2">
           <span style="font-size:1.75rem;font-weight:700;line-height:1;color:var(--text)">
             {{ '{:,}'.format(post.tiktok_views) }}
@@ -191,61 +212,27 @@
           <span class="ms-2" style="font-size:0.75rem;color:var(--text-dim)">· {{ post.hours_since_post }}h ago</span>
           {% endif %}
         </div>
-
-        {# Secondary metrics row #}
         <div class="d-flex flex-wrap gap-3 mb-2">
-          <div class="kv">
-            <span class="kv-label">Likes</span>
-            <span class="kv-value">{{ '{:,}'.format(post.tiktok_likes or 0) }}</span>
-          </div>
-          <div class="kv">
-            <span class="kv-label">Comments</span>
-            <span class="kv-value">{{ '{:,}'.format(post.tiktok_comments or 0) }}</span>
-          </div>
-          <div class="kv">
-            <span class="kv-label">Shares</span>
-            <span class="kv-value">{{ '{:,}'.format(post.tiktok_shares or 0) }}</span>
-          </div>
-          <div class="kv">
-            <span class="kv-label">Saves</span>
-            <span class="kv-value fw-semibold">{{ '{:,}'.format(post.tiktok_saves or 0) }}</span>
-          </div>
-          <div class="kv">
-            <span class="kv-label">Follows</span>
-            <span class="kv-value fw-bold" style="color:var(--success)">+{{ '{:,}'.format(post.tiktok_follows or 0) }}</span>
-          </div>
+          <div class="kv"><span class="kv-label">Likes</span><span class="kv-value">{{ '{:,}'.format(post.tiktok_likes or 0) }}</span></div>
+          <div class="kv"><span class="kv-label">Comments</span><span class="kv-value">{{ '{:,}'.format(post.tiktok_comments or 0) }}</span></div>
+          <div class="kv"><span class="kv-label">Shares</span><span class="kv-value">{{ '{:,}'.format(post.tiktok_shares or 0) }}</span></div>
+          <div class="kv"><span class="kv-label">Saves</span><span class="kv-value fw-semibold">{{ '{:,}'.format(post.tiktok_saves or 0) }}</span></div>
+          <div class="kv"><span class="kv-label">Follows</span><span class="kv-value fw-bold" style="color:var(--success)">+{{ '{:,}'.format(post.tiktok_follows or 0) }}</span></div>
         </div>
-
-        {# Derived rates — the signals the learning system optimises for #}
         {% if post.tiktok_views > 0 %}
         {% set save_pct  = (post.tiktok_saves  or 0) / post.tiktok_views * 100 %}
         {% set follow_pct = (post.tiktok_follows or 0) / post.tiktok_views * 100 %}
         {% set eng_pct   = ((post.tiktok_likes or 0) + (post.tiktok_comments or 0) + (post.tiktok_shares or 0) + (post.tiktok_saves or 0)) / post.tiktok_views * 100 %}
         <div class="d-flex flex-wrap gap-3">
-          <span style="font-size:0.78rem;color:var(--text-dim)">
-            Save rate
-            <strong style="color:{% if save_pct >= 1.0 %}var(--success){% elif save_pct >= 0.3 %}var(--text){% else %}var(--text-dim){% endif %}">
-              {{ '%.2f' | format(save_pct) }}%
-            </strong>
-          </span>
-          <span style="font-size:0.78rem;color:var(--text-dim)">
-            Follow rate
-            <strong style="color:{% if follow_pct >= 0.2 %}var(--success){% elif follow_pct >= 0.05 %}var(--text){% else %}var(--text-dim){% endif %}">
-              {{ '%.3f' | format(follow_pct) }}%
-            </strong>
-          </span>
-          <span style="font-size:0.78rem;color:var(--text-dim)">
-            Engagement
-            <strong style="color:var(--text)">{{ '%.2f' | format(eng_pct) }}%</strong>
-          </span>
+          <span style="font-size:0.78rem;color:var(--text-dim)">Save rate <strong style="color:{% if save_pct >= 1.0 %}var(--success){% elif save_pct >= 0.3 %}var(--text){% else %}var(--text-dim){% endif %}">{{ '%.2f' | format(save_pct) }}%</strong></span>
+          <span style="font-size:0.78rem;color:var(--text-dim)">Follow rate <strong style="color:{% if follow_pct >= 0.2 %}var(--success){% elif follow_pct >= 0.05 %}var(--text){% else %}var(--text-dim){% endif %}">{{ '%.3f' | format(follow_pct) }}%</strong></span>
+          <span style="font-size:0.78rem;color:var(--text-dim)">Engagement <strong style="color:var(--text)">{{ '%.2f' | format(eng_pct) }}%</strong></span>
         </div>
         {% endif %}
       </div>
       {% endif %}
 
-      {# ── Log / edit form ── #}
       <div id="af-{{ post.id }}"{% if post.tiktok_views is not none %} style="display:none"{% endif %}>
-
         {% if post.tiktok_views is none %}
         <div class="d-flex align-items-center justify-content-between mb-2">
           <span style="font-size:0.72rem;font-weight:600;text-transform:uppercase;letter-spacing:0.07em;color:var(--text-dim)">
@@ -259,52 +246,20 @@
                   onclick="hideAnalyticsEdit({{ post.id }})">Cancel</button>
         </div>
         {% endif %}
-
         <div class="row g-2 mb-2">
+          <div class="col-6 col-sm-4 col-xl-2"><label class="form-label mb-1" style="font-size:0.73rem">Views</label><input type="number" id="av-{{ post.id }}" class="form-control form-control-sm" value="{{ post.tiktok_views if post.tiktok_views is not none else 0 }}" min="0"></div>
+          <div class="col-6 col-sm-4 col-xl-2"><label class="form-label mb-1" style="font-size:0.73rem">Likes</label><input type="number" id="al-{{ post.id }}" class="form-control form-control-sm" value="{{ post.tiktok_likes or 0 }}" min="0"></div>
+          <div class="col-6 col-sm-4 col-xl-2"><label class="form-label mb-1" style="font-size:0.73rem">Comments</label><input type="number" id="acom-{{ post.id }}" class="form-control form-control-sm" value="{{ post.tiktok_comments or 0 }}" min="0"></div>
+          <div class="col-6 col-sm-4 col-xl-2"><label class="form-label mb-1" style="font-size:0.73rem">Shares</label><input type="number" id="ash-{{ post.id }}" class="form-control form-control-sm" value="{{ post.tiktok_shares or 0 }}" min="0"></div>
+          <div class="col-6 col-sm-4 col-xl-2"><label class="form-label mb-1" style="font-size:0.73rem">Saves</label><input type="number" id="asv-{{ post.id }}" class="form-control form-control-sm" value="{{ post.tiktok_saves or 0 }}" min="0"></div>
+          <div class="col-6 col-sm-4 col-xl-2"><label class="form-label mb-1" style="font-size:0.73rem">Follows</label><input type="number" id="afo-{{ post.id }}" class="form-control form-control-sm" value="{{ post.tiktok_follows or 0 }}" min="0"></div>
           <div class="col-6 col-sm-4 col-xl-2">
-            <label class="form-label mb-1" style="font-size:0.73rem">Views</label>
-            <input type="number" id="av-{{ post.id }}" class="form-control form-control-sm"
-                   value="{{ post.tiktok_views if post.tiktok_views is not none else 0 }}" min="0">
-          </div>
-          <div class="col-6 col-sm-4 col-xl-2">
-            <label class="form-label mb-1" style="font-size:0.73rem">Likes</label>
-            <input type="number" id="al-{{ post.id }}" class="form-control form-control-sm"
-                   value="{{ post.tiktok_likes or 0 }}" min="0">
-          </div>
-          <div class="col-6 col-sm-4 col-xl-2">
-            <label class="form-label mb-1" style="font-size:0.73rem">Comments</label>
-            <input type="number" id="acom-{{ post.id }}" class="form-control form-control-sm"
-                   value="{{ post.tiktok_comments or 0 }}" min="0">
-          </div>
-          <div class="col-6 col-sm-4 col-xl-2">
-            <label class="form-label mb-1" style="font-size:0.73rem">Shares</label>
-            <input type="number" id="ash-{{ post.id }}" class="form-control form-control-sm"
-                   value="{{ post.tiktok_shares or 0 }}" min="0">
-          </div>
-          <div class="col-6 col-sm-4 col-xl-2">
-            <label class="form-label mb-1" style="font-size:0.73rem">Saves</label>
-            <input type="number" id="asv-{{ post.id }}" class="form-control form-control-sm"
-                   value="{{ post.tiktok_saves or 0 }}" min="0">
-          </div>
-          <div class="col-6 col-sm-4 col-xl-2">
-            <label class="form-label mb-1" style="font-size:0.73rem">Follows</label>
-            <input type="number" id="afo-{{ post.id }}" class="form-control form-control-sm"
-                   value="{{ post.tiktok_follows or 0 }}" min="0">
-          </div>
-          <div class="col-6 col-sm-4 col-xl-2">
-            <label class="form-label mb-1" style="font-size:0.73rem">
-              Hours since posted
-              <span class="text-muted" style="font-weight:400">· for context</span>
-            </label>
-            <input type="number" id="aho-{{ post.id }}" class="form-control form-control-sm"
-                   value="{{ post.hours_since_post or 24 }}" min="0"
-                   {% if post.posted_at_iso %}data-posted-at="{{ post.posted_at_iso }}"{% endif %}>
+            <label class="form-label mb-1" style="font-size:0.73rem">Hours since posted <span class="text-muted" style="font-weight:400">· for context</span></label>
+            <input type="number" id="aho-{{ post.id }}" class="form-control form-control-sm" value="{{ post.hours_since_post or 24 }}" min="0" {% if post.posted_at_iso %}data-posted-at="{{ post.posted_at_iso }}"{% endif %}>
           </div>
         </div>
-
         <div class="d-flex align-items-center gap-2 flex-wrap">
-          <button class="btn btn-sm btn-primary"
-                  onclick="logCarouselAnalytics({{ post.id }}, this)">
+          <button class="btn btn-sm btn-primary" onclick="logCarouselAnalytics({{ post.id }}, this)">
             <i class="bi bi-bar-chart-line me-1"></i>{% if post.tiktok_views is not none %}Update{% else %}Save metrics{% endif %}
           </button>
           <span id="ar-{{ post.id }}" style="font-size:0.8rem"></span>
@@ -313,7 +268,6 @@
 
     </div>
     {% endif %}
-
   </div>
 </div>
 {% endfor %}
@@ -333,29 +287,219 @@
     </div>
   </div>
 </div>
+
+{# Inline rename modal #}
+<div class="modal fade" id="renameModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered" style="max-width:360px">
+    <div class="modal-content border-0" style="background:var(--surface-2);border-radius:12px">
+      <div class="modal-header border-0 pb-0">
+        <h6 class="modal-title" style="font-size:0.9rem;font-weight:600">Rename account</h6>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body pt-2">
+        <input type="text" id="renameInput" class="form-control" placeholder="Account name"
+               style="font-size:0.95rem"
+               onkeydown="if(event.key==='Enter')saveRename()">
+        <div id="renameError" class="text-danger mt-2" style="font-size:0.8rem;display:none"></div>
+      </div>
+      <div class="modal-footer border-0 pt-0">
+        <button class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button class="btn btn-sm btn-primary" onclick="saveRename()">Save</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 {% endblock %}
 
 {% block scripts %}
+<style>
+/* ── Account tabs ─────────────────────────────────────────────────────── */
+.account-tabs {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: var(--surface-1, #0d1117);
+  padding: 0.5rem 0 0;
+  border-bottom: 1px solid var(--border);
+  margin: -1rem -1rem 0;
+  padding: 0.5rem 1rem 0;
+}
+.account-tabs-scroll {
+  display: flex;
+  gap: 0.25rem;
+  overflow-x: auto;
+  scrollbar-width: none;
+  padding-bottom: 0;
+}
+.account-tabs-scroll::-webkit-scrollbar { display: none; }
+.account-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.45rem 0.9rem;
+  border: none;
+  background: transparent;
+  color: var(--text-dim, #8b949e);
+  font-size: 0.875rem;
+  font-weight: 500;
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: color 0.15s, border-color 0.15s;
+  border-radius: 0;
+  flex-shrink: 0;
+}
+.account-tab:hover { color: var(--text, #e6edf3); }
+.account-tab.active {
+  color: var(--brand, #6c63ff);
+  border-bottom-color: var(--brand, #6c63ff);
+}
+.tab-rename-btn {
+  display: none;
+  font-size: 0.7rem;
+  opacity: 0.6;
+  padding: 1px 3px;
+  border-radius: 3px;
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+.tab-rename-btn:hover { opacity: 1; background: var(--surface-3); }
+.account-tab:hover .tab-rename-btn,
+.account-tab.active .tab-rename-btn { display: inline-flex; }
+</style>
+
 <script>
-// Export in ONE tap: copy the caption to the clipboard, then open the share
-// sheet so every slide saves to Photos at once. The caption is on the clipboard
-// ready to paste into TikTok; .zip is the desktop fallback.
+// ── Tab state ────────────────────────────────────────────────────────────
+let _activeAccountId = 'all';
+let _renameAccountId = null;
+let _renameModal = null;
+
+// ACCOUNTS from the template (for tab name updates)
+const ACCOUNTS_TAB = {{ (accounts | map(attribute='id') | list) | tojson if accounts else '[]' }};
+
+function switchTab(btn, accountId) {
+  _activeAccountId = accountId;
+  document.querySelectorAll('.account-tab').forEach(t => t.classList.remove('active'));
+  btn.classList.add('active');
+  filterCarousels(accountId);
+
+  // Update page title
+  const titleEl = document.getElementById('pageTitle');
+  if (accountId === 'all') {
+    titleEl.textContent = 'Carousels';
+  } else {
+    const nameEl = document.getElementById('tab-name-' + accountId);
+    titleEl.textContent = nameEl ? nameEl.textContent.trim() : 'Carousels';
+  }
+}
+
+function filterCarousels(accountId) {
+  const cards = document.querySelectorAll('.carousel-item-card');
+  let visible = 0;
+  cards.forEach(card => {
+    const cardAccount = card.dataset.accountId;
+    const show = accountId === 'all'
+      || String(cardAccount) === String(accountId)
+      || (accountId === 'none' && (!cardAccount || cardAccount === 'None' || cardAccount === 'none'));
+    card.style.display = show ? '' : 'none';
+    if (show) visible++;
+  });
+  const empty = document.getElementById('emptyState');
+  if (empty) empty.style.display = (visible === 0 && document.querySelectorAll('.carousel-item-card').length > 0) ? '' : 'none';
+}
+
+// ── Inline rename ────────────────────────────────────────────────────────
+function startRename(evt, accountId) {
+  evt.stopPropagation();
+  _renameAccountId = accountId;
+  const nameEl = document.getElementById('tab-name-' + accountId);
+  const current = nameEl ? nameEl.textContent.trim() : '';
+  document.getElementById('renameInput').value = current;
+  document.getElementById('renameError').style.display = 'none';
+  if (!_renameModal) _renameModal = new bootstrap.Modal(document.getElementById('renameModal'));
+  _renameModal.show();
+  setTimeout(() => {
+    const inp = document.getElementById('renameInput');
+    inp.focus(); inp.select();
+  }, 200);
+}
+
+async function saveRename() {
+  const name = document.getElementById('renameInput').value.trim();
+  const errEl = document.getElementById('renameError');
+  if (!name) { errEl.textContent = 'Name cannot be empty.'; errEl.style.display = ''; return; }
+  try {
+    const r = await fetch(`/accounts/${_renameAccountId}/rename`, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({display_name: name}),
+    });
+    const data = await r.json();
+    if (!r.ok) { errEl.textContent = data.detail || 'Error saving.'; errEl.style.display = ''; return; }
+    // Update tab label in place
+    const nameEl = document.getElementById('tab-name-' + _renameAccountId);
+    if (nameEl) nameEl.textContent = name;
+    // Update page title if this is the active tab
+    if (String(_activeAccountId) === String(_renameAccountId)) {
+      document.getElementById('pageTitle').textContent = name;
+    }
+    _renameModal.hide();
+  } catch (e) {
+    errEl.textContent = 'Network error.'; errEl.style.display = '';
+  }
+}
+
+// ── Create carousel ──────────────────────────────────────────────────────
+async function createCarousel(btn) {
+  const note = document.getElementById('createNote');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Working…';
+
+  const body = {};
+  if (_activeAccountId !== 'all' && _activeAccountId !== 'none') {
+    body.account_id = parseInt(_activeAccountId);
+  }
+
+  try {
+    const r = await fetch('/pipeline/create-carousel', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(body),
+    });
+    const data = await r.json();
+    if (data.status === 'created') {
+      note.textContent = `Part ${data.part} created — scroll down to review it.`;
+      location.reload();
+    } else if (data.status === 'warming_up') {
+      note.textContent = data.message || 'Warming up — check back in a minute.';
+      btn.disabled = false;
+      btn.innerHTML = 'Create a carousel';
+    } else {
+      note.textContent = data.message || JSON.stringify(data);
+      btn.disabled = false;
+      btn.innerHTML = 'Create a carousel';
+    }
+  } catch (e) {
+    note.textContent = 'Network error — try again.';
+    btn.disabled = false;
+    btn.innerHTML = 'Create a carousel';
+  }
+}
+
+// ── Carousel actions ─────────────────────────────────────────────────────
 async function saveCarouselToPhotos(btn) {
   let urls = [];
   try { urls = JSON.parse(btn.dataset.slides || '[]'); } catch (e) {}
   const part = btn.dataset.part || '';
   const cid = btn.dataset.cid;
   if (!urls.length) { alert('No slides to save yet.'); return; }
-
-  // Copy the caption first so it's ready to paste after the slides are saved.
   const capEl = document.getElementById(btn.dataset.captionEl || '');
   if (capEl) { try { await navigator.clipboard.writeText(capEl.textContent.trim()); } catch (e) {} }
-
   const original = btn.innerHTML;
   const zipFallback = () => { window.location.href = `/carousel/${cid}/download`; };
   btn.disabled = true;
   btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Preparing…';
-
   try {
     const files = [];
     for (let i = 0; i < urls.length; i++) {
@@ -364,7 +508,6 @@ async function saveCarouselToPhotos(btn) {
       const blob = await resp.blob();
       files.push(new File([blob], `slide_${i + 1}.png`, {type: blob.type || 'image/png'}));
     }
-
     if (navigator.canShare && navigator.canShare({files})) {
       await navigator.share({files, title: `Roblox Carousel Part ${part}`});
       btn.innerHTML = '<i class="bi bi-check-circle me-1"></i>Saved · caption copied';
@@ -373,14 +516,13 @@ async function saveCarouselToPhotos(btn) {
       btn.innerHTML = '<i class="bi bi-download me-1"></i>Downloaded .zip';
     }
   } catch (e) {
-    if (e && e.name === 'AbortError') {  // user dismissed the share sheet
-      btn.innerHTML = original; btn.disabled = false; return;
-    }
+    if (e && e.name === 'AbortError') { btn.innerHTML = original; btn.disabled = false; return; }
     zipFallback();
     btn.innerHTML = '<i class="bi bi-download me-1"></i>Downloaded .zip';
   }
   setTimeout(() => { btn.innerHTML = original; btn.disabled = false; }, 2500);
 }
+
 async function approveCarousel(id) {
   await post(`/carousel/${id}/approve`);
   location.reload();
@@ -393,9 +535,7 @@ async function rejectCarousel(id) {
 async function regenerateCarousel(id, btn) {
   btn.disabled = true;
   btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Working…';
-  try {
-    await post(`/carousel/${id}/regenerate`);
-  } catch (e) {}
+  try { await post(`/carousel/${id}/regenerate`); } catch (e) {}
   location.reload();
 }
 async function markPosted(id, btn) {
@@ -447,14 +587,10 @@ function copyCaption(elId, btn) {
   });
 }
 
-// ── Carousel analytics ──────────────────────────────────────────────────────
-
-// When the page loads, auto-fill "hours since post" from the posted_at
-// timestamp on any analytics input that hasn't been manually set yet.
+// ── Analytics ────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
   document.querySelectorAll('[data-posted-at]').forEach(input => {
     const val = parseInt(input.value) || 0;
-    // Only auto-fill when it's the 24h placeholder default (not a saved value)
     if (val === 24) {
       try {
         const posted = new Date(input.dataset.postedAt + (input.dataset.postedAt.includes('T') ? 'Z' : ''));
@@ -464,41 +600,32 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 });
-
 function showAnalyticsEdit(id) {
   const summary = document.getElementById('am-' + id);
   const form    = document.getElementById('af-' + id);
   if (summary) summary.style.display = 'none';
   if (form)    form.style.display    = '';
 }
-
 function hideAnalyticsEdit(id) {
   const summary = document.getElementById('am-' + id);
   const form    = document.getElementById('af-' + id);
   if (summary) summary.style.display = '';
   if (form)    form.style.display    = 'none';
 }
-
 async function logCarouselAnalytics(id, btn) {
   const v = k => parseInt(document.getElementById(k + id)?.value) || 0;
   const payload = {
-    views:           v('av-'),
-    likes:           v('al-'),
-    comments:        v('acom-'),
-    shares:          v('ash-'),
-    saves:           v('asv-'),
-    follows:         v('afo-'),
+    views: v('av-'), likes: v('al-'), comments: v('acom-'),
+    shares: v('ash-'), saves: v('asv-'), follows: v('afo-'),
     hours_since_post: v('aho-'),
   };
   const resultEl = document.getElementById('ar-' + id);
   const original = btn.innerHTML;
   btn.disabled = true;
   btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Saving…';
-
   try {
     const r = await fetch(`/carousel/${id}/log-analytics`, {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
+      method: 'POST', headers: {'Content-Type': 'application/json'},
       body: JSON.stringify(payload),
     });
     const data = await r.json();
@@ -507,13 +634,11 @@ async function logCarouselAnalytics(id, btn) {
       setTimeout(() => location.reload(), 700);
     } else {
       resultEl.innerHTML = `<span class="text-danger"><i class="bi bi-x-circle me-1"></i>${data.detail || 'Error saving'}</span>`;
-      btn.disabled = false;
-      btn.innerHTML = original;
+      btn.disabled = false; btn.innerHTML = original;
     }
   } catch (e) {
     resultEl.innerHTML = '<span class="text-danger">Network error</span>';
-    btn.disabled = false;
-    btn.innerHTML = original;
+    btn.disabled = false; btn.innerHTML = original;
   }
 }
 </script>
