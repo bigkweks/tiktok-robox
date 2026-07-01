@@ -2,36 +2,158 @@
 {% block title %}Carousels{% endblock %}
 {% block content %}
 
-{# ── Account tabs ─────────────────────────────────────────────────────── #}
-{% if accounts %}
-<div class="account-tabs mb-4" id="accountTabs">
-  <div class="account-tabs-scroll">
-    <button class="account-tab active" data-account-id="all" onclick="switchTab(this, 'all')">
-      All
-    </button>
-    {% for acc in accounts %}
-    <button class="account-tab" data-account-id="{{ acc.id }}" onclick="switchTab(this, {{ acc.id }})">
-      <span class="tab-name" id="tab-name-{{ acc.id }}">{{ acc.display_name }}</span>
-      <span class="tab-rename-btn" onclick="startRename(event, {{ acc.id }})" title="Rename">
-        <i class="bi bi-pencil"></i>
-      </span>
-    </button>
-    {% endfor %}
-  </div>
-</div>
-{% endif %}
+<style>
+/* ── Account cards ───────────────────────────────────────────────── */
+.account-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+.account-card {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 1rem 1.1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  transition: border-color 0.15s;
+  position: relative;
+}
+.account-card:hover { border-color: var(--border-hi); }
+.account-card.is-generating { border-color: var(--brand); }
+.account-card.is-done      { border-color: var(--success); }
+.account-card.is-error     { border-color: var(--danger, #f85149); }
+.account-card.is-warming   { border-color: var(--warning, #d29922); }
+.account-card-add {
+  border-style: dashed;
+  align-items: center;
+  justify-content: center;
+  min-height: 130px;
+  cursor: pointer;
+  color: var(--text-dim);
+  font-size: 0.85rem;
+  gap: 0.35rem;
+}
+.account-card-add:hover { color: var(--text); border-color: var(--border-hi); }
+.acc-name-wrap {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+.acc-name {
+  font-weight: 600;
+  font-size: 0.95rem;
+  color: var(--text);
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.acc-rename-btn {
+  flex-shrink: 0;
+  background: none;
+  border: none;
+  padding: 2px 4px;
+  color: var(--text-dim);
+  font-size: 0.7rem;
+  cursor: pointer;
+  border-radius: 4px;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+.account-card:hover .acc-rename-btn { opacity: 1; }
+.acc-rename-btn:hover { color: var(--text); background: var(--surface-3); }
+.acc-style-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  padding: 2px 7px;
+  border-radius: 20px;
+  width: fit-content;
+}
+.acc-style-classic { background: rgba(108,99,255,0.15); color: var(--brand); border: 1px solid rgba(108,99,255,0.3); }
+.acc-style-gazette { background: rgba(210,153,34,0.15); color: #d29922; border: 1px solid rgba(210,153,34,0.3); }
+.acc-count { font-size: 0.78rem; color: var(--text-dim); }
+.acc-status-msg {
+  font-size: 0.75rem;
+  min-height: 1.1em;
+  color: var(--text-dim);
+}
+.acc-status-msg.generating { color: var(--brand); }
+.acc-status-msg.done       { color: var(--success); }
+.acc-status-msg.error      { color: var(--danger, #f85149); }
+.acc-status-msg.warming    { color: #d29922; }
+.acc-generate-btn {
+  margin-top: auto;
+  padding: 0.35rem 0.75rem;
+  font-size: 0.8rem;
+  border-radius: 7px;
+}
 
-{# ── Page header (adapts to active tab) ─────────────────────────────── #}
-<div class="page-header">
+/* ── Tabs ────────────────────────────────────────────────────────── */
+.account-tabs { display: flex; gap: 0.25rem; overflow-x: auto; scrollbar-width: none; border-bottom: 1px solid var(--border); margin-bottom: 1.25rem; }
+.account-tabs::-webkit-scrollbar { display: none; }
+.account-tab { padding: 0.45rem 0.9rem; border: none; background: transparent; color: var(--text-dim); font-size: 0.875rem; font-weight: 500; border-bottom: 2px solid transparent; cursor: pointer; white-space: nowrap; transition: color 0.15s, border-color 0.15s; border-radius: 0; flex-shrink: 0; }
+.account-tab:hover { color: var(--text); }
+.account-tab.active { color: var(--brand); border-bottom-color: var(--brand); }
+</style>
+
+{# ── Account cards ────────────────────────────────────────────────── #}
+<div class="d-flex align-items-center justify-content-between mb-3 flex-wrap gap-2">
   <div>
-    <h1 class="page-title" id="pageTitle">Carousels</h1>
-    <p class="page-subtitle">6 slides · 5 games per drop · passes an automated 3-reviewer panel, then waits for <em>your</em> approval before export.</p>
-    <p class="page-subtitle text-accent" id="createNote" style="min-height:1px"></p>
+    <h1 class="page-title mb-0">Carousels</h1>
+    <p class="page-subtitle mb-0">6 slides · 5 games · passes an automated review panel, then waits for your approval.</p>
   </div>
-  <button class="btn btn-primary btn-lg px-4" onclick="createCarousel(this)" id="carouselBtn">Create a carousel</button>
+  {% if accounts %}
+  <button class="btn btn-primary btn-lg px-4" id="generateAllBtn" onclick="generateAll(this)">
+    <i class="bi bi-play-fill me-1"></i>Generate for all accounts
+  </button>
+  {% else %}
+  <button class="btn btn-primary btn-lg px-4" onclick="generateAll(this)">Create a carousel</button>
+  {% endif %}
 </div>
 
-<div class="workflow-steps mb-4">
+<div id="globalNote" class="page-subtitle text-accent mb-3" style="min-height:1px"></div>
+
+<div class="account-grid" id="accountGrid">
+  {% for acc in accounts %}
+  <div class="account-card" id="acc-card-{{ acc.id }}" data-account-id="{{ acc.id }}">
+    <div class="acc-name-wrap">
+      <span class="acc-name" id="acc-name-{{ acc.id }}">{{ acc.display_name }}</span>
+      <button class="acc-rename-btn" onclick="startRename(event, {{ acc.id }})" title="Rename">
+        <i class="bi bi-pencil"></i>
+      </button>
+    </div>
+    <span class="acc-style-badge acc-style-{{ acc.carousel_style or 'classic' }}">
+      {% if acc.carousel_style == 'gazette' %}<i class="bi bi-newspaper"></i> Gazette
+      {% else %}<i class="bi bi-controller"></i> Classic
+      {% endif %}
+    </span>
+    <span class="acc-count">
+      {{ post_counts.get(acc.id, 0) }} carousel{% if post_counts.get(acc.id, 0) != 1 %}s{% endif %}
+    </span>
+    <div class="acc-status-msg" id="acc-status-{{ acc.id }}"></div>
+    <button class="btn btn-outline-secondary acc-generate-btn" id="acc-btn-{{ acc.id }}"
+            onclick="generateOne({{ acc.id }}, this)">
+      <i class="bi bi-play-fill me-1"></i>Generate
+    </button>
+  </div>
+  {% endfor %}
+
+  <div class="account-card account-card-add" onclick="document.getElementById('addAccountPanel').style.display='';this.closest('.account-card').style.display='none';document.getElementById('addAccountPanel').scrollIntoView({behavior:'smooth'})">
+    <i class="bi bi-plus-circle" style="font-size:1.4rem"></i>
+    <span>Add account</span>
+  </div>
+</div>
+
+{# ── Workflow steps ────────────────────────────────────────────────── #}
+<div class="workflow-steps mb-3">
   <span><b>1</b> Review the draft</span>
   <span><b>2</b> Approve (or Reject / Regenerate)</span>
   <span><b>3</b> Save all 6 slides + caption</span>
@@ -39,15 +161,26 @@
   <span><b>5</b> Mark as posted</span>
 </div>
 
-{# ── Empty state (shown when filtered list is empty) ─────────────────── #}
-<div id="emptyState" class="card" style="display:none">
-  <div class="card-body text-center py-5">
-    <i class="bi bi-images" style="font-size:2.5rem;color:var(--text-dim);display:block;margin-bottom:1rem"></i>
-    <div class="fw-semibold mb-1">Nothing built yet</div>
-    <p class="text-muted mb-3" style="font-size:0.875rem">
-      One tap does everything — find games, rate them, build and review a carousel.
-    </p>
-    <button class="btn btn-primary btn-lg px-4" onclick="createCarousel(this)">Create a carousel</button>
+{# ── Account tabs ─────────────────────────────────────────────────── #}
+{% if accounts %}
+<div class="account-tabs" id="accountTabs">
+  <button class="account-tab active" data-account-id="all" onclick="switchTab(this,'all')">All</button>
+  {% for acc in accounts %}
+  <button class="account-tab" data-account-id="{{ acc.id }}" onclick="switchTab(this,{{ acc.id }})">
+    {{ acc.display_name }}
+  </button>
+  {% endfor %}
+</div>
+{% endif %}
+
+{# ── Empty state ──────────────────────────────────────────────────── #}
+<div id="emptyState" style="display:none">
+  <div class="card">
+    <div class="card-body text-center py-5">
+      <i class="bi bi-images" style="font-size:2.5rem;color:var(--text-dim);display:block;margin-bottom:1rem"></i>
+      <div class="fw-semibold mb-1">No carousels yet for this account</div>
+      <p class="text-muted mb-0" style="font-size:0.875rem">Hit Generate on the account card above.</p>
+    </div>
   </div>
 </div>
 
@@ -56,14 +189,12 @@
   <div class="card-body text-center py-5">
     <i class="bi bi-images" style="font-size:2.5rem;color:var(--text-dim);display:block;margin-bottom:1rem"></i>
     <div class="fw-semibold mb-1">Nothing built yet</div>
-    <p class="text-muted mb-3" style="font-size:0.875rem">
-      One tap does everything — find games, rate them, build and review a carousel.
-    </p>
-    <button class="btn btn-primary btn-lg px-4" onclick="createCarousel(this)">Create a carousel</button>
+    <p class="text-muted mb-3" style="font-size:0.875rem">Hit Generate for all accounts to get started.</p>
   </div>
 </div>
 {% endif %}
 
+{# ── Carousel cards ───────────────────────────────────────────────── #}
 {% for post in carousels %}
 <div class="card mb-3 carousel-item-card"
      data-account-id="{{ post.account_id if post.account_id else 'none' }}">
@@ -76,11 +207,7 @@
         {{ post.account_name }}
       </span>
       {% endif %}
-      <span class="badge
-        {% if post.status == 'pending_review' %}bg-warning text-dark
-        {% elif post.status == 'approved' %}bg-success
-        {% elif post.status == 'posted' %}bg-primary
-        {% else %}bg-secondary{% endif %}">
+      <span class="badge {% if post.status == 'pending_review' %}bg-warning text-dark{% elif post.status == 'approved' %}bg-success{% elif post.status == 'posted' %}bg-primary{% else %}bg-secondary{% endif %}">
         {% if post.status == 'pending_review' %}awaiting your approval{% else %}{{ post.status }}{% endif %}
       </span>
       <small class="text-muted">{{ post.created_at.strftime('%b %d · %H:%M') }}</small>
@@ -90,12 +217,12 @@
         <button class="btn btn-sm btn-success" onclick="approveCarousel({{ post.id }})">
           <i class="bi bi-check-lg me-1"></i>Approve
         </button>
-        <button class="btn btn-sm btn-outline-secondary" onclick="regenerateCarousel({{ post.id }}, this)" title="Discard and build a fresh one">
+        <button class="btn btn-sm btn-outline-secondary" onclick="regenerateCarousel({{ post.id }}, this)">
           <i class="bi bi-arrow-repeat me-1"></i>Regenerate
         </button>
       {% endif %}
       {% if post.status != 'posted' %}
-        <button class="btn btn-sm btn-reject" onclick="rejectCarousel({{ post.id }})" title="Reject / discard">
+        <button class="btn btn-sm btn-reject" onclick="rejectCarousel({{ post.id }})" title="Reject">
           <i class="bi bi-x-lg"></i>
         </button>
       {% endif %}
@@ -128,8 +255,7 @@
       {% set slide_label = 'Title' if loop.index == 1 else 'Game ' + (loop.index - 1) | string %}
       <div class="flex-shrink-0 text-center">
         {% if path %}
-          <img src="{{ slide_url }}"
-               class="rounded"
+          <img src="{{ slide_url }}" class="rounded"
                style="height:200px;width:auto;cursor:pointer;border:2px solid var(--border-hi);border-radius:8px;transition:border-color 0.15s"
                onclick="expandSlide(this.src)"
                onmouseenter="this.style.borderColor='var(--brand)'"
@@ -140,12 +266,9 @@
             <small class="text-muted" style="font-size:0.7rem">No slide</small>
           </div>
         {% endif %}
-        <div class="text-muted mt-1" style="font-size:0.7rem;font-weight:600;text-transform:uppercase;letter-spacing:0.05em">
-          {{ slide_label }}
-        </div>
+        <div class="text-muted mt-1" style="font-size:0.7rem;font-weight:600;text-transform:uppercase;letter-spacing:0.05em">{{ slide_label }}</div>
         {% if path %}
-        <button class="btn btn-sm btn-outline-secondary mt-1 px-2 py-0"
-                style="font-size:0.7rem"
+        <button class="btn btn-sm btn-outline-secondary mt-1 px-2 py-0" style="font-size:0.7rem"
                 onclick="saveSlide('{{ slide_url }}', 'slide_{{ loop.index }}.png')">
           <i class="bi bi-download"></i>
         </button>
@@ -173,11 +296,7 @@
       {% if post.status != 'posted' %}
       <button class="btn btn-success" onclick="markPosted({{ post.id }}, this)">Mark as posted</button>
       {% endif %}
-      <a class="btn btn-outline-secondary btn-sm" href="/carousel/{{ post.id }}/download"
-         title="Download all slides as a .zip">.zip</a>
-      <small class="text-muted" style="font-size:0.72rem">
-        On iPad: tap <strong>Save {{ post.slide_urls | length }} Images</strong>, then paste the caption into TikTok.
-      </small>
+      <a class="btn btn-outline-secondary btn-sm" href="/carousel/{{ post.id }}/download">.zip</a>
     </div>
     {% endif %}
 
@@ -193,24 +312,16 @@
 
     {% if post.status in ('approved', 'posted') %}
     <div class="carousel-analytics pt-3 mt-3" style="border-top:1px solid var(--border)">
-
       {% if post.tiktok_views is not none %}
       <div id="am-{{ post.id }}">
         <div class="d-flex align-items-center justify-content-between mb-2">
           <span style="font-size:0.72rem;font-weight:600;text-transform:uppercase;letter-spacing:0.07em;color:var(--text-dim)">Performance</span>
-          <button class="btn btn-link py-0 px-0 text-muted" style="font-size:0.72rem"
-                  onclick="showAnalyticsEdit({{ post.id }})">
-            <i class="bi bi-pencil me-1"></i>Edit
-          </button>
+          <button class="btn btn-link py-0 px-0 text-muted" style="font-size:0.72rem" onclick="showAnalyticsEdit({{ post.id }})"><i class="bi bi-pencil me-1"></i>Edit</button>
         </div>
         <div class="d-flex align-items-baseline gap-1 mb-2">
-          <span style="font-size:1.75rem;font-weight:700;line-height:1;color:var(--text)">
-            {{ '{:,}'.format(post.tiktok_views) }}
-          </span>
+          <span style="font-size:1.75rem;font-weight:700;line-height:1;color:var(--text)">{{ '{:,}'.format(post.tiktok_views) }}</span>
           <span style="font-size:0.75rem;color:var(--text-dim)">views</span>
-          {% if post.hours_since_post %}
-          <span class="ms-2" style="font-size:0.75rem;color:var(--text-dim)">· {{ post.hours_since_post }}h ago</span>
-          {% endif %}
+          {% if post.hours_since_post %}<span class="ms-2" style="font-size:0.75rem;color:var(--text-dim)">· {{ post.hours_since_post }}h ago</span>{% endif %}
         </div>
         <div class="d-flex flex-wrap gap-3 mb-2">
           <div class="kv"><span class="kv-label">Likes</span><span class="kv-value">{{ '{:,}'.format(post.tiktok_likes or 0) }}</span></div>
@@ -220,13 +331,13 @@
           <div class="kv"><span class="kv-label">Follows</span><span class="kv-value fw-bold" style="color:var(--success)">+{{ '{:,}'.format(post.tiktok_follows or 0) }}</span></div>
         </div>
         {% if post.tiktok_views > 0 %}
-        {% set save_pct  = (post.tiktok_saves  or 0) / post.tiktok_views * 100 %}
+        {% set save_pct   = (post.tiktok_saves  or 0) / post.tiktok_views * 100 %}
         {% set follow_pct = (post.tiktok_follows or 0) / post.tiktok_views * 100 %}
-        {% set eng_pct   = ((post.tiktok_likes or 0) + (post.tiktok_comments or 0) + (post.tiktok_shares or 0) + (post.tiktok_saves or 0)) / post.tiktok_views * 100 %}
+        {% set eng_pct    = ((post.tiktok_likes or 0)+(post.tiktok_comments or 0)+(post.tiktok_shares or 0)+(post.tiktok_saves or 0)) / post.tiktok_views * 100 %}
         <div class="d-flex flex-wrap gap-3">
-          <span style="font-size:0.78rem;color:var(--text-dim)">Save rate <strong style="color:{% if save_pct >= 1.0 %}var(--success){% elif save_pct >= 0.3 %}var(--text){% else %}var(--text-dim){% endif %}">{{ '%.2f' | format(save_pct) }}%</strong></span>
-          <span style="font-size:0.78rem;color:var(--text-dim)">Follow rate <strong style="color:{% if follow_pct >= 0.2 %}var(--success){% elif follow_pct >= 0.05 %}var(--text){% else %}var(--text-dim){% endif %}">{{ '%.3f' | format(follow_pct) }}%</strong></span>
-          <span style="font-size:0.78rem;color:var(--text-dim)">Engagement <strong style="color:var(--text)">{{ '%.2f' | format(eng_pct) }}%</strong></span>
+          <span style="font-size:0.78rem;color:var(--text-dim)">Save rate <strong style="color:{% if save_pct >= 1.0 %}var(--success){% elif save_pct >= 0.3 %}var(--text){% else %}var(--text-dim){% endif %}">{{ '%.2f'|format(save_pct) }}%</strong></span>
+          <span style="font-size:0.78rem;color:var(--text-dim)">Follow rate <strong style="color:{% if follow_pct >= 0.2 %}var(--success){% elif follow_pct >= 0.05 %}var(--text){% else %}var(--text-dim){% endif %}">{{ '%.3f'|format(follow_pct) }}%</strong></span>
+          <span style="font-size:0.78rem;color:var(--text-dim)">Engagement <strong style="color:var(--text)">{{ '%.2f'|format(eng_pct) }}%</strong></span>
         </div>
         {% endif %}
       </div>
@@ -234,16 +345,11 @@
 
       <div id="af-{{ post.id }}"{% if post.tiktok_views is not none %} style="display:none"{% endif %}>
         {% if post.tiktok_views is none %}
-        <div class="d-flex align-items-center justify-content-between mb-2">
-          <span style="font-size:0.72rem;font-weight:600;text-transform:uppercase;letter-spacing:0.07em;color:var(--text-dim)">
-            {% if post.status == 'posted' %}Log performance{% else %}Log performance (once posted){% endif %}
-          </span>
-        </div>
+        <div class="mb-2"><span style="font-size:0.72rem;font-weight:600;text-transform:uppercase;letter-spacing:0.07em;color:var(--text-dim)">{% if post.status == 'posted' %}Log performance{% else %}Log performance (once posted){% endif %}</span></div>
         {% else %}
         <div class="d-flex align-items-center justify-content-between mb-2">
           <span style="font-size:0.72rem;font-weight:600;text-transform:uppercase;letter-spacing:0.07em;color:var(--text-dim)">Update performance</span>
-          <button class="btn btn-link py-0 px-0 text-muted" style="font-size:0.72rem"
-                  onclick="hideAnalyticsEdit({{ post.id }})">Cancel</button>
+          <button class="btn btn-link py-0 px-0 text-muted" style="font-size:0.72rem" onclick="hideAnalyticsEdit({{ post.id }})">Cancel</button>
         </div>
         {% endif %}
         <div class="row g-2 mb-2">
@@ -253,33 +359,68 @@
           <div class="col-6 col-sm-4 col-xl-2"><label class="form-label mb-1" style="font-size:0.73rem">Shares</label><input type="number" id="ash-{{ post.id }}" class="form-control form-control-sm" value="{{ post.tiktok_shares or 0 }}" min="0"></div>
           <div class="col-6 col-sm-4 col-xl-2"><label class="form-label mb-1" style="font-size:0.73rem">Saves</label><input type="number" id="asv-{{ post.id }}" class="form-control form-control-sm" value="{{ post.tiktok_saves or 0 }}" min="0"></div>
           <div class="col-6 col-sm-4 col-xl-2"><label class="form-label mb-1" style="font-size:0.73rem">Follows</label><input type="number" id="afo-{{ post.id }}" class="form-control form-control-sm" value="{{ post.tiktok_follows or 0 }}" min="0"></div>
-          <div class="col-6 col-sm-4 col-xl-2">
-            <label class="form-label mb-1" style="font-size:0.73rem">Hours since posted <span class="text-muted" style="font-weight:400">· for context</span></label>
-            <input type="number" id="aho-{{ post.id }}" class="form-control form-control-sm" value="{{ post.hours_since_post or 24 }}" min="0" {% if post.posted_at_iso %}data-posted-at="{{ post.posted_at_iso }}"{% endif %}>
-          </div>
+          <div class="col-6 col-sm-4 col-xl-2"><label class="form-label mb-1" style="font-size:0.73rem">Hours since posted</label><input type="number" id="aho-{{ post.id }}" class="form-control form-control-sm" value="{{ post.hours_since_post or 24 }}" min="0" {% if post.posted_at_iso %}data-posted-at="{{ post.posted_at_iso }}"{% endif %}></div>
         </div>
-        <div class="d-flex align-items-center gap-2 flex-wrap">
+        <div class="d-flex align-items-center gap-2">
           <button class="btn btn-sm btn-primary" onclick="logCarouselAnalytics({{ post.id }}, this)">
             <i class="bi bi-bar-chart-line me-1"></i>{% if post.tiktok_views is not none %}Update{% else %}Save metrics{% endif %}
           </button>
           <span id="ar-{{ post.id }}" style="font-size:0.8rem"></span>
         </div>
       </div>
-
     </div>
     {% endif %}
   </div>
 </div>
 {% endfor %}
 
-{# Slide expand modal #}
+{# ── Quick "Add Account" panel (shown when + card clicked) ──────── #}
+<div id="addAccountPanel" class="card mb-4" style="display:none">
+  <div class="card-header"><i class="bi bi-plus-lg me-1"></i>Add Account</div>
+  <div class="card-body">
+    <form id="quickAddForm" onsubmit="quickAddAccount(event)">
+      <div class="row g-3">
+        <div class="col-sm-4">
+          <label class="form-label">Name <span style="color:var(--danger)">*</span></label>
+          <input type="text" class="form-control" id="qaName" placeholder="Classic Roblox" required>
+        </div>
+        <div class="col-sm-4">
+          <label class="form-label">Slug <span style="color:var(--danger)">*</span></label>
+          <input type="text" class="form-control" id="qaSlug" placeholder="classic-roblox" required pattern="[a-z0-9\-]+">
+        </div>
+        <div class="col-sm-4">
+          <label class="form-label">Style</label>
+          <select class="form-select" id="qaStyle">
+            <option value="classic">Classic (Roblox page)</option>
+            <option value="gazette">Gazette (newspaper)</option>
+          </select>
+        </div>
+        <div class="col-sm-6">
+          <label class="form-label">Channel handle</label>
+          <input type="text" class="form-control" id="qaHandle" placeholder="@robloxgems">
+        </div>
+        <div class="col-sm-6">
+          <label class="form-label">Buffer TikTok Profile ID</label>
+          <input type="text" class="form-control" id="qaProfileId" placeholder="5f3a…">
+        </div>
+      </div>
+      <div class="d-flex gap-2 mt-3">
+        <button type="submit" class="btn btn-primary" id="qaSubmitBtn"><i class="bi bi-check-lg me-1"></i>Add Account</button>
+        <button type="button" class="btn btn-outline-secondary" onclick="document.getElementById('addAccountPanel').style.display='none';document.querySelector('.account-card-add').style.display=''">Cancel</button>
+      </div>
+      <div id="qaMsg" class="mt-2" style="display:none;font-size:0.85rem"></div>
+    </form>
+  </div>
+</div>
+
+{# ── Modals ───────────────────────────────────────────────────────── #}
 <div class="modal fade" id="slideModal" tabindex="-1">
   <div class="modal-dialog modal-dialog-centered" style="max-width:420px">
     <div class="modal-content border-0" style="background:var(--surface-2);border-radius:12px">
       <div class="modal-body p-2 text-center">
         <img id="modalImg" src="" class="img-fluid rounded" style="max-height:75vh">
         <div class="mt-2">
-          <button class="btn btn-primary btn-sm" onclick="saveSlide(document.getElementById('modalImg').src, 'slide.png')">
+          <button class="btn btn-primary btn-sm" onclick="saveSlide(document.getElementById('modalImg').src,'slide.png')">
             <i class="bi bi-download me-1"></i>Save to Photos
           </button>
         </div>
@@ -288,7 +429,6 @@
   </div>
 </div>
 
-{# Inline rename modal #}
 <div class="modal fade" id="renameModal" tabindex="-1">
   <div class="modal-dialog modal-dialog-centered" style="max-width:360px">
     <div class="modal-content border-0" style="background:var(--surface-2);border-radius:12px">
@@ -298,7 +438,6 @@
       </div>
       <div class="modal-body pt-2">
         <input type="text" id="renameInput" class="form-control" placeholder="Account name"
-               style="font-size:0.95rem"
                onkeydown="if(event.key==='Enter')saveRename()">
         <div id="renameError" class="text-danger mt-2" style="font-size:0.8rem;display:none"></div>
       </div>
@@ -313,116 +452,144 @@
 {% endblock %}
 
 {% block scripts %}
-<style>
-/* ── Account tabs ─────────────────────────────────────────────────────── */
-.account-tabs {
-  position: sticky;
-  top: 0;
-  z-index: 10;
-  background: var(--surface-1, #0d1117);
-  padding: 0.5rem 0 0;
-  border-bottom: 1px solid var(--border);
-  margin: -1rem -1rem 0;
-  padding: 0.5rem 1rem 0;
-}
-.account-tabs-scroll {
-  display: flex;
-  gap: 0.25rem;
-  overflow-x: auto;
-  scrollbar-width: none;
-  padding-bottom: 0;
-}
-.account-tabs-scroll::-webkit-scrollbar { display: none; }
-.account-tab {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.35rem;
-  padding: 0.45rem 0.9rem;
-  border: none;
-  background: transparent;
-  color: var(--text-dim, #8b949e);
-  font-size: 0.875rem;
-  font-weight: 500;
-  border-bottom: 2px solid transparent;
-  cursor: pointer;
-  white-space: nowrap;
-  transition: color 0.15s, border-color 0.15s;
-  border-radius: 0;
-  flex-shrink: 0;
-}
-.account-tab:hover { color: var(--text, #e6edf3); }
-.account-tab.active {
-  color: var(--brand, #6c63ff);
-  border-bottom-color: var(--brand, #6c63ff);
-}
-.tab-rename-btn {
-  display: none;
-  font-size: 0.7rem;
-  opacity: 0.6;
-  padding: 1px 3px;
-  border-radius: 3px;
-  cursor: pointer;
-  transition: opacity 0.15s;
-}
-.tab-rename-btn:hover { opacity: 1; background: var(--surface-3); }
-.account-tab:hover .tab-rename-btn,
-.account-tab.active .tab-rename-btn { display: inline-flex; }
-</style>
-
 <script>
-// ── Tab state ────────────────────────────────────────────────────────────
-let _activeAccountId = 'all';
+// ── State ─────────────────────────────────────────────────────────────────
+let _activeTab = 'all';
 let _renameAccountId = null;
 let _renameModal = null;
+let _pollTimer = null;
 
-// ACCOUNTS from the template (for tab name updates)
-const ACCOUNTS_TAB = {{ (accounts | map(attribute='id') | list) | tojson if accounts else '[]' }};
+// ── Generation: all accounts ──────────────────────────────────────────────
+async function generateAll(btn) {
+  const orig = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Starting…';
+  try {
+    const r = await fetch('/pipeline/create-carousel', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({}),
+    });
+    const data = await r.json();
+    if (data.status === 'started') {
+      document.getElementById('globalNote').textContent =
+        data.accounts.length
+          ? `Generating for ${data.accounts.map(a => a.name).join(', ')} — watch the cards below.`
+          : 'Generating…';
+      startPolling();
+    } else {
+      document.getElementById('globalNote').textContent = data.message || JSON.stringify(data);
+    }
+  } catch (e) {
+    document.getElementById('globalNote').textContent = 'Network error — try again.';
+  }
+  setTimeout(() => { btn.disabled = false; btn.innerHTML = orig; }, 3000);
+}
 
-function switchTab(btn, accountId) {
-  _activeAccountId = accountId;
-  document.querySelectorAll('.account-tab').forEach(t => t.classList.remove('active'));
-  btn.classList.add('active');
-  filterCarousels(accountId);
-
-  // Update page title
-  const titleEl = document.getElementById('pageTitle');
-  if (accountId === 'all') {
-    titleEl.textContent = 'Carousels';
-  } else {
-    const nameEl = document.getElementById('tab-name-' + accountId);
-    titleEl.textContent = nameEl ? nameEl.textContent.trim() : 'Carousels';
+// ── Generation: single account ────────────────────────────────────────────
+async function generateOne(accountId, btn) {
+  const orig = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>';
+  setCardState(accountId, 'generating', 'Starting…');
+  try {
+    const r = await fetch('/pipeline/create-carousel', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({account_id: accountId}),
+    });
+    const data = await r.json();
+    if (data.status === 'started') {
+      startPolling();
+    } else {
+      setCardState(accountId, 'error', data.message || 'Failed');
+      btn.disabled = false; btn.innerHTML = orig;
+    }
+  } catch (e) {
+    setCardState(accountId, 'error', 'Network error');
+    btn.disabled = false; btn.innerHTML = orig;
   }
 }
 
-function filterCarousels(accountId) {
-  const cards = document.querySelectorAll('.carousel-item-card');
-  let visible = 0;
-  cards.forEach(card => {
-    const cardAccount = card.dataset.accountId;
-    const show = accountId === 'all'
-      || String(cardAccount) === String(accountId)
-      || (accountId === 'none' && (!cardAccount || cardAccount === 'None' || cardAccount === 'none'));
-    card.style.display = show ? '' : 'none';
-    if (show) visible++;
-  });
-  const empty = document.getElementById('emptyState');
-  if (empty) empty.style.display = (visible === 0 && document.querySelectorAll('.carousel-item-card').length > 0) ? '' : 'none';
+// ── Card state ────────────────────────────────────────────────────────────
+function setCardState(accountId, status, message) {
+  const card   = document.getElementById('acc-card-' + accountId);
+  const msgEl  = document.getElementById('acc-status-' + accountId);
+  const btnEl  = document.getElementById('acc-btn-' + accountId);
+  if (!card) return;
+  card.className = card.className.replace(/\bis-\S+/g, '').trim();
+  if (status !== 'idle') card.classList.add('is-' + status);
+  if (msgEl) {
+    msgEl.className = 'acc-status-msg ' + status;
+    const icons = {generating:'<span class="spinner-border spinner-border-sm me-1" style="width:.7rem;height:.7rem"></span>',
+                   done:'<i class="bi bi-check-circle me-1" style="color:var(--success)"></i>',
+                   error:'<i class="bi bi-x-circle me-1" style="color:var(--danger)"></i>',
+                   warming:'<i class="bi bi-hourglass-split me-1"></i>'};
+    msgEl.innerHTML = (icons[status] || '') + (message || '');
+  }
+  if (btnEl) {
+    if (status === 'generating') {
+      btnEl.disabled = true;
+      btnEl.innerHTML = '<span class="spinner-border spinner-border-sm" style="width:.7rem;height:.7rem"></span>';
+    } else {
+      btnEl.disabled = false;
+      btnEl.innerHTML = '<i class="bi bi-play-fill me-1"></i>Generate';
+    }
+  }
 }
 
-// ── Inline rename ────────────────────────────────────────────────────────
+// ── Poll generation status ────────────────────────────────────────────────
+function startPolling() {
+  if (_pollTimer) return;
+  _pollTimer = setInterval(pollStatus, 2000);
+}
+
+async function pollStatus() {
+  try {
+    const r = await fetch('/pipeline/generation-status');
+    const data = await r.json();
+    let anyGenerating = false;
+    for (const [key, st] of Object.entries(data)) {
+      const accountId = parseInt(key);
+      if (!isNaN(accountId)) {
+        setCardState(accountId, st.status, st.message);
+        if (st.status === 'generating') anyGenerating = true;
+        if (st.status === 'done') {
+          // Reload after a brief delay so new carousel appears
+          setTimeout(() => location.reload(), 1500);
+          clearInterval(_pollTimer); _pollTimer = null;
+          return;
+        }
+      }
+    }
+    if (!anyGenerating) { clearInterval(_pollTimer); _pollTimer = null; }
+  } catch (e) { /* ignore network blips */ }
+}
+
+// ── Tab filtering ─────────────────────────────────────────────────────────
+function switchTab(btn, accountId) {
+  _activeTab = accountId;
+  document.querySelectorAll('.account-tab').forEach(t => t.classList.remove('active'));
+  btn.classList.add('active');
+  let visible = 0;
+  document.querySelectorAll('.carousel-item-card').forEach(card => {
+    const match = accountId === 'all'
+      || String(card.dataset.accountId) === String(accountId);
+    card.style.display = match ? '' : 'none';
+    if (match) visible++;
+  });
+  document.getElementById('emptyState').style.display =
+    (visible === 0 && document.querySelectorAll('.carousel-item-card').length > 0) ? '' : 'none';
+}
+
+// ── Inline rename ─────────────────────────────────────────────────────────
 function startRename(evt, accountId) {
   evt.stopPropagation();
   _renameAccountId = accountId;
-  const nameEl = document.getElementById('tab-name-' + accountId);
-  const current = nameEl ? nameEl.textContent.trim() : '';
-  document.getElementById('renameInput').value = current;
+  const nameEl = document.getElementById('acc-name-' + accountId);
+  document.getElementById('renameInput').value = nameEl ? nameEl.textContent.trim() : '';
   document.getElementById('renameError').style.display = 'none';
   if (!_renameModal) _renameModal = new bootstrap.Modal(document.getElementById('renameModal'));
   _renameModal.show();
-  setTimeout(() => {
-    const inp = document.getElementById('renameInput');
-    inp.focus(); inp.select();
-  }, 200);
+  setTimeout(() => { const inp = document.getElementById('renameInput'); inp.focus(); inp.select(); }, 200);
 }
 
 async function saveRename() {
@@ -431,164 +598,66 @@ async function saveRename() {
   if (!name) { errEl.textContent = 'Name cannot be empty.'; errEl.style.display = ''; return; }
   try {
     const r = await fetch(`/accounts/${_renameAccountId}/rename`, {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
+      method: 'POST', headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({display_name: name}),
     });
-    const data = await r.json();
-    if (!r.ok) { errEl.textContent = data.detail || 'Error saving.'; errEl.style.display = ''; return; }
-    // Update tab label in place
-    const nameEl = document.getElementById('tab-name-' + _renameAccountId);
-    if (nameEl) nameEl.textContent = name;
-    // Update page title if this is the active tab
-    if (String(_activeAccountId) === String(_renameAccountId)) {
-      document.getElementById('pageTitle').textContent = name;
-    }
-    _renameModal.hide();
-  } catch (e) {
-    errEl.textContent = 'Network error.'; errEl.style.display = '';
-  }
-}
-
-// ── Create carousel ──────────────────────────────────────────────────────
-async function createCarousel(btn) {
-  const note = document.getElementById('createNote');
-  btn.disabled = true;
-  btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Working…';
-
-  const body = {};
-  if (_activeAccountId !== 'all' && _activeAccountId !== 'none') {
-    body.account_id = parseInt(_activeAccountId);
-  }
-
-  try {
-    const r = await fetch('/pipeline/create-carousel', {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify(body),
+    if (!r.ok) { const d = await r.json(); errEl.textContent = d.detail || 'Error.'; errEl.style.display = ''; return; }
+    document.getElementById('acc-name-' + _renameAccountId).textContent = name;
+    // Update matching tab label
+    document.querySelectorAll(`.account-tab[data-account-id="${_renameAccountId}"]`).forEach(t => {
+      t.textContent = name;
     });
+    _renameModal.hide();
+  } catch (e) { errEl.textContent = 'Network error.'; errEl.style.display = ''; }
+}
+
+// ── Quick add account ─────────────────────────────────────────────────────
+async function quickAddAccount(e) {
+  e.preventDefault();
+  const btn = document.getElementById('qaSubmitBtn');
+  const msg = document.getElementById('qaMsg');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Adding…';
+  const body = {
+    slug: document.getElementById('qaSlug').value.trim().toLowerCase(),
+    display_name: document.getElementById('qaName').value.trim(),
+    carousel_style: document.getElementById('qaStyle').value,
+    channel_handle: document.getElementById('qaHandle').value.trim() || '@account',
+    channel_name: document.getElementById('qaName').value.trim(),
+    buffer_tiktok_profile_id: document.getElementById('qaProfileId').value.trim(),
+  };
+  try {
+    const r = await fetch('/accounts', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)});
     const data = await r.json();
-    if (data.status === 'created') {
-      note.textContent = `Part ${data.part} created — scroll down to review it.`;
-      location.reload();
-    } else if (data.status === 'warming_up') {
-      note.textContent = data.message || 'Warming up — check back in a minute.';
+    msg.style.display = '';
+    if (r.ok) {
+      msg.style.color = 'var(--success)';
+      msg.innerHTML = '<i class="bi bi-check-circle me-1"></i>Account added — reloading…';
+      setTimeout(() => location.reload(), 1000);
+    } else {
+      msg.style.color = 'var(--danger)';
+      msg.innerHTML = '<i class="bi bi-x-circle me-1"></i>' + (data.detail || 'Error adding account.');
       btn.disabled = false;
-      btn.innerHTML = 'Create a carousel';
-    } else {
-      note.textContent = data.message || JSON.stringify(data);
-      btn.disabled = false;
-      btn.innerHTML = 'Create a carousel';
+      btn.innerHTML = '<i class="bi bi-check-lg me-1"></i>Add Account';
     }
   } catch (e) {
-    note.textContent = 'Network error — try again.';
+    msg.style.display = ''; msg.style.color = 'var(--danger)';
+    msg.innerHTML = 'Network error.';
     btn.disabled = false;
-    btn.innerHTML = 'Create a carousel';
+    btn.innerHTML = '<i class="bi bi-check-lg me-1"></i>Add Account';
   }
 }
 
-// ── Carousel actions ─────────────────────────────────────────────────────
-async function saveCarouselToPhotos(btn) {
-  let urls = [];
-  try { urls = JSON.parse(btn.dataset.slides || '[]'); } catch (e) {}
-  const part = btn.dataset.part || '';
-  const cid = btn.dataset.cid;
-  if (!urls.length) { alert('No slides to save yet.'); return; }
-  const capEl = document.getElementById(btn.dataset.captionEl || '');
-  if (capEl) { try { await navigator.clipboard.writeText(capEl.textContent.trim()); } catch (e) {} }
-  const original = btn.innerHTML;
-  const zipFallback = () => { window.location.href = `/carousel/${cid}/download`; };
-  btn.disabled = true;
-  btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Preparing…';
-  try {
-    const files = [];
-    for (let i = 0; i < urls.length; i++) {
-      const resp = await fetch(urls[i]);
-      if (!resp.ok) throw new Error('fetch failed');
-      const blob = await resp.blob();
-      files.push(new File([blob], `slide_${i + 1}.png`, {type: blob.type || 'image/png'}));
-    }
-    if (navigator.canShare && navigator.canShare({files})) {
-      await navigator.share({files, title: `Roblox Carousel Part ${part}`});
-      btn.innerHTML = '<i class="bi bi-check-circle me-1"></i>Saved · caption copied';
-    } else {
-      zipFallback();
-      btn.innerHTML = '<i class="bi bi-download me-1"></i>Downloaded .zip';
-    }
-  } catch (e) {
-    if (e && e.name === 'AbortError') { btn.innerHTML = original; btn.disabled = false; return; }
-    zipFallback();
-    btn.innerHTML = '<i class="bi bi-download me-1"></i>Downloaded .zip';
-  }
-  setTimeout(() => { btn.innerHTML = original; btn.disabled = false; }, 2500);
-}
-
-async function approveCarousel(id) {
-  await post(`/carousel/${id}/approve`);
-  location.reload();
-}
-async function rejectCarousel(id) {
-  if (!confirm('Reject and discard this carousel?')) return;
-  await post(`/carousel/${id}/reject`);
-  location.reload();
-}
-async function regenerateCarousel(id, btn) {
-  btn.disabled = true;
-  btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Working…';
-  try { await post(`/carousel/${id}/regenerate`); } catch (e) {}
-  location.reload();
-}
-async function markPosted(id, btn) {
-  btn.disabled = true;
-  btn.innerHTML = '<i class="bi bi-hourglass-split me-1"></i>Saving...';
-  try {
-    await post(`/carousel/${id}/mark-posted`);
-    btn.innerHTML = '<i class="bi bi-check-circle me-1"></i>Posted';
-    btn.classList.replace('btn-primary', 'btn-success');
-    setTimeout(() => location.reload(), 1000);
-  } catch (e) {
-    btn.innerHTML = '<i class="bi bi-x-circle me-1"></i>Failed';
-    btn.disabled = false;
-    alert('Failed: ' + (e.message || 'check logs'));
-  }
-}
-function expandSlide(src) {
-  document.getElementById('modalImg').src = src;
-  new bootstrap.Modal(document.getElementById('slideModal')).show();
-}
-async function saveSlide(url, filename) {
-  try {
-    const resp = await fetch(url);
-    const blob = await resp.blob();
-    const file = new File([blob], filename, {type: blob.type || 'image/png'});
-    if (navigator.canShare && navigator.canShare({files: [file]})) {
-      await navigator.share({files: [file]});
-    } else {
-      const a = document.createElement('a');
-      a.href = URL.createObjectURL(blob);
-      a.download = filename;
-      a.click();
-    }
-  } catch(e) {
-    if (e.name !== 'AbortError') alert('Could not save — try long-pressing the image instead.');
-  }
-}
-function copyCaption(elId, btn) {
-  const el = document.getElementById(elId);
-  navigator.clipboard.writeText(el.textContent).then(() => {
-    btn.innerHTML = '<i class="bi bi-check-lg me-1"></i>Copied!';
-    btn.classList.add('btn-success');
-    btn.classList.remove('btn-outline-secondary');
-    setTimeout(() => {
-      btn.innerHTML = '<i class="bi bi-clipboard me-1"></i>Copy Caption';
-      btn.classList.remove('btn-success');
-      btn.classList.add('btn-outline-secondary');
-    }, 2000);
-  });
-}
-
-// ── Analytics ────────────────────────────────────────────────────────────
+// Auto-fill slug from name
 document.addEventListener('DOMContentLoaded', () => {
+  const nameInput = document.getElementById('qaName');
+  const slugInput = document.getElementById('qaSlug');
+  if (nameInput && slugInput) {
+    nameInput.addEventListener('input', () => {
+      slugInput.value = nameInput.value.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+    });
+  }
+  // Auto-fill hours
   document.querySelectorAll('[data-posted-at]').forEach(input => {
     const val = parseInt(input.value) || 0;
     if (val === 24) {
@@ -600,46 +669,77 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 });
-function showAnalyticsEdit(id) {
-  const summary = document.getElementById('am-' + id);
-  const form    = document.getElementById('af-' + id);
-  if (summary) summary.style.display = 'none';
-  if (form)    form.style.display    = '';
-}
-function hideAnalyticsEdit(id) {
-  const summary = document.getElementById('am-' + id);
-  const form    = document.getElementById('af-' + id);
-  if (summary) summary.style.display = '';
-  if (form)    form.style.display    = 'none';
-}
-async function logCarouselAnalytics(id, btn) {
-  const v = k => parseInt(document.getElementById(k + id)?.value) || 0;
-  const payload = {
-    views: v('av-'), likes: v('al-'), comments: v('acom-'),
-    shares: v('ash-'), saves: v('asv-'), follows: v('afo-'),
-    hours_since_post: v('aho-'),
-  };
-  const resultEl = document.getElementById('ar-' + id);
-  const original = btn.innerHTML;
+
+// ── Carousel actions ──────────────────────────────────────────────────────
+async function saveCarouselToPhotos(btn) {
+  let urls = [];
+  try { urls = JSON.parse(btn.dataset.slides || '[]'); } catch (e) {}
+  const part = btn.dataset.part || '';
+  const cid = btn.dataset.cid;
+  if (!urls.length) { alert('No slides to save yet.'); return; }
+  const capEl = document.getElementById(btn.dataset.captionEl || '');
+  if (capEl) { try { await navigator.clipboard.writeText(capEl.textContent.trim()); } catch (e) {} }
+  const orig = btn.innerHTML;
   btn.disabled = true;
-  btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Saving…';
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Preparing…';
   try {
-    const r = await fetch(`/carousel/${id}/log-analytics`, {
-      method: 'POST', headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify(payload),
-    });
-    const data = await r.json();
-    if (r.ok) {
-      resultEl.innerHTML = '<span class="text-success"><i class="bi bi-check-circle me-1"></i>Saved</span>';
-      setTimeout(() => location.reload(), 700);
-    } else {
-      resultEl.innerHTML = `<span class="text-danger"><i class="bi bi-x-circle me-1"></i>${data.detail || 'Error saving'}</span>`;
-      btn.disabled = false; btn.innerHTML = original;
+    const files = [];
+    for (let i = 0; i < urls.length; i++) {
+      const resp = await fetch(urls[i]);
+      if (!resp.ok) throw new Error('fetch failed');
+      const blob = await resp.blob();
+      files.push(new File([blob], `slide_${i+1}.png`, {type: blob.type || 'image/png'}));
     }
+    if (navigator.canShare && navigator.canShare({files})) {
+      await navigator.share({files, title: `Roblox Carousel Part ${part}`});
+      btn.innerHTML = '<i class="bi bi-check-circle me-1"></i>Saved · caption copied';
+    } else { window.location.href = `/carousel/${cid}/download`; btn.innerHTML = '<i class="bi bi-download me-1"></i>Downloaded .zip'; }
   } catch (e) {
-    resultEl.innerHTML = '<span class="text-danger">Network error</span>';
-    btn.disabled = false; btn.innerHTML = original;
+    if (e && e.name === 'AbortError') { btn.innerHTML = orig; btn.disabled = false; return; }
+    window.location.href = `/carousel/${cid}/download`; btn.innerHTML = '<i class="bi bi-download me-1"></i>Downloaded .zip';
   }
+  setTimeout(() => { btn.innerHTML = orig; btn.disabled = false; }, 2500);
+}
+async function approveCarousel(id) { await post(`/carousel/${id}/approve`); location.reload(); }
+async function rejectCarousel(id) { if (!confirm('Reject and discard this carousel?')) return; await post(`/carousel/${id}/reject`); location.reload(); }
+async function regenerateCarousel(id, btn) {
+  btn.disabled = true; btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Working…';
+  try { await post(`/carousel/${id}/regenerate`); } catch (e) {}
+  location.reload();
+}
+async function markPosted(id, btn) {
+  btn.disabled = true; btn.innerHTML = '<i class="bi bi-hourglass-split me-1"></i>Saving...';
+  try { await post(`/carousel/${id}/mark-posted`); btn.innerHTML = '<i class="bi bi-check-circle me-1"></i>Posted'; btn.classList.replace('btn-success','btn-success'); setTimeout(() => location.reload(), 1000); }
+  catch (e) { btn.innerHTML = '<i class="bi bi-x-circle me-1"></i>Failed'; btn.disabled = false; alert('Failed: ' + (e.message || 'check logs')); }
+}
+function expandSlide(src) { document.getElementById('modalImg').src = src; new bootstrap.Modal(document.getElementById('slideModal')).show(); }
+async function saveSlide(url, filename) {
+  try {
+    const resp = await fetch(url); const blob = await resp.blob();
+    const file = new File([blob], filename, {type: blob.type||'image/png'});
+    if (navigator.canShare && navigator.canShare({files:[file]})) { await navigator.share({files:[file]}); }
+    else { const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = filename; a.click(); }
+  } catch(e) { if (e.name !== 'AbortError') alert('Could not save — try long-pressing the image instead.'); }
+}
+function copyCaption(elId, btn) {
+  navigator.clipboard.writeText(document.getElementById(elId).textContent).then(() => {
+    btn.innerHTML = '<i class="bi bi-check-lg me-1"></i>Copied!'; btn.classList.add('btn-success'); btn.classList.remove('btn-outline-secondary');
+    setTimeout(() => { btn.innerHTML = '<i class="bi bi-clipboard me-1"></i>Copy Caption'; btn.classList.remove('btn-success'); btn.classList.add('btn-outline-secondary'); }, 2000);
+  });
+}
+function showAnalyticsEdit(id) { document.getElementById('am-'+id).style.display='none'; document.getElementById('af-'+id).style.display=''; }
+function hideAnalyticsEdit(id) { document.getElementById('am-'+id).style.display=''; document.getElementById('af-'+id).style.display='none'; }
+async function logCarouselAnalytics(id, btn) {
+  const v = k => parseInt(document.getElementById(k+id)?.value)||0;
+  const payload = {views:v('av-'),likes:v('al-'),comments:v('acom-'),shares:v('ash-'),saves:v('asv-'),follows:v('afo-'),hours_since_post:v('aho-')};
+  const resultEl = document.getElementById('ar-'+id);
+  const orig = btn.innerHTML; btn.disabled = true; btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Saving…';
+  try {
+    const r = await fetch(`/carousel/${id}/log-analytics`, {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+    const data = await r.json();
+    if (r.ok) { resultEl.innerHTML = '<span class="text-success"><i class="bi bi-check-circle me-1"></i>Saved</span>'; setTimeout(() => location.reload(), 700); }
+    else { resultEl.innerHTML = `<span class="text-danger"><i class="bi bi-x-circle me-1"></i>${data.detail||'Error'}</span>`; btn.disabled=false; btn.innerHTML=orig; }
+  } catch (e) { resultEl.innerHTML='<span class="text-danger">Network error</span>'; btn.disabled=false; btn.innerHTML=orig; }
 }
 </script>
 {% endblock %}

@@ -73,6 +73,11 @@ _queue = ContentQueue()
 _feedback = FeedbackLoop()
 _pipeline: Optional[Pipeline] = None
 
+# Per-account generation status. Key = str(account.id) or "global".
+# Values: {status: "idle"|"generating"|"done"|"warming"|"error",
+#          name: str, message: str, part: int|None, started_at: str|None}
+_gen_status: dict[str, dict] = {}
+
 # Cached AI credential state, refreshed at startup and on demand. None until the
 # first check runs. The dashboard surfaces this so a missing/invalid/expired key
 # can never silently downgrade users into fallback mode without them knowing.
@@ -266,27 +271,87 @@ async def trigger_carousel(background_tasks: BackgroundTasks):
 
 
 class CreateCarouselRequest(BaseModel):
-    account_id: Optional[int] = None
+    account_id: Optional[int] = None  # None = all active accounts
+
+
+async def _bg_generate_for_account(account: Account) -> None:
+    """Background coroutine: generate one carousel for an account, update _gen_status."""
+    key = str(account.id)
+    _gen_status[key] = {
+        "status": "generating",
+        "name": account.display_name,
+        "style": account.carousel_style,
+        "message": "Generating…",
+        "part": None,
+        "started_at": datetime.utcnow().isoformat(),
+    }
+    try:
+        result = await _pipeline.run_carousel_factory(account=account)
+        if result.get("carousels"):
+            _gen_status[key].update({
+                "status": "done",
+                "message": f"Part {result.get('part')} ready to review",
+                "part": result.get("part"),
+            })
+        elif result.get("eligible", 0) < 5 or result.get("status") == "warming_up":
+            if not _pipeline._warming:
+                _pipeline._warming = True
+                asyncio.create_task(_pipeline._warmup_for_carousel())
+            _gen_status[key].update({
+                "status": "warming",
+                "message": "Finding & rating games — check back in a few minutes",
+            })
+        else:
+            _gen_status[key].update({
+                "status": "error",
+                "message": result.get("message") or result.get("reason") or "Generation failed",
+            })
+    except Exception as exc:
+        log.error("dashboard.bg_generate_failed", account_id=account.id, error=str(exc))
+        _gen_status[key].update({"status": "error", "message": str(exc)})
 
 
 @app.post("/pipeline/create-carousel")
 async def create_carousel(req: CreateCarouselRequest = CreateCarouselRequest()):
-    """One action → a carousel. Builds now if possible, otherwise warms up the
-    discover→rate→build chain in the background. The single primary CTA."""
+    """Generate carousels — for one account (account_id set) or all active accounts (default).
+    Returns immediately; generation runs in the background. Poll /pipeline/generation-status."""
     if not _pipeline:
         return {"status": "error", "message": "Pipeline not initialized"}
-    if req.account_id is not None:
-        async with get_session() as session:
+
+    async with get_session() as session:
+        if req.account_id is not None:
             account = await session.get(Account, req.account_id)
-            if account:
-                from sqlalchemy.orm import make_transient  # noqa: PLC0415
-                session.expunge(account)
-                result = await _pipeline.run_carousel_factory(account=account)
-                if result.get("carousels"):
-                    return {**result, "status": "created", "review_required": True,
-                            "carousel_status": "pending_review"}
-                return result
-    return await _pipeline.run_create_carousel()
+            if not account:
+                raise HTTPException(404, "Account not found")
+            session.expunge(account)
+            accounts = [account]
+        else:
+            rows = await session.execute(
+                select(Account).where(Account.is_active == True)  # noqa: E712
+            )
+            accounts = list(rows.scalars().all())
+            for a in accounts:
+                session.expunge(a)
+
+    if not accounts:
+        # No accounts configured — fall back to global (no-account) generation
+        asyncio.create_task(_pipeline.run_create_carousel())
+        return {"status": "started", "accounts": [], "message": "Generating (no accounts configured)"}
+
+    for account in accounts:
+        asyncio.create_task(_bg_generate_for_account(account))
+
+    return {
+        "status": "started",
+        "accounts": [{"id": a.id, "name": a.display_name, "style": a.carousel_style}
+                     for a in accounts],
+    }
+
+
+@app.get("/pipeline/generation-status")
+async def generation_status():
+    """Current per-account generation status. Clients poll this to update UI."""
+    return _gen_status
 
 
 # ── Carousel pages ────────────────────────────────────────────────────
@@ -302,6 +367,12 @@ async def carousels_page(request: Request):
             select(Account).order_by(Account.created_at.asc())
         )
         accounts = list(acc_rows.scalars().all())
+        from sqlalchemy import func as _func  # noqa: PLC0415
+        counts_q = await session.execute(
+            select(CarouselPost.account_id, _func.count(CarouselPost.id))
+            .group_by(CarouselPost.account_id)
+        )
+        post_counts = {row[0]: row[1] for row in counts_q}
     account_map = {a.id: a.display_name for a in accounts}
 
     # Attach helper properties for template
@@ -367,6 +438,7 @@ async def carousels_page(request: Request):
     return templates.TemplateResponse(request, "carousels.html", {
         "carousels": enriched,
         "accounts": accounts,
+        "post_counts": post_counts,
         "settings": _settings,
     })
 
