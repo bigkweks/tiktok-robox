@@ -29,6 +29,7 @@ from src.config import get_settings
 from src.content.carousel_generator import CarouselGame, CarouselGenerator
 from src.content.gazette_generator import GazetteCarouselGenerator
 from src.integrations.buffer_client import BufferClient, BufferError
+from src.integrations.upload_post_client import UploadPostClient, UploadPostError
 from src.content.description_engine import DescriptionEngine
 from src.content.rating_engine import RatingEngine
 from src.content.thumbnail_generator import ThumbnailGenerator
@@ -189,13 +190,14 @@ class Pipeline:
 
     async def _seed_default_account_if_needed(self) -> None:
         """
-        On first startup, if no accounts exist and .env has a Buffer profile ID,
-        create a default Account from the legacy env-var settings so existing
-        single-account users get zero-downtime migration.
+        On first startup, if no accounts exist and .env has posting credentials
+        (Upload-Post or legacy Buffer), create a default Account from the
+        env-var settings so existing single-account users get zero-downtime
+        migration.
         """
-        if not self._settings.BUFFER_ACCESS_TOKEN:
-            return
-        if not self._settings.BUFFER_TIKTOK_PROFILE_ID:
+        has_upload_post = bool(self._settings.UPLOAD_POST_API_KEY)
+        has_buffer = bool(self._settings.BUFFER_ACCESS_TOKEN and self._settings.BUFFER_TIKTOK_PROFILE_ID)
+        if not has_upload_post and not has_buffer:
             return
         async with get_session() as session:
             from sqlalchemy import func as _func  # noqa: PLC0415
@@ -222,9 +224,9 @@ class Pipeline:
                  profile_id=self._settings.BUFFER_TIKTOK_PROFILE_ID)
 
     async def _register_all_account_jobs(self) -> None:
-        """Register posting cron jobs for every active account with Buffer credentials."""
-        if not self._settings.BUFFER_ACCESS_TOKEN:
-            log.info("pipeline.accounts_disabled", reason="BUFFER_ACCESS_TOKEN not set")
+        """Register posting cron jobs for every active account with posting credentials."""
+        if not self._settings.UPLOAD_POST_API_KEY and not self._settings.BUFFER_ACCESS_TOKEN:
+            log.info("pipeline.accounts_disabled", reason="no posting credentials configured")
             return
         async with get_session() as session:
             rows = await session.execute(
@@ -233,7 +235,7 @@ class Pipeline:
             accounts = list(rows.scalars().all())
         n = 0
         for account in accounts:
-            if account.buffer_tiktok_profile_id:
+            if account.upload_post_profile or account.buffer_tiktok_profile_id:
                 self._register_account_jobs(account)
                 n += 1
         log.info("pipeline.account_jobs_registered", accounts=n)
@@ -329,11 +331,12 @@ class Pipeline:
             log.error("pipeline.account_post.no_slides", gen_id=gen_id)
             return {"status": "failed", "reason": "no_slide_paths"}
 
-        # 3. Upload to Buffer using this account's TikTok profile.
-        buffer_result = await asyncio.get_event_loop().run_in_executor(
+        # 3. Post to TikTok via Upload-Post (falls back to Buffer if that's
+        #    all this account has configured — see _upload_carousel).
+        upload_result = await asyncio.get_event_loop().run_in_executor(
             None,
             functools.partial(
-                self._upload_to_buffer,
+                self._upload_carousel,
                 account=account,
                 slide_paths=slide_paths,
                 caption=caption,
@@ -342,17 +345,65 @@ class Pipeline:
         )
 
         overall = {
-            "status": "success" if buffer_result.get("queued") else "partial",
+            "status": "success" if upload_result.get("queued") else "partial",
             "account_id": account_id,
             "account_slug": account.slug,
             "part": factory_result.get("part"),
             "slides": len(slide_paths),
             "generation_id": gen_id,
             "final_score": factory_result.get("final_score"),
-            **buffer_result,
+            **upload_result,
         }
         log.info("pipeline.account_post.complete", **overall)
         return overall
+
+    def _upload_carousel(
+        self,
+        account: Account,
+        slide_paths: list[Path],
+        caption: str,
+        hashtags: list[str],
+    ) -> dict:
+        """
+        Sync helper: post a carousel to TikTok under the given account.
+        Called in an executor so the async event loop is never blocked.
+
+        Prefers Upload-Post (current path — no TikTok developer app needed).
+        Falls back to Buffer only if the account has a legacy Buffer profile
+        ID configured and no Upload-Post profile.
+        """
+        if account.upload_post_profile and self._settings.UPLOAD_POST_API_KEY:
+            return self._upload_to_upload_post(account, slide_paths, caption, hashtags)
+        if account.buffer_tiktok_profile_id and self._settings.BUFFER_ACCESS_TOKEN:
+            return self._upload_to_buffer(account, slide_paths, caption, hashtags)
+        log.warning("pipeline.upload_skipped",
+                    account=account.slug, reason="no posting credentials configured")
+        return {"queued": False, "error": "No Upload-Post or Buffer credentials configured for this account"}
+
+    def _upload_to_upload_post(
+        self,
+        account: Account,
+        slide_paths: list[Path],
+        caption: str,
+        hashtags: list[str],
+    ) -> dict:
+        """Queue a carousel via Upload-Post under the given account's TikTok profile."""
+        try:
+            client = UploadPostClient(self._settings.UPLOAD_POST_API_KEY)
+            result = client.queue_gazette_carousel(
+                profile=account.upload_post_profile,
+                slide_paths=slide_paths,
+                caption=caption,
+                hashtags=hashtags,
+            )
+            log.info("pipeline.upload_post_ok", account=account.slug, response=result)
+            return {"queued": True, "error": None}
+        except UploadPostError as exc:
+            log.error("pipeline.upload_post_failed", account=account.slug, error=str(exc))
+            return {"queued": False, "error": str(exc)}
+        except Exception as exc:
+            log.error("pipeline.upload_post_unexpected", account=account.slug, error=str(exc))
+            return {"queued": False, "error": str(exc)}
 
     def _upload_to_buffer(
         self,
@@ -363,7 +414,7 @@ class Pipeline:
     ) -> dict:
         """
         Sync helper: queue a carousel in Buffer under the given account's TikTok profile.
-        Called in an executor so the async event loop is never blocked.
+        Legacy path — only reachable for accounts still using a pre-freeze Buffer app.
         """
         token = self._settings.BUFFER_ACCESS_TOKEN
         profile_id = account.buffer_tiktok_profile_id

@@ -5,19 +5,19 @@
 <div class="page-header">
   <div>
     <h1 class="page-title"><i class="bi bi-person-badge me-2 text-brand"></i>Posting Accounts</h1>
-    <p class="page-subtitle">Each account posts to a different TikTok channel via Buffer — 3 carousels/day per account.</p>
+    <p class="page-subtitle">Each account posts to a different TikTok channel via Upload-Post — 3 carousels/day per account.</p>
   </div>
   <button class="btn btn-primary" onclick="showAddForm()">
     <i class="bi bi-plus-lg me-1"></i>Add Account
   </button>
 </div>
 
-{% if not buffer_configured %}
+{% if not upload_post_configured %}
 <div class="alert alert-warning mb-4">
   <i class="bi bi-exclamation-triangle-fill me-2"></i>
-  <strong>BUFFER_ACCESS_TOKEN not set.</strong>
-  Set it in your <code>.env</code> file — see <code>src/integrations/buffer_client.py</code> for setup instructions.
-  Without it, carousels will be generated but not uploaded.
+  <strong>UPLOAD_POST_API_KEY not set.</strong>
+  Set it in your <code>.env</code> file — see <code>src/integrations/upload_post_client.py</code> for setup instructions.
+  Without it, carousels will be generated but not posted automatically.
 </div>
 {% endif %}
 
@@ -35,7 +35,7 @@
         <tr>
           <th>Channel</th>
           <th>Posting slots (UTC)</th>
-          <th>Buffer profile ID</th>
+          <th>Upload-Post profile</th>
           <th>Carousels</th>
           <th>Part #</th>
           <th>Status</th>
@@ -59,10 +59,10 @@
             </div>
           </td>
           <td>
-            {% if account.buffer_tiktok_profile_id %}
-            <span class="id-chip">{{ account.buffer_tiktok_profile_id }}</span>
+            {% if account.upload_post_profile %}
+            <span class="id-chip">{{ account.upload_post_profile }}</span>
             <button class="btn btn-sm btn-outline-secondary ms-2" style="padding:2px 8px;font-size:0.72rem"
-                    onclick="testBuffer({{ account.id }}, this)" title="Test Buffer connection">
+                    onclick="testUploadPost({{ account.id }}, this)" title="Test Upload-Post connection">
               <i class="bi bi-plug"></i>
             </button>
             {% else %}
@@ -117,8 +117,7 @@
     <p class="mb-2">Each account gets <strong style="color:var(--text)">3 APScheduler cron jobs</strong> — one per posting slot. At each slot:</p>
     <ol style="padding-left:1.25rem;margin-bottom:.75rem">
       <li>The pipeline generates a new carousel (5 games, full approval + image gate)</li>
-      <li>The carousel is queued in Buffer under that account's TikTok profile ID</li>
-      <li>Buffer posts it at the next scheduled slot in your Buffer posting schedule</li>
+      <li>The carousel is posted to TikTok via that account's Upload-Post profile</li>
     </ol>
     <p class="mb-0">All accounts share the same discovered game pool. Per-account cooldown ensures no game repeats within 50 unique games on that channel — the same game can appear on two channels in the same week without issue.</p>
   </div>
@@ -149,10 +148,10 @@
           <input type="text" class="form-control" id="fChannelName" placeholder="RobloxGems">
         </div>
         <div class="col-md-8">
-          <label class="form-label">Buffer TikTok Profile ID <span style="color:var(--danger)">*</span></label>
-          <input type="text" class="form-control" id="fProfileId" placeholder="5f3a...">
+          <label class="form-label">Upload-Post profile <span style="color:var(--danger)">*</span></label>
+          <input type="text" class="form-control" id="fProfileId" placeholder="my-tiktok-account">
           <div style="font-size:.75rem;color:var(--text-dim);margin-top:.35rem">
-            Run <code>python -m src.integrations.buffer_client</code> to list your Buffer profiles.
+            The profile name you connected to this TikTok account at <code>upload-post.com</code> → User Profiles.
           </div>
         </div>
 
@@ -223,7 +222,7 @@ function showEditForm(id) {
   document.getElementById('fDisplayName').value = a.display_name;
   document.getElementById('fHandle').value = a.channel_handle;
   document.getElementById('fChannelName').value = a.channel_name;
-  document.getElementById('fProfileId').value = a.buffer_tiktok_profile_id || '';
+  document.getElementById('fProfileId').value = a.upload_post_profile || '';
   document.getElementById('fHour1').value = a.post_hour_1_utc;
   document.getElementById('fHour2').value = a.post_hour_2_utc;
   document.getElementById('fHour3').value = a.post_hour_3_utc;
@@ -249,7 +248,7 @@ async function submitAccount(e) {
     display_name: document.getElementById('fDisplayName').value.trim(),
     channel_handle: document.getElementById('fHandle').value.trim(),
     channel_name: document.getElementById('fChannelName').value.trim(),
-    buffer_tiktok_profile_id: document.getElementById('fProfileId').value.trim(),
+    upload_post_profile: document.getElementById('fProfileId').value.trim(),
     post_hour_1_utc: parseInt(document.getElementById('fHour1').value),
     post_hour_2_utc: parseInt(document.getElementById('fHour2').value),
     post_hour_3_utc: parseInt(document.getElementById('fHour3').value),
@@ -285,18 +284,18 @@ async function activate(id, btn) {
   location.reload();
 }
 
-async function testBuffer(id, btn) {
+async function testUploadPost(id, btn) {
   const orig = btn.innerHTML;
   btn.disabled = true;
   btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
-  const r = await fetch(`/accounts/${id}/test-buffer`, {method:'POST'});
+  const r = await fetch(`/accounts/${id}/test-upload-post`, {method:'POST'});
   const data = await r.json();
   btn.disabled = false;
   btn.innerHTML = orig;
   if (data.ok) {
-    alert(`✅ Buffer OK\nService: ${data.service}\nUsername: @${data.username}`);
+    alert(`✅ Upload-Post OK\nProfile: ${data.profile}`);
   } else {
-    alert(`❌ Buffer error\n${data.error}`);
+    alert(`❌ Upload-Post error\n${data.error}`);
   }
 }
 </script>

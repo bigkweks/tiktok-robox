@@ -29,14 +29,21 @@ class Settings(BaseSettings):
     # like filler. 7.4 = the floor of "WORTH PLAYING" once rounded.
     MIN_CAROUSEL_RATING: float = 7.4
 
-    # ── Buffer (social scheduling) ────────────────────────────────────────
-    # Get your token: python -m src.integrations.buffer_client (follow the guide
-    # at the top of that file).  Leave blank to disable Buffer upload.
+    # ── Buffer (social scheduling — legacy) ───────────────────────────────
+    # Buffer stopped issuing new developer API apps, so this only still works
+    # for apps registered before the freeze. New setups should use Upload-Post
+    # below instead. Leave blank to disable Buffer upload.
     BUFFER_ACCESS_TOKEN: str = ""
     # Legacy single-account settings — used only to seed the default Account row
     # on first startup.  Manage accounts via the /accounts dashboard page instead.
     BUFFER_TIKTOK_PROFILE_ID: str = ""
     MORNING_RUN_UTC_HOUR: int = 7
+
+    # ── Upload-Post (social scheduling — current) ─────────────────────────
+    # Get your key: sign up at upload-post.com, connect each TikTok account
+    # under User Profiles (each connected account = one "profile" name), then
+    # generate a key under API Keys. Leave blank to disable auto-posting.
+    UPLOAD_POST_API_KEY: str = ""
 
     # Default posting hours (UTC) for newly created accounts.
     # Three slots = three carousels queued in Buffer per account per day.

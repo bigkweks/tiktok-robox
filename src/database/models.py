@@ -41,7 +41,12 @@ class Account(Base):
     carousel_style: Mapped[str] = mapped_column(String(16), default="gazette")
 
     # Buffer/TikTok — one shared token in .env; profile_id is what differs
+    # (legacy — Buffer no longer issues new developer apps, see upload_post_profile)
     buffer_tiktok_profile_id: Mapped[str] = mapped_column(String(256), default="")
+
+    # Upload-Post/TikTok — one shared API key in .env; profile name is what differs.
+    # Each Upload-Post "profile" is a TikTok account connected via their dashboard.
+    upload_post_profile: Mapped[str] = mapped_column(String(256), default="")
 
     # Three UTC posting hours per day; APScheduler fires one job at each slot
     post_hour_1_utc: Mapped[int] = mapped_column(Integer, default=7)

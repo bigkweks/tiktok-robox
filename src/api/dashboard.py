@@ -919,6 +919,7 @@ class AccountCreateRequest(BaseModel):
     brand_accent_color: str = "#FFD700"
     carousel_style: str = "gazette"
     buffer_tiktok_profile_id: str = ""
+    upload_post_profile: str = ""
     post_hour_1_utc: int = 7
     post_hour_2_utc: int = 12
     post_hour_3_utc: int = 17
@@ -949,6 +950,7 @@ async def accounts_page(request: Request):
             _settings.DEFAULT_POST_HOUR_3_UTC,
         ],
         "buffer_configured": bool(_settings.BUFFER_ACCESS_TOKEN),
+        "upload_post_configured": bool(_settings.UPLOAD_POST_API_KEY),
     })
 
 
@@ -973,6 +975,7 @@ async def create_account(req: AccountCreateRequest):
             brand_accent_color=req.brand_accent_color,
             carousel_style=req.carousel_style,
             buffer_tiktok_profile_id=req.buffer_tiktok_profile_id.strip(),
+            upload_post_profile=req.upload_post_profile.strip(),
             post_hour_1_utc=req.post_hour_1_utc,
             post_hour_2_utc=req.post_hour_2_utc,
             post_hour_3_utc=req.post_hour_3_utc,
@@ -985,7 +988,7 @@ async def create_account(req: AccountCreateRequest):
         account_copy = _copy.copy(account)
         session.expunge(account)
 
-    if _pipeline and req.buffer_tiktok_profile_id:
+    if _pipeline and (req.upload_post_profile or req.buffer_tiktok_profile_id):
         _pipeline._register_account_jobs(account_copy)
 
     log.info("dashboard.account_created", slug=slug, account_id=account_id)
@@ -1021,7 +1024,7 @@ async def activate_account(account_id: int):
         account_copy = _copy.copy(account)
         session.expunge(account)
 
-    if _pipeline and account_copy.buffer_tiktok_profile_id:
+    if _pipeline and (account_copy.upload_post_profile or account_copy.buffer_tiktok_profile_id):
         _pipeline._register_account_jobs(account_copy)
 
     log.info("dashboard.account_activated", account_id=account_id)
@@ -1043,6 +1046,7 @@ async def update_account(account_id: int, req: AccountCreateRequest):
         account.brand_accent_color = req.brand_accent_color
         account.carousel_style = req.carousel_style
         account.buffer_tiktok_profile_id = req.buffer_tiktok_profile_id.strip()
+        account.upload_post_profile = req.upload_post_profile.strip()
         account.post_hour_1_utc = req.post_hour_1_utc
         account.post_hour_2_utc = req.post_hour_2_utc
         account.post_hour_3_utc = req.post_hour_3_utc
@@ -1051,7 +1055,7 @@ async def update_account(account_id: int, req: AccountCreateRequest):
         session.expunge(account)
 
     # Re-register jobs with updated hours
-    if _pipeline and account_copy.is_active and account_copy.buffer_tiktok_profile_id:
+    if _pipeline and account_copy.is_active and (account_copy.upload_post_profile or account_copy.buffer_tiktok_profile_id):
         _pipeline._register_account_jobs(account_copy)
 
     log.info("dashboard.account_updated", account_id=account_id)
@@ -1103,5 +1107,31 @@ async def test_buffer_account(account_id: int):
                         "username": match.get("formatted_username")}
             return {"ok": False, "error": f"Profile ID '{profile_id}' not found in Buffer account"}
         except BufferError as e:
+            return {"ok": False, "error": str(e)}
+    return await _asyncio.get_event_loop().run_in_executor(None, _check)
+
+
+@app.post("/accounts/{account_id}/test-upload-post")
+async def test_upload_post_account(account_id: int):
+    """Verify that the Upload-Post profile for this account is connected."""
+    if not _settings.UPLOAD_POST_API_KEY:
+        return {"ok": False, "error": "UPLOAD_POST_API_KEY not set in .env"}
+    async with get_session() as session:
+        account = await session.get(Account, account_id)
+        if not account:
+            raise HTTPException(404, "Account not found")
+        profile = account.upload_post_profile
+
+    if not profile:
+        return {"ok": False, "error": "No Upload-Post profile set for this account"}
+
+    import asyncio as _asyncio
+    from src.integrations.upload_post_client import UploadPostClient, UploadPostError
+    def _check():
+        try:
+            client = UploadPostClient(_settings.UPLOAD_POST_API_KEY)
+            profiles = client.list_profiles()
+            return {"ok": True, "profile": profile, "profiles": profiles}
+        except UploadPostError as e:
             return {"ok": False, "error": str(e)}
     return await _asyncio.get_event_loop().run_in_executor(None, _check)
