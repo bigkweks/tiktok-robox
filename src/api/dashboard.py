@@ -763,7 +763,7 @@ async def accounts_page(request: Request):
             _settings.DEFAULT_POST_HOUR_2_UTC,
             _settings.DEFAULT_POST_HOUR_3_UTC,
         ],
-        "buffer_configured": bool(_settings.BUFFER_ACCESS_TOKEN),
+        "buffer_configured": bool(_settings.BUFFER_EMAIL and _settings.BUFFER_PASSWORD),
     })
 
 
@@ -875,9 +875,9 @@ async def update_account(account_id: int, req: AccountCreateRequest):
 
 @app.post("/accounts/{account_id}/test-buffer")
 async def test_buffer_account(account_id: int):
-    """Verify that Buffer credentials for this account are valid."""
-    if not _settings.BUFFER_ACCESS_TOKEN:
-        return {"ok": False, "error": "BUFFER_ACCESS_TOKEN not set in .env"}
+    """Verify that Buffer credentials are valid by doing a headless test login."""
+    if not _settings.BUFFER_EMAIL or not _settings.BUFFER_PASSWORD:
+        return {"ok": False, "error": "BUFFER_EMAIL and BUFFER_PASSWORD not set in .env"}
     async with get_session() as session:
         account = await session.get(Account, account_id)
         if not account:
@@ -885,19 +885,26 @@ async def test_buffer_account(account_id: int):
         profile_id = account.buffer_tiktok_profile_id
 
     if not profile_id:
-        return {"ok": False, "error": "No Buffer profile ID set for this account"}
+        return {"ok": False, "error": "No channel handle set for this account"}
 
     import asyncio as _asyncio
     from src.integrations.buffer_client import BufferClient, BufferError
     def _check():
         try:
-            client = BufferClient(_settings.BUFFER_ACCESS_TOKEN)
-            profiles = client.get_profiles()
-            match = next((p for p in profiles if p["id"] == profile_id), None)
-            if match:
-                return {"ok": True, "service": match.get("service"),
-                        "username": match.get("formatted_username")}
-            return {"ok": False, "error": f"Profile ID '{profile_id}' not found in Buffer account"}
+            client = BufferClient(_settings.BUFFER_EMAIL, _settings.BUFFER_PASSWORD)
+            result = client.test_login()
+            if result["ok"]:
+                channels = result.get("channels", [])
+                handle = profile_id.lstrip("@").lower()
+                matched = any(handle in ch.lower() for ch in channels)
+                return {
+                    "ok": True,
+                    "service": "TikTok",
+                    "username": profile_id,
+                    "channel_found": matched,
+                    "channels_visible": channels,
+                }
+            return {"ok": False, "error": result.get("error", "Login failed")}
         except BufferError as e:
             return {"ok": False, "error": str(e)}
     return await _asyncio.get_event_loop().run_in_executor(None, _check)

@@ -15,8 +15,9 @@
 {% if not buffer_configured %}
 <div class="alert alert-warning mb-4">
   <i class="bi bi-exclamation-triangle-fill me-2"></i>
-  <strong>BUFFER_ACCESS_TOKEN not set.</strong>
-  Set it in your <code>.env</code> file — see <code>src/integrations/buffer_client.py</code> for setup instructions.
+  <strong>Buffer credentials not set.</strong>
+  Add <code>BUFFER_EMAIL</code> and <code>BUFFER_PASSWORD</code> to your <code>.env</code> file.
+  Run <code>python -m src.integrations.buffer_client</code> to test login and list your channel names.
   Without it, carousels will be generated but not uploaded.
 </div>
 {% endif %}
@@ -149,10 +150,11 @@
           <input type="text" class="form-control" id="fChannelName" placeholder="RobloxGems">
         </div>
         <div class="col-md-8">
-          <label class="form-label">Buffer TikTok Profile ID <span style="color:var(--danger)">*</span></label>
-          <input type="text" class="form-control" id="fProfileId" placeholder="5f3a...">
+          <label class="form-label">TikTok channel handle in Buffer <span style="color:var(--danger)">*</span></label>
+          <input type="text" class="form-control" id="fProfileId" placeholder="@robloxgems">
           <div style="font-size:.75rem;color:var(--text-dim);margin-top:.35rem">
-            Run <code>python -m src.integrations.buffer_client</code> to list your Buffer profiles.
+            Enter the TikTok handle exactly as it appears in Buffer's channel list (e.g. <code>@robloxgems</code>).
+            Run <code>python -m src.integrations.buffer_client</code> to see your connected channels.
           </div>
         </div>
 

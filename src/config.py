@@ -30,11 +30,13 @@ class Settings(BaseSettings):
     MIN_CAROUSEL_RATING: float = 7.4
 
     # ── Buffer (social scheduling) ────────────────────────────────────────
-    # Get your token: python -m src.integrations.buffer_client (follow the guide
-    # at the top of that file).  Leave blank to disable Buffer upload.
-    BUFFER_ACCESS_TOKEN: str = ""
-    # Legacy single-account settings — used only to seed the default Account row
-    # on first startup.  Manage accounts via the /accounts dashboard page instead.
+    # Buffer web credentials (replaces the deprecated API token).
+    # Run: python -m src.integrations.buffer_client  to test login & list channels.
+    BUFFER_EMAIL: str = ""
+    BUFFER_PASSWORD: str = ""
+    # Legacy — kept so the seed migration can auto-create a default Account on
+    # first startup for existing users.  Manage accounts via /accounts instead.
+    BUFFER_ACCESS_TOKEN: str = ""   # no longer used for API calls
     BUFFER_TIKTOK_PROFILE_ID: str = ""
     MORNING_RUN_UTC_HOUR: int = 7
 

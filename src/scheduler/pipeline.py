@@ -193,7 +193,7 @@ class Pipeline:
         create a default Account from the legacy env-var settings so existing
         single-account users get zero-downtime migration.
         """
-        if not self._settings.BUFFER_ACCESS_TOKEN:
+        if not self._settings.BUFFER_EMAIL:
             return
         if not self._settings.BUFFER_TIKTOK_PROFILE_ID:
             return
@@ -223,8 +223,8 @@ class Pipeline:
 
     async def _register_all_account_jobs(self) -> None:
         """Register posting cron jobs for every active account with Buffer credentials."""
-        if not self._settings.BUFFER_ACCESS_TOKEN:
-            log.info("pipeline.accounts_disabled", reason="BUFFER_ACCESS_TOKEN not set")
+        if not self._settings.BUFFER_EMAIL:
+            log.info("pipeline.accounts_disabled", reason="BUFFER_EMAIL not set")
             return
         async with get_session() as session:
             rows = await session.execute(
@@ -362,29 +362,29 @@ class Pipeline:
         hashtags: list[str],
     ) -> dict:
         """
-        Sync helper: queue a carousel in Buffer under the given account's TikTok profile.
+        Sync helper: upload a carousel to Buffer via the web interface.
         Called in an executor so the async event loop is never blocked.
         """
-        token = self._settings.BUFFER_ACCESS_TOKEN
+        email = self._settings.BUFFER_EMAIL
+        password = self._settings.BUFFER_PASSWORD
         profile_id = account.buffer_tiktok_profile_id
 
-        if not token or not profile_id:
+        if not email or not password or not profile_id:
             log.warning("pipeline.buffer_upload_skipped",
                         account=account.slug, reason="credentials not configured")
             return {"queued": False, "buffer_updates": 0,
-                    "error": "Buffer credentials not configured"}
+                    "error": "BUFFER_EMAIL / BUFFER_PASSWORD / profile ID not configured"}
         try:
-            client = BufferClient(token)
+            client = BufferClient(email, password)
             result = client.queue_gazette_carousel(
                 profile_id=profile_id,
                 slide_paths=slide_paths,
                 caption=caption,
                 hashtags=hashtags,
             )
-            n = len(result.get("updates", []))
             log.info("pipeline.buffer_upload_ok",
-                     account=account.slug, updates=n, profile_id=profile_id)
-            return {"queued": True, "buffer_updates": n, "error": None}
+                     account=account.slug, profile_id=profile_id)
+            return {"queued": True, "buffer_updates": result.get("updates", 1), "error": None}
         except BufferError as exc:
             log.error("pipeline.buffer_upload_failed",
                       account=account.slug, error=str(exc))
